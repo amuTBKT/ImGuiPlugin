@@ -8,8 +8,8 @@
 PRAGMA_DISABLE_OPTIMIZATION
 
 // config
-static constexpr ImGuiTableFlags TableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders;
-static ImGuiTextFilter StatFilter;
+static constexpr ImGuiTableFlags TableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable;
+static ImGuiTextFilter StatFilter = {};
 
 // helpers
 FORCEINLINE static FString ShortenName(TCHAR const* LongName)
@@ -52,7 +52,7 @@ FORCEINLINE static void RenderGroupedHeadings(const bool bIsHierarchy, const boo
     static const char* CaptionFlat = "Cycle counters (flat)";
     static const char* CaptionHier = "Cycle counters (hierarchy)";
 
-    ImGui::TableSetupColumn(bIsHierarchy ? CaptionHier : CaptionFlat, ImGuiTableColumnFlags_WidthFixed);
+    ImGui::TableSetupColumn(bIsHierarchy ? CaptionHier : CaptionFlat, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoHide);
     ImGui::TableSetupColumn("CallCount", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("InclusiveAvg", ImGuiTableColumnFlags_WidthFixed);
     if (!bBudget)
@@ -69,29 +69,29 @@ FORCEINLINE static void RenderGroupedHeadings(const bool bIsHierarchy, const boo
     ImGui::TableHeadersRow();
 }
 
-FORCEINLINE static void RenderCounterHeadings()
-{
-    // The heading looks like:
-    // Stat [32chars]	Value [8chars]	Average [8chars]
-
-    ImGui::TableSetupColumn("Counters", ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableSetupColumn("Average", ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
-    ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
-    ImGui::TableHeadersRow();
-}
-
 FORCEINLINE static void RenderMemoryHeadings()
 {
     // The heading looks like:
     // Stat [32chars]	MemUsed [8chars]	PhysMem [8chars]
 
-    ImGui::TableSetupColumn("Memory Counters", ImGuiTableColumnFlags_WidthFixed);
+    ImGui::TableSetupColumn("Memory Counters", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoHide);
     ImGui::TableSetupColumn("UsedMax", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("Mem%", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("MemPool", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("Pool Capacity", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
+    ImGui::TableHeadersRow();
+}
+
+FORCEINLINE static void RenderCounterHeadings()
+{
+    // The heading looks like:
+    // Stat [32chars]	Value [8chars]	Average [8chars]
+
+    ImGui::TableSetupColumn("Counters", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoHide);
+    ImGui::TableSetupColumn("Average", ImGuiTableColumnFlags_WidthFixed);
+    ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthFixed);
+    ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
     ImGui::TableHeadersRow();
 }
@@ -154,16 +154,16 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat, 
         {
             static TSet<FString> Selections;
 
-            const bool IsItemSelected = Selections.Contains(StatDesc);
+            const bool IsItemSelected = Selections.Contains(StatDisplay);
             if (ImGui::Selectable(TCHAR_TO_ANSI(*ShortenName(*StatDisplay)), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0)))
             {
                 if (IsItemSelected)
                 {
-                    Selections.Remove(StatDesc);
+                    Selections.Remove(StatDisplay);
                 }
                 else
                 {
-                    Selections.Add(StatDesc);
+                    Selections.Add(StatDisplay);
                 }
             }
         }
