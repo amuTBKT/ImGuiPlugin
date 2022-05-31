@@ -2,7 +2,7 @@
 #include "Engine/Texture2D.h"
 #include "Input/Events.h"
 #include "InputCoreTypes.h"
-#include "ImGuiPluginModule.h"
+#include "ImGuiRuntimeModule.h"
 
 #if STATS
 #include "Stats/StatsData.h"
@@ -28,8 +28,8 @@ void SImGuiWindow::Construct(const FArguments& InArgs)
 	//[TODO] not using Imgui font, we use texture asset instead
 	io.Fonts->Build();
 
-	FImGuiPluginModule& ImGuiPluginModule = FModuleManager::GetModuleChecked<FImGuiPluginModule>("ImGuiPlugin");
-	io.Fonts->TexID = ImGuiPluginModule.GetDefaultFontTextureID();
+	FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+	io.Fonts->TexID = ImGuiRuntimeModule.GetDefaultFontTextureID();
 }
 
 SImGuiWindow::~SImGuiWindow()
@@ -70,13 +70,14 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 	ImGui::SetCurrentContext(m_ImGuiContext);
 	ImGui::Render();
 
-	FImGuiPluginModule& ImGuiPluginModule = FModuleManager::GetModuleChecked<FImGuiPluginModule>("ImGuiPlugin");
+	FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
 
 	ImDrawData* DrawData = ImGui::GetDrawData();
 	if (DrawData->DisplaySize.x > 0.0f && DrawData->DisplaySize.y > 0.0f)
 	{
 		if (DrawData->TotalVtxCount > 0 && DrawData->TotalIdxCount > 0)
 		{
+#if 1
 			// needed to adjust for border and title bar...
 			const FSlateRenderTransform& WidgetOffsetTransform = AllottedGeometry.GetAccumulatedRenderTransform();
 
@@ -125,11 +126,14 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 					OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
 
 					// Add elements to the list.
-					FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, ImGuiPluginModule.GetResourceHandle(DrawCommand.TextureId), VertexBuffer, IndexBuffer, nullptr, 0, 0);
+					FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, ImGuiRuntimeModule.GetResourceHandle(DrawCommand.TextureId), VertexBuffer, IndexBuffer, nullptr, 0, 0);
 
 					OutDrawElements.PopClip();
 				}
 			}
+#else
+
+#endif
 		}
 	}
 
@@ -295,11 +299,11 @@ FReply SImGuiWindow::OnMouseMove(const FGeometry& MyGeometry, const FPointerEven
 
 void SImGuiMainWindow::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
-	FImGuiPluginModule& ImGuiPluginModule = FModuleManager::GetModuleChecked<FImGuiPluginModule>("ImGuiPlugin");
-	if (ImGuiPluginModule.GetMainWindowTickDelegate().IsBound())
+	FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+	if (ImGuiRuntimeModule.GetMainWindowTickDelegate().IsBound())
 	{
 		ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-		ImGuiPluginModule.GetMainWindowTickDelegate().Broadcast(InDeltaTime);
+		ImGuiRuntimeModule.GetMainWindowTickDelegate().Broadcast(InDeltaTime);
 	}
 	else
 	{

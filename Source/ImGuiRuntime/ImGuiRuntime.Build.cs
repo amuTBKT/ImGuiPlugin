@@ -1,16 +1,16 @@
 using System.IO;
 using UnrealBuildTool;
 
-public class ImGuiPlugin : ModuleRules
+public class ImGuiRuntime : ModuleRules
 {
-	public ImGuiPlugin(ReadOnlyTargetRules Target) : base(Target)
+	public ImGuiRuntime(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PublicDefinitions.Add("WITH_IMGUI=1");
 
 		PublicIncludePaths.AddRange(
 			new string[]
 			{
-				Path.Combine(ModuleDirectory, "../Thirdparty/ImGui/imgui"),
+				Path.Combine(ModuleDirectory, "../../Thirdparty/ImGui/imgui"),
 			}
 		);
 
@@ -19,7 +19,7 @@ public class ImGuiPlugin : ModuleRules
 			PublicAdditionalLibraries.AddRange(
 				new string[]
 				{
-					Path.Combine(ModuleDirectory, "../Thirdparty/ImGui/libs/Debug/ImGui.lib"),
+					Path.Combine(ModuleDirectory, "../../Thirdparty/ImGui/libs/Debug/ImGui.lib"),
 				}
 			);
 		}
@@ -28,7 +28,7 @@ public class ImGuiPlugin : ModuleRules
 			PublicAdditionalLibraries.AddRange(
 				new string[]
 				{
-					Path.Combine(ModuleDirectory, "../Thirdparty/ImGui/libs/Release/ImGui.lib"),
+					Path.Combine(ModuleDirectory, "../../Thirdparty/ImGui/libs/Release/ImGui.lib"),
 				}
 			);
 		}

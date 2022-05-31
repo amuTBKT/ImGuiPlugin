@@ -14,12 +14,11 @@
 	"CanContainContent" : true,
 	"IsBetaVersion" : false,
 	"Installed" : false,
-	"Modules" :
-	[
+	"Modules":[
 		{
-			"Name" : "ImGuiPlugin",
-			"Type" : "Runtime",
-			"LoadingPhase" : "PostDefault"
+			"Name": "ImGuiRuntime",
+			"Type": "Runtime",
+			"LoadingPhase": "PostDefault"
 		}
 	]
 }

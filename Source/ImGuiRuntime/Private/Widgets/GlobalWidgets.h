@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ImGuiPluginModule.h"
+#include "ImGuiRuntimeModule.h"
 
 // GlobalWidgets are registered at ModuleInit, so we cannot use logic that relies on initialization order.
 
@@ -9,11 +9,11 @@
     {                                                                                       \
         FAtModuleInit()                                                                     \
         {                                                                                   \
-            FImGuiPluginModule::OnPluginInitialized.AddLambda(                              \
-                [](FImGuiPluginModule& ImGuiPlugin)                                         \
+            FImGuiRuntimeModule::OnPluginInitialized.AddLambda(                             \
+                [](FImGuiRuntimeModule& ImGuiRuntimeModule)                                 \
                 {                                                                           \
-                    InitFunction(ImGuiPlugin);                                              \
-                    ImGuiPlugin.GetMainWindowTickDelegate().AddStatic(&TickFunction);       \
+                    InitFunction(ImGuiRuntimeModule);                                       \
+                    ImGuiRuntimeModule.GetMainWindowTickDelegate().AddStatic(&TickFunction);\
                 }                                                                           \
             );                                                                              \
         }                                                                                   \

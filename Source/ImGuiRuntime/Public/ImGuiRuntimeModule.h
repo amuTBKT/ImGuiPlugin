@@ -24,7 +24,7 @@ struct FImGuiImageBindParams
 	ImTextureID Id = 0;
 };
 
-class IMGUIPLUGIN_API FImGuiPluginModule : public IModuleInterface
+class IMGUIRUNTIME_API FImGuiRuntimeModule : public IModuleInterface
 {
 private:
 	virtual void StartupModule() override;

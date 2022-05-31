@@ -8,7 +8,7 @@
 
 struct ImGuiContext;
 
-class IMGUIPLUGIN_API SImGuiWindow : public SCompoundWidget
+class IMGUIRUNTIME_API SImGuiWindow : public SCompoundWidget
 {
 public:
 	SLATE_BEGIN_ARGS(SImGuiWindow)

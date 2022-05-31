@@ -5,7 +5,7 @@
 #include "Stats/StatsData.h"
 #include "Performance/EnginePerformanceTargets.h"
 
-#include "ImGuiPluginModule.h"
+#include "ImGuiRuntimeModule.h"
 
 //PRAGMA_DISABLE_OPTIMIZATION
 
@@ -15,6 +15,8 @@ static ImGuiTextFilter StatFilter = {};
 
 static FImGuiImageBindParams WatchIcon;
 static FImGuiImageBindParams UnwatchIcon;
+
+static constexpr float HeaderSizeY = 42.f;
 
 // helpers
 FORCEINLINE static FString ShortenName(TCHAR const* LongName)
@@ -423,7 +425,7 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
 
         //if (ImGui::SmallButton((TCHAR_TO_ANSI(*NameBuffer))))
         const FImGuiImageBindParams& Param = Value.Enabled ? UnwatchIcon : WatchIcon;
-        if (ImGui::ImageButton(Param.Id, ImVec2(8.f, 8.f), Param.UV0, Param.UV1))
+        if (ImGui::ImageButton(Param.Id, Param.Size, Param.UV0, Param.UV1))
         {
             Value.Enabled = !Value.Enabled;
         }
@@ -663,15 +665,15 @@ static void RenderStatsHeader()
 
 namespace ImGuiStatsVizualizer
 {
-    static void Initialize(FImGuiPluginModule& ImGuiPluginModule)
+    static void Initialize(FImGuiRuntimeModule& ImGuiRuntimeModule)
     {
     }
 
     static void RegisterOneFrameResources()
     {
-        FImGuiPluginModule& ImGuiPluginModule = FModuleManager::GetModuleChecked<FImGuiPluginModule>("ImGuiPlugin");
-        WatchIcon = ImGuiPluginModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Visible").GetIcon());
-        UnwatchIcon = ImGuiPluginModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Hidden").GetIcon());
+        FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+        WatchIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Visible").GetIcon(), { 10.f, 10.f }, 1.f);
+        UnwatchIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Hidden").GetIcon(), { 10.f, 10.f }, 1.f);
     }
 
     static void Tick(float DeltaTime)
@@ -680,7 +682,7 @@ namespace ImGuiStatsVizualizer
 	    {
             RegisterOneFrameResources();
 
-            if (ImGui::BeginChild("Header", ImVec2(ImGui::GetContentRegionAvail().x, 42.f), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+            if (ImGui::BeginChild("Header", ImVec2(0.f, HeaderSizeY), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
             {
                 RenderStatsHeader();
             }

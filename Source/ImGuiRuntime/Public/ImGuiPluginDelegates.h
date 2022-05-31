@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnImGuiPluginInitialized, class FImGuiPluginModule& /* ImGuiPluginModule */);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnImGuiPluginInitialized, class FImGuiRuntimeModule& /* ImGuiRuntimeModule */);
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnTickImGuiMainWindowDelegate, float /* DeltaTime */);
 

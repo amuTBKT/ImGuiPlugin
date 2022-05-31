@@ -1,4 +1,4 @@
-#include "ImGuiPluginModule.h"
+#include "ImGuiRuntimeModule.h"
 
 #if WITH_EDITOR
 #include "EditorStyleSet.h"
@@ -17,17 +17,17 @@
 #define LOCTEXT_NAMESPACE "ImGuiPlugin"
 
 #if WITH_EDITOR
-const FName FImGuiPluginModule::ImGuiTabName = TEXT("ImGuiTab");
+const FName FImGuiRuntimeModule::ImGuiTabName = TEXT("ImGuiTab");
 #endif
 
-FOnImGuiPluginInitialized FImGuiPluginModule::OnPluginInitialized = {};
+FOnImGuiPluginInitialized FImGuiRuntimeModule::OnPluginInitialized = {};
 
-void FImGuiPluginModule::StartupModule()
+void FImGuiRuntimeModule::StartupModule()
 {
 	IMGUI_CHECKVERSION();
 
 #if WITH_EDITOR
-	FTabSpawnerEntry& SpawnerEntry = FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateStatic(&FImGuiPluginModule::SpawnImGuiTab))
+	FTabSpawnerEntry& SpawnerEntry = FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateStatic(&FImGuiRuntimeModule::SpawnImGuiTab))
 		.SetDisplayName(LOCTEXT("ImGuiTabTitle", "ImGui"))
 		.SetTooltipText(LOCTEXT("ImGuiTabToolTip", "ImGui UI"))
 		.SetIcon(FSlateIcon(FEditorStyle::GetStyleSetName(), "ClassIcon.WidgetBlueprint"))
@@ -53,17 +53,17 @@ void FImGuiPluginModule::StartupModule()
 				m_OpenImGuiWindowCommand = MakeUnique<FAutoConsoleCommand>(
 					TEXT("imgui.OpenWindow"),
 					TEXT("Opens ImGui window."),
-					FConsoleCommandDelegate::CreateRaw(this, &FImGuiPluginModule::OpenImGuiMainWindow));
+					FConsoleCommandDelegate::CreateRaw(this, &FImGuiRuntimeModule::OpenImGuiMainWindow));
 			}
 		}
 	);
 
-	FCoreDelegates::OnBeginFrame.AddRaw(this, &FImGuiPluginModule::OnBeginFrame);
+	FCoreDelegates::OnBeginFrame.AddRaw(this, &FImGuiRuntimeModule::OnBeginFrame);
 
 	OnPluginInitialized.Broadcast(*this);
 }
 
-void FImGuiPluginModule::ShutdownModule()
+void FImGuiRuntimeModule::ShutdownModule()
 {
 #if WITH_EDITOR
 	if (FSlateApplication::IsInitialized())
@@ -78,7 +78,7 @@ void FImGuiPluginModule::ShutdownModule()
 }
 
 #if WITH_EDITOR
-TSharedRef<SDockTab> FImGuiPluginModule::SpawnImGuiTab(const FSpawnTabArgs& SpawnTabArgs)
+TSharedRef<SDockTab> FImGuiRuntimeModule::SpawnImGuiTab(const FSpawnTabArgs& SpawnTabArgs)
 {
 	const TSharedRef<SDockTab> ImguiTab =
 		SNew(SDockTab)
@@ -91,7 +91,7 @@ TSharedRef<SDockTab> FImGuiPluginModule::SpawnImGuiTab(const FSpawnTabArgs& Spaw
 }
 #endif
 
-void FImGuiPluginModule::OpenImGuiMainWindow()
+void FImGuiRuntimeModule::OpenImGuiMainWindow()
 {
 	if (!m_ImGuiMainWindow.IsValid())
 	{
@@ -121,7 +121,7 @@ void FImGuiPluginModule::OpenImGuiMainWindow()
 	}
 }
 
-TSharedPtr<SWindow> FImGuiPluginModule::CreateWidget(const FString& WindowName, const FVector2D& WindowSize, FOnTickImGuiWidgetDelegate TickDelegate)
+TSharedPtr<SWindow> FImGuiRuntimeModule::CreateWidget(const FString& WindowName, const FVector2D& WindowSize, FOnTickImGuiWidgetDelegate TickDelegate)
 {	
 	TSharedPtr<SWindow> Window = SNew(SWindow)
 		.Title(FText::FromString(WindowName))
@@ -139,7 +139,7 @@ TSharedPtr<SWindow> FImGuiPluginModule::CreateWidget(const FString& WindowName, 
 	return Window;
 }
 
-void FImGuiPluginModule::OnBeginFrame()
+void FImGuiRuntimeModule::OnBeginFrame()
 {
 	OneFrameResourceHandles.Reset();
 	OneFrameSlateBrushes.Reset();
@@ -148,7 +148,7 @@ void FImGuiPluginModule::OnBeginFrame()
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
 }
 
-FImGuiImageBindParams FImGuiPluginModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
+FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
 {
 	const uint32 NewIndex = OneFrameResourceHandles.Num();
 
@@ -168,12 +168,12 @@ FImGuiImageBindParams FImGuiPluginModule::RegisterOneFrameResource(const FSlateB
 	return Params;
 }
 
-FImGuiImageBindParams FImGuiPluginModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
+FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
 {
 	return RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f);
 }
 
-FImGuiImageBindParams FImGuiPluginModule::RegisterOneFrameResource(UTexture2D* Texture)
+FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(UTexture2D* Texture)
 {
 	FSlateBrush& NewBrush = OneFrameSlateBrushes.AddDefaulted_GetRef();
 	NewBrush.SetResourceObject(Texture);
@@ -181,6 +181,6 @@ FImGuiImageBindParams FImGuiPluginModule::RegisterOneFrameResource(UTexture2D* T
 	return RegisterOneFrameResource(&NewBrush);
 }
 
-IMPLEMENT_MODULE(FImGuiPluginModule, ImGuiPlugin)
+IMPLEMENT_MODULE(FImGuiRuntimeModule, ImGuiRuntime)
 
 #undef LOCTEXT_NAMESPACE
