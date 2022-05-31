@@ -125,7 +125,7 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 					OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
 
 					// Add elements to the list.
-					FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, ImGuiPluginModule.GetTextureResourceHandle(DrawCommand.TextureId), VertexBuffer, IndexBuffer, nullptr, 0, 0);
+					FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, ImGuiPluginModule.GetResourceHandle(DrawCommand.TextureId), VertexBuffer, IndexBuffer, nullptr, 0, 0);
 
 					OutDrawElements.PopClip();
 				}

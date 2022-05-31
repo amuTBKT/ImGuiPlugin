@@ -5,11 +5,16 @@
 #include "Stats/StatsData.h"
 #include "Performance/EnginePerformanceTargets.h"
 
-PRAGMA_DISABLE_OPTIMIZATION
+#include "ImGuiPluginModule.h"
+
+//PRAGMA_DISABLE_OPTIMIZATION
 
 // config
 static constexpr ImGuiTableFlags TableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable;
 static ImGuiTextFilter StatFilter = {};
+
+static FImGuiImageBindParams WatchIcon;
+static FImGuiImageBindParams UnwatchIcon;
 
 // helpers
 FORCEINLINE static FString ShortenName(TCHAR const* LongName)
@@ -91,7 +96,8 @@ FORCEINLINE static void RenderCounterHeadings()
     ImGui::TableSetupColumn("Counters", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoHide);
     ImGui::TableSetupColumn("Average", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthFixed);
+    ImGui::TableSetupColumn("Watch", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
     ImGui::TableHeadersRow();
 }
@@ -316,7 +322,7 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
         static TSet<FString> Selections;
 
         const bool IsItemSelected = Selections.Contains(StatDisplay);
-        if (ImGui::Selectable(TCHAR_TO_ANSI(*ShortenName(*StatDisplay)), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0)))
+        if (ImGui::Selectable(TCHAR_TO_ANSI(*ShortenName(*StatDisplay)), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap, ImVec2(0, 0)))
         {
             if (IsItemSelected)
             {
@@ -329,17 +335,23 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
         }
     }
 
+    double AvgValue = FLT_MAX;
+
     ImGui::TableSetColumnIndex(1);
     if (bDisplayAll)
     {
         // Append the average.
         if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_double)
         {
+            AvgValue = All.GetValue_double(EComplexStatField::IncAve);
+
             const FString ValueFormatted = FormatStatValueFloat(All.GetValue_double(EComplexStatField::IncAve));
             ImGui::Text(TCHAR_TO_ANSI(*ValueFormatted));
         }
         else if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64)
         {
+            AvgValue = All.GetValue_int64(EComplexStatField::IncAve);
+
             const FString ValueFormatted = FormatStatValueInt64(All.GetValue_int64(EComplexStatField::IncAve));
             ImGui::Text(TCHAR_TO_ANSI(*ValueFormatted));
         }
@@ -385,6 +397,55 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
     else
     {
         ImGui::Text("");
+    }
+
+    // watcher
+    ImGui::TableSetColumnIndex(4);
+    {
+        struct FWatchValue
+        {
+            double Threshold = 10000.;
+            bool Enabled = false;
+        };
+        static TMap<FString, FWatchValue> WatchValues;
+
+        FWatchValue& Value = WatchValues.FindOrAdd(StatDisplay);
+        
+        FString NameBuffer;
+        if (Value.Enabled)
+        {
+            NameBuffer = FString::Printf(TEXT("Unwatch###%s"), *StatDisplay);
+        }
+        else
+        {
+            NameBuffer = FString::Printf(TEXT("Watch###%s"), *StatDisplay);
+        }
+
+        //if (ImGui::SmallButton((TCHAR_TO_ANSI(*NameBuffer))))
+        const FImGuiImageBindParams& Param = Value.Enabled ? UnwatchIcon : WatchIcon;
+        if (ImGui::ImageButton(Param.Id, ImVec2(8.f, 8.f), Param.UV0, Param.UV1))
+        {
+            Value.Enabled = !Value.Enabled;
+        }
+        if (ImGui::BeginPopupContextItem(TCHAR_TO_ANSI(*NameBuffer)))
+        {
+            char InputBuffer[32];
+            if (ImGui::InputText("Value:", InputBuffer, sizeof(InputBuffer), ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_EnterReturnsTrue))
+            {
+                Value.Threshold = FCString::Atod(ANSI_TO_TCHAR(InputBuffer));
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+
+        if (Value.Enabled)
+        {
+            if (AvgValue > Value.Threshold)
+            {
+                GEngine->AddOnScreenDebugMessage(0, 5.f, FColor::Red, FString::Printf(TEXT("%f"), AvgValue));
+                Value.Enabled = false;
+            }
+        }
     }
 }
 
@@ -538,7 +599,7 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
             {
                 const FString CounterStatsTableName = StatGroupName + TEXT("_CounterStats");
 
-                if (ImGui::BeginTable(TCHAR_TO_ANSI(*CounterStatsTableName), 4, TableFlags))
+                if (ImGui::BeginTable(TCHAR_TO_ANSI(*CounterStatsTableName), 5, TableFlags))
                 {
                     RenderCounterHeadings();
 
@@ -553,8 +614,8 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
 
 static void RenderStatsHeader()
 {
-    static const TCHAR* GroupNames[] = { TEXT("GPU"), TEXT("SceneRendering"), TEXT("NiagaraOverview"), TEXT("NiagaraSystems"), TEXT("NiagaraEmitters") };
-    static bool GroupStatStatus[] = { false, false, false, false, false };
+    static const TCHAR* GroupNames[] = { TEXT("GPU"), TEXT("SceneRendering"), TEXT("NiagaraOverview"), TEXT("NiagaraSystems"), TEXT("NiagaraEmitters"), TEXT("ImGui") };
+    static bool GroupStatStatus[] = { false, false, false, false, false, false };
     for (int32 Index = 0; Index < UE_ARRAY_COUNT(GroupNames); ++Index)
     {
         ImGui::SameLine();
@@ -602,25 +663,48 @@ static void RenderStatsHeader()
 
 namespace ImGuiStatsVizualizer
 {
-    static void Initialize() {}
+    static void Initialize(FImGuiPluginModule& ImGuiPluginModule)
+    {
+    }
+
+    static void RegisterOneFrameResources()
+    {
+        FImGuiPluginModule& ImGuiPluginModule = FModuleManager::GetModuleChecked<FImGuiPluginModule>("ImGuiPlugin");
+        WatchIcon = ImGuiPluginModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Visible").GetIcon());
+        UnwatchIcon = ImGuiPluginModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Hidden").GetIcon());
+    }
+
     static void Tick(float DeltaTime)
     {
-	    if (ImGui::Begin("Stats", nullptr))
+	    if (ImGui::Begin("Stats", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
 	    {
-            RenderStatsHeader();
+            RegisterOneFrameResources();
 
-            FGameThreadStatsData* ViewData = FLatestGameThreadStatsData::Get().Latest;
-            if (ViewData/* || !ViewData->bRenderStats*/)
+            if (ImGui::BeginChild("Header", ImVec2(ImGui::GetContentRegionAvail().x, 42.f), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
             {
-                if (!ViewData->bDrawOnlyRawStats)
+                RenderStatsHeader();
+            }
+            ImGui::EndChild();
+
+            ImGui::Separator();
+
+            if (ImGui::BeginChild("Body"))
+            {
+                FGameThreadStatsData* ViewData = FLatestGameThreadStatsData::Get().Latest;
+                if (ViewData/* || !ViewData->bRenderStats*/)
                 {
-                    RenderGroupedWithHierarchy(*ViewData);
+                    if (!ViewData->bDrawOnlyRawStats)
+                    {
+                        RenderGroupedWithHierarchy(*ViewData);
+                    }
                 }
+                else
+                {
+                    ImGui::Text("Not recording stats...");
+                }
+
             }
-            else
-            {
-                ImGui::Text("Not recording stats...");
-            }
+            ImGui::EndChild();
 
             ImGui::End();
 	    }
@@ -629,6 +713,6 @@ namespace ImGuiStatsVizualizer
     IMGUI_REGISTER_GLOBAL_WIDGET(Initialize, Tick);
 }
 
-PRAGMA_ENABLE_OPTIMIZATION
+//PRAGMA_ENABLE_OPTIMIZATION
 
 #endif //#if STATS

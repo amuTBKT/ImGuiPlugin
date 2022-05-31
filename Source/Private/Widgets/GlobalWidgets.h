@@ -9,11 +9,11 @@
     {                                                                                       \
         FAtModuleInit()                                                                     \
         {                                                                                   \
-            InitFunction();                                                                 \
             FImGuiPluginModule::OnPluginInitialized.AddLambda(                              \
                 [](FImGuiPluginModule& ImGuiPlugin)                                         \
                 {                                                                           \
-                    ImGuiPlugin.GetMainWindowTickDelegate().AddStatic(&TickFunction);     \
+                    InitFunction(ImGuiPlugin);                                              \
+                    ImGuiPlugin.GetMainWindowTickDelegate().AddStatic(&TickFunction);       \
                 }                                                                           \
             );                                                                              \
         }                                                                                   \

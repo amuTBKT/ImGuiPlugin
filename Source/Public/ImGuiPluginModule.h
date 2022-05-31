@@ -16,6 +16,14 @@ class FAutoConsoleCommand;
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
 
+struct FImGuiImageBindParams
+{
+	ImVec2 Size = ImVec2(1.f, 1.f);
+	ImVec2 UV0 = ImVec2(0.f, 0.f);
+	ImVec2 UV1 = ImVec2(1.f, 1.f);
+	ImTextureID Id = 0;
+};
+
 class IMGUIPLUGIN_API FImGuiPluginModule : public IModuleInterface
 {
 private:
@@ -36,43 +44,48 @@ public:
 
 	ImTextureID GetDefaultFontTextureID() const
 	{
-		return m_DefaultFontTextureID;
+		return m_DefaultFontImageParams.Id;
 	}
 	
-	const FSlateResourceHandle& GetTextureResourceHandle(uint32 Index) const
+	const FSlateResourceHandle& GetResourceHandle(uint32 Index) const
 	{
-		if (!m_TextureBrushes.IsValidIndex(Index))
+		if (!OneFrameResourceHandles.IsValidIndex(Index))
 		{
-			Index = ImGuiIDToIndex(m_MissingImageTextureID);
+			Index = ImGuiIDToIndex(m_MissingImageParams.Id);
 		}
 
-		check(m_TextureBrushes.IsValidIndex(Index));
-		return m_TextureBrushes[Index].GetRenderingResource();
+		check(OneFrameResourceHandles.IsValidIndex(Index));
+		return OneFrameResourceHandles[Index];
 	}
 
-	const FSlateResourceHandle& GetTextureResourceHandle(ImTextureID ID) const
+	const FSlateResourceHandle& GetResourceHandle(ImTextureID ID) const
 	{
-		return GetTextureResourceHandle(ImGuiIDToIndex(ID));
+		return GetResourceHandle(ImGuiIDToIndex(ID));
 	}
 
-	ImTextureID RegisterTexture(UTexture2D* Texture);
-	void UnregisterTexture(UTexture2D* Texture);
-
-	ImTextureID RegisterSlateBrush(FSlateBrush SlateBrush) { checkf(false, TEXT("NOT IMPLEMENTED!")); return {}; };
-	void UnregisterSlateBrush(UTexture2D* Texture) { checkf(false, TEXT("NOT IMPLEMENTED!")); };
-
+	FImGuiImageBindParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale);
+	FImGuiImageBindParams RegisterOneFrameResource(const FSlateBrush* SlateBrush);
+	FImGuiImageBindParams RegisterOneFrameResource(UTexture2D* Texture);
+	
 	FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() { return m_ImGuiMainWindowTickDelegate; }
 	const FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() const { return m_ImGuiMainWindowTickDelegate; }
 
 	static FOnImGuiPluginInitialized OnPluginInitialized;
 
+protected:
+	void OnBeginFrame();
+
 private:
 	FOnTickImGuiMainWindowDelegate m_ImGuiMainWindowTickDelegate;
-	TArray<FSlateBrush> m_TextureBrushes = {};
-	TMap<FName, ImTextureID> m_TextureIDMap = {};
 	
-	ImTextureID m_MissingImageTextureID = {};
-	ImTextureID m_DefaultFontTextureID = {};
+	FSlateBrush m_DefaultFontSlateBrush = {};
+	FSlateBrush m_MissingImageSlateBrush = {};
+
+	FImGuiImageBindParams m_DefaultFontImageParams = {};
+	FImGuiImageBindParams m_MissingImageParams = {};
+
+	TArray<FSlateBrush> OneFrameSlateBrushes;
+	TArray<FSlateResourceHandle> OneFrameResourceHandles;
 
 #if WITH_EDITOR
 	static const FName ImGuiTabName;

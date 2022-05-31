@@ -34,13 +34,13 @@ void FImGuiPluginModule::StartupModule()
 		.SetGroup(WorkspaceMenu::GetMenuStructure().GetDeveloperToolsLogCategory());
 #endif
 
-	UTexture2D* MissingImageTexture = LoadObject<UTexture2D>(nullptr, TEXT("/ImGuiPlugin/T_MissingImage.T_MissingImage"));
-	checkf(MissingImageTexture, TEXT("T_MissingImage texture not found, did you mark it for cooking?"));
-	m_MissingImageTextureID = RegisterTexture(MissingImageTexture);
-	
 	UTexture2D* DefaultFontTexture = LoadObject<UTexture2D>(nullptr, TEXT("/ImGuiPlugin/T_DefaultFont.T_DefaultFont"));
 	checkf(DefaultFontTexture, TEXT("T_DefaultFont texture not found, did you mark it for cooking?"));
-	m_DefaultFontTextureID = RegisterTexture(DefaultFontTexture);
+	m_DefaultFontSlateBrush.SetResourceObject(DefaultFontTexture);
+	
+	UTexture2D* MissingImageTexture = LoadObject<UTexture2D>(nullptr, TEXT("/ImGuiPlugin/T_MissingImage.T_MissingImage"));
+	checkf(MissingImageTexture, TEXT("T_MissingImage texture not found, did you mark it for cooking?"));
+	m_MissingImageSlateBrush.SetResourceObject(MissingImageTexture);
 	
 	// console command makes sense for Game worlds, for editor we should use ImGuiTab
 	FWorldDelegates::OnPreWorldInitialization.AddLambda(
@@ -57,6 +57,8 @@ void FImGuiPluginModule::StartupModule()
 			}
 		}
 	);
+
+	FCoreDelegates::OnBeginFrame.AddRaw(this, &FImGuiPluginModule::OnBeginFrame);
 
 	OnPluginInitialized.Broadcast(*this);
 }
@@ -137,47 +139,46 @@ TSharedPtr<SWindow> FImGuiPluginModule::CreateWidget(const FString& WindowName, 
 	return Window;
 }
 
-ImTextureID FImGuiPluginModule::RegisterTexture(UTexture2D* Texture)
+void FImGuiPluginModule::OnBeginFrame()
 {
-	checkf(Texture, TEXT("Texture is invalid!"));
-	if (Texture)
-	{
-		const FName TextureName = Texture->GetFName();
-
-		if (const ImTextureID* ExistingTextureID = m_TextureIDMap.Find(TextureName))
-		{
-			return *ExistingTextureID;
-		}
-
-		const ImTextureID NewTextureID = IndexToImGuiID(m_TextureBrushes.Num());
-		m_TextureIDMap.Add(TextureName, NewTextureID);
-
-		FSlateBrush& SlateBrush = m_TextureBrushes.AddDefaulted_GetRef();
-		SlateBrush.SetResourceObject(Texture);
-
-		return NewTextureID;
-	}
-	return IndexToImGuiID((uint32)INDEX_NONE);
+	OneFrameResourceHandles.Reset();
+	OneFrameSlateBrushes.Reset();
+	
+	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
+	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
 }
 
-void FImGuiPluginModule::UnregisterTexture(UTexture2D* Texture)
+FImGuiImageBindParams FImGuiPluginModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
 {
-	checkf(Texture, TEXT("Texture is invalid!"));
-	if (Texture)
-	{
-		const FName TextureName = Texture->GetFName();
+	const uint32 NewIndex = OneFrameResourceHandles.Num();
 
-		ImTextureID TextureID;
-		if (m_TextureIDMap.RemoveAndCopyValue(TextureName, TextureID))
-		{
-			const uint32 BrushIndex = ImGuiIDToIndex(TextureID);
-			if (m_TextureBrushes.IsValidIndex(BrushIndex))
-			{
-				// NOTE: this will leave holes in the array, we can reuse freed indices.
-				m_TextureBrushes[BrushIndex].SetResourceObject(nullptr);
-			}
-		}
-	}
+	const FSlateResourceHandle& ResourceHandle = SlateBrush->GetRenderingResource(LocalSize, DrawScale);
+	OneFrameResourceHandles.Add(ResourceHandle);
+
+	const FSlateShaderResourceProxy* Proxy = ResourceHandle.GetResourceProxy();
+	const FVector2f StartUV = Proxy->StartUV;
+	const FVector2f SizeUV = Proxy->SizeUV;
+
+	FImGuiImageBindParams Params = {};
+	Params.Size = ImVec2(SlateBrush->ImageSize.X, SlateBrush->ImageSize.Y);
+	Params.UV0 = ImVec2(StartUV.X, StartUV.Y);
+	Params.UV1 = ImVec2(StartUV.X + SizeUV.X, StartUV.Y + SizeUV.Y);
+	Params.Id = IndexToImGuiID(NewIndex);
+
+	return Params;
+}
+
+FImGuiImageBindParams FImGuiPluginModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
+{
+	return RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f);
+}
+
+FImGuiImageBindParams FImGuiPluginModule::RegisterOneFrameResource(UTexture2D* Texture)
+{
+	FSlateBrush& NewBrush = OneFrameSlateBrushes.AddDefaulted_GetRef();
+	NewBrush.SetResourceObject(Texture);
+
+	return RegisterOneFrameResource(&NewBrush);
 }
 
 IMPLEMENT_MODULE(FImGuiPluginModule, ImGuiPlugin)
