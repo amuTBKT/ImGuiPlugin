@@ -30,7 +30,7 @@ void FImGuiRuntimeModule::StartupModule()
 	FTabSpawnerEntry& SpawnerEntry = FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateStatic(&FImGuiRuntimeModule::SpawnImGuiTab))
 		.SetDisplayName(LOCTEXT("ImGuiTabTitle", "ImGui"))
 		.SetTooltipText(LOCTEXT("ImGuiTabToolTip", "ImGui UI"))
-		.SetIcon(FSlateIcon(FEditorStyle::GetStyleSetName(), "ClassIcon.WidgetBlueprint"))
+		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "ClassIcon.WidgetBlueprint"))
 		.SetGroup(WorkspaceMenu::GetMenuStructure().GetDeveloperToolsLogCategory());
 #endif
 
@@ -82,9 +82,8 @@ TSharedRef<SDockTab> FImGuiRuntimeModule::SpawnImGuiTab(const FSpawnTabArgs& Spa
 {
 	const TSharedRef<SDockTab> ImguiTab =
 		SNew(SDockTab)
-		.Icon(FEditorStyle::GetBrush("ClassIcon.WidgetBlueprint"))
 		.TabRole(ETabRole::NomadTab);
-
+	ImguiTab->SetTabIcon(FAppStyle::GetBrush("ClassIcon.WidgetBlueprint"));
 	ImguiTab->SetContent(SNew(SImGuiMainWindow));
 
 	return ImguiTab;
