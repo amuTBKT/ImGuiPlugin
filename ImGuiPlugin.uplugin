@@ -16,6 +16,11 @@
 	"Installed" : false,
 	"Modules":[
 		{
+			"Name": "ImGuiShaders",
+			"Type": "Runtime",
+			"LoadingPhase": "PostConfigInit"
+		},
+		{
 			"Name": "ImGuiRuntime",
 			"Type": "Runtime",
 			"LoadingPhase": "PostDefault"

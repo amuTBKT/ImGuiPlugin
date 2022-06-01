@@ -13,10 +13,12 @@
 static constexpr ImGuiTableFlags TableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable;
 static ImGuiTextFilter StatFilter = {};
 
+static constexpr float HeaderSizeY = 42.f;
+
 static FImGuiImageBindParams WatchIcon;
 static FImGuiImageBindParams UnwatchIcon;
 
-static constexpr float HeaderSizeY = 42.f;
+static TMap<FString, bool> StatGroups;
 
 // helpers
 FORCEINLINE static FString ShortenName(TCHAR const* LongName)
@@ -521,11 +523,13 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
         FString StatGroupName = ViewData.GroupNames[GroupIndex].ToString();
         StatGroupName.RemoveFromStart(TEXT("STATGROUP_"), ESearchCase::CaseSensitive);
 
-        const FName& GroupName = ViewData.GroupNames[GroupIndex];
-        const FString& GroupDesc = ViewData.GroupDescriptions[GroupIndex];
+        StatGroups.FindOrAdd(StatGroupName) = true;
 
-        if (ImGui::CollapsingHeader(TCHAR_TO_ANSI(*GroupDesc), ImGuiTreeNodeFlags_DefaultOpen))
+        if (ImGui::CollapsingHeader(TCHAR_TO_ANSI(*StatGroupName), ImGuiTreeNodeFlags_DefaultOpen))
         {
+            const FName& GroupName = ViewData.GroupNames[GroupIndex];
+            const FString& GroupDesc = ViewData.GroupDescriptions[GroupIndex];
+
             const bool bBudget = StatGroup.ThreadBudgetMap.Num() > 0;
             const int32 NumThreadsBreakdown = bBudget ? StatGroup.FlatAggregateThreadBreakdown.Num() : 1;
             TArray<FName> ThreadNames;
@@ -616,13 +620,14 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
 
 static void RenderStatsHeader()
 {
-    static const TCHAR* GroupNames[] = { TEXT("GPU"), TEXT("SceneRendering"), TEXT("NiagaraOverview"), TEXT("NiagaraSystems"), TEXT("NiagaraEmitters"), TEXT("ImGui") };
-    static bool GroupStatStatus[] = { false, false, false, false, false, false };
-    for (int32 Index = 0; Index < UE_ARRAY_COUNT(GroupNames); ++Index)
+    int32 Index = -1;
+    for (auto& [StatGroupName, Enabled] : StatGroups)
     {
+        ++Index;
+
         ImGui::SameLine();
 
-        const bool bApplyStyle = GroupStatStatus[Index];
+        const bool bApplyStyle = Enabled;
         if (bApplyStyle)
         {
             ImGui::PushID(Index);
@@ -638,10 +643,10 @@ static void RenderStatsHeader()
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ButtonColor);
         }
 
-        const TCHAR* GroupName = GroupNames[Index];
+        const TCHAR* GroupName = *StatGroupName;
         if (ImGui::Button(TCHAR_TO_ANSI(GroupName)))
         {
-            GroupStatStatus[Index] = !GroupStatStatus[Index];
+            Enabled ^= 1;
 
             const FString StatCommand = FString::Printf(TEXT("stat %s -nodisplay"), GroupName);
             GEngine->Exec(nullptr, *StatCommand);
@@ -661,12 +666,24 @@ static void RenderStatsHeader()
     {
         StatFilter.Clear();
     }
+
+
+    for (auto& [StatGroupName, Enabled] : StatGroups)
+    {
+        Enabled = false;
+    }
 }
 
 namespace ImGuiStatsVizualizer
 {
     static void Initialize(FImGuiRuntimeModule& ImGuiRuntimeModule)
     {
+        StatGroups.FindOrAdd(TEXT("GPU")) = false;
+        StatGroups.FindOrAdd(TEXT("SceneRendering")) = false;
+        StatGroups.FindOrAdd(TEXT("NiagaraOverview")) = false;
+        StatGroups.FindOrAdd(TEXT("NiagaraSystems")) = false;
+        StatGroups.FindOrAdd(TEXT("NiagaraEmitters")) = false;
+        StatGroups.FindOrAdd(TEXT("ImGui")) = false;
     }
 
     static void RegisterOneFrameResources()

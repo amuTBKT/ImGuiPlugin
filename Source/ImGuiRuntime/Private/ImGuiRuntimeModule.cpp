@@ -142,6 +142,7 @@ void FImGuiRuntimeModule::OnBeginFrame()
 {
 	OneFrameResourceHandles.Reset();
 	OneFrameSlateBrushes.Reset();
+	CreatedSlateBrushes.Reset();
 	
 	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
@@ -149,6 +150,8 @@ void FImGuiRuntimeModule::OnBeginFrame()
 
 FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
 {
+	OneFrameSlateBrushes.Add(SlateBrush);
+	
 	const uint32 NewIndex = OneFrameResourceHandles.Num();
 
 	const FSlateResourceHandle& ResourceHandle = SlateBrush->GetRenderingResource(LocalSize, DrawScale);
@@ -174,7 +177,7 @@ FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlate
 
 FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(UTexture2D* Texture)
 {
-	FSlateBrush& NewBrush = OneFrameSlateBrushes.AddDefaulted_GetRef();
+	FSlateBrush& NewBrush = CreatedSlateBrushes.AddDefaulted_GetRef();
 	NewBrush.SetResourceObject(Texture);
 
 	return RegisterOneFrameResource(&NewBrush);

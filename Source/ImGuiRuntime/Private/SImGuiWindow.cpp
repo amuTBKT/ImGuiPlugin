@@ -4,12 +4,28 @@
 #include "InputCoreTypes.h"
 #include "ImGuiRuntimeModule.h"
 
+#include "RHI.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Engine/Texture2D.h"
+#include "ImGuiShaders.h"
+#include "RenderGraphUtils.h"
+#include "CommonRenderResources.h"
+
+#include "SlateUTextureResource.h"
+
 #if STATS
 #include "Stats/StatsData.h"
 #endif
 
 DECLARE_CYCLE_STAT(TEXT("ImGui Tick"), STAT_TickWidget, STATGROUP_ImGui);
 DECLARE_CYCLE_STAT(TEXT("ImGui Render"), STAT_RenderWidget, STATGROUP_ImGui);
+
+static TAutoConsoleVariable<int32> CVarUseSlateRHI(
+	TEXT("r.ImGui.UseSlateRHI"),
+	0,
+	TEXT(""));
+
+PRAGMA_DISABLE_OPTIMIZATION
 
 void SImGuiWindow::Construct(const FArguments& InArgs)
 {
@@ -57,6 +73,22 @@ void SImGuiWindow::Tick(const FGeometry& AllottedGeometry, const double InCurren
 		IO.DeltaTime = InDeltaTime;		
 	}
 
+	int32 NewSizeX = (int32)AllottedGeometry.GetAbsoluteSize().X;
+	int32 NewSizeY = (int32)AllottedGeometry.GetAbsoluteSize().Y;
+
+	if (!m_ImGuiRT || m_ImGuiRT->SizeX != NewSizeX || m_ImGuiRT->SizeY != NewSizeY)
+	{
+		m_ImGuiRT = NewObject<UTextureRenderTarget2D>();
+		m_ImGuiRT->bCanCreateUAV = false;
+		m_ImGuiRT->bAutoGenerateMips = false;
+		m_ImGuiRT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
+		m_ImGuiRT->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
+		m_ImGuiRT->InitAutoFormat(NewSizeX, NewSizeY);
+		m_ImGuiRT->UpdateResourceImmediate(true);
+
+		m_ImGuiSlateBrush.SetResourceObject(m_ImGuiRT);
+	}
+
 	TickInternal(AllottedGeometry, InCurrentTime, InDeltaTime);
 }
 
@@ -77,63 +109,266 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 	{
 		if (DrawData->TotalVtxCount > 0 && DrawData->TotalIdxCount > 0)
 		{
-#if 1
-			// needed to adjust for border and title bar...
-			const FSlateRenderTransform& WidgetOffsetTransform = AllottedGeometry.GetAccumulatedRenderTransform();
-
-			TArray<FSlateVertex> VertexBuffer;
-			TArray<SlateIndex> IndexBuffer;
-			int32 IndexBufferOffset = 0;
-			for (int32 CmdListIndex = 0; CmdListIndex < DrawData->CmdListsCount; CmdListIndex++)
+			if (CVarUseSlateRHI.GetValueOnAnyThread() > 0)
 			{
-				const ImDrawList* CmdList = DrawData->CmdLists[CmdListIndex];
 
-				VertexBuffer.SetNum(CmdList->VtxBuffer.Size, false);
-				for (int32 VertIndex = 0; VertIndex < CmdList->VtxBuffer.Size; ++VertIndex)
+				// needed to adjust for border and title bar...
+				const FSlateRenderTransform& WidgetOffsetTransform = AllottedGeometry.GetAccumulatedRenderTransform();
+
+				TArray<FSlateVertex> VertexBuffer;
+				TArray<SlateIndex> IndexBuffer;
+				int32 IndexBufferOffset = 0;
+				for (int32 CmdListIndex = 0; CmdListIndex < DrawData->CmdListsCount; CmdListIndex++)
 				{
-					const ImDrawVert& ImGuiVertex = CmdList->VtxBuffer[VertIndex];
-					FSlateVertex& SlateVertex = VertexBuffer[VertIndex];
+					const ImDrawList* CmdList = DrawData->CmdLists[CmdListIndex];
 
-					const FVector2D TransformedPos = WidgetOffsetTransform.TransformPoint(FVector2D{ ImGuiVertex.pos.x, ImGuiVertex.pos.y });
-					SlateVertex.Position = { (float)TransformedPos.X, (float)TransformedPos.Y };
-
-					SlateVertex.TexCoords[0] = ImGuiVertex.uv.x;
-					SlateVertex.TexCoords[1] = ImGuiVertex.uv.y;
-					SlateVertex.TexCoords[2] = SlateVertex.TexCoords[3] = 1.f;
-
-					SlateVertex.Color.AlignmentDummy = ImGuiVertex.col;
-					std::swap(SlateVertex.Color.R, SlateVertex.Color.B);
-				}
-
-				for (int CmdBufferIndex = 0; CmdBufferIndex < CmdList->CmdBuffer.Size; CmdBufferIndex++)
-				{
-					const ImDrawCmd& DrawCommand = CmdList->CmdBuffer[CmdBufferIndex];
-
-					IndexBuffer.SetNum(DrawCommand.ElemCount, false);
-					for (uint32 Index = 0; Index < DrawCommand.ElemCount; ++Index)
+					VertexBuffer.SetNum(CmdList->VtxBuffer.Size, false);
+					for (int32 VertIndex = 0; VertIndex < CmdList->VtxBuffer.Size; ++VertIndex)
 					{
-						IndexBuffer[Index] = CmdList->IdxBuffer[DrawCommand.IdxOffset + Index];
+						const ImDrawVert& ImGuiVertex = CmdList->VtxBuffer[VertIndex];
+						FSlateVertex& SlateVertex = VertexBuffer[VertIndex];
+
+						const FVector2D TransformedPos = WidgetOffsetTransform.TransformPoint(FVector2D{ ImGuiVertex.pos.x, ImGuiVertex.pos.y });
+						SlateVertex.Position = { (float)TransformedPos.X, (float)TransformedPos.Y };
+
+						SlateVertex.TexCoords[0] = ImGuiVertex.uv.x;
+						SlateVertex.TexCoords[1] = ImGuiVertex.uv.y;
+						SlateVertex.TexCoords[2] = SlateVertex.TexCoords[3] = 1.f;
+
+						SlateVertex.Color.AlignmentDummy = ImGuiVertex.col;
+						std::swap(SlateVertex.Color.R, SlateVertex.Color.B);
 					}
 
-					FSlateRect ImGuiClippingRect;
-					ImGuiClippingRect.Left = DrawCommand.ClipRect.x;
-					ImGuiClippingRect.Top = DrawCommand.ClipRect.y;
-					ImGuiClippingRect.Right = DrawCommand.ClipRect.z;
-					ImGuiClippingRect.Bottom = DrawCommand.ClipRect.w;
+					for (int CmdBufferIndex = 0; CmdBufferIndex < CmdList->CmdBuffer.Size; CmdBufferIndex++)
+					{
+						const ImDrawCmd& DrawCommand = CmdList->CmdBuffer[CmdBufferIndex];
 
-					// Transform clipping rectangle to screen space and apply to elements that we draw.
-					const FSlateRect ClippingRect = TransformRect(WidgetOffsetTransform, ImGuiClippingRect).IntersectionWith(MyClippingRect);
-					OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
+						IndexBuffer.SetNum(DrawCommand.ElemCount, false);
+						for (uint32 Index = 0; Index < DrawCommand.ElemCount; ++Index)
+						{
+							IndexBuffer[Index] = CmdList->IdxBuffer[DrawCommand.IdxOffset + Index];
+						}
 
-					// Add elements to the list.
-					FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, ImGuiRuntimeModule.GetResourceHandle(DrawCommand.TextureId), VertexBuffer, IndexBuffer, nullptr, 0, 0);
+						FSlateRect ImGuiClippingRect;
+						ImGuiClippingRect.Left = DrawCommand.ClipRect.x;
+						ImGuiClippingRect.Top = DrawCommand.ClipRect.y;
+						ImGuiClippingRect.Right = DrawCommand.ClipRect.z;
+						ImGuiClippingRect.Bottom = DrawCommand.ClipRect.w;
 
-					OutDrawElements.PopClip();
+						// Transform clipping rectangle to screen space and apply to elements that we draw.
+						const FSlateRect ClippingRect = TransformRect(WidgetOffsetTransform, ImGuiClippingRect).IntersectionWith(MyClippingRect);
+						OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
+
+						// Add elements to the list.
+						FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, ImGuiRuntimeModule.GetResourceHandle(DrawCommand.TextureId), VertexBuffer, IndexBuffer, nullptr, 0, 0);
+
+						OutDrawElements.PopClip();
+					}
 				}
 			}
-#else
+			else
+			{
+				struct FRenderData
+				{
+					TArray<ImDrawList*> DrawLists;
+					TArray<FTextureRHIRef> BoundTextures;
+					ImVec2 DisplayPos;
+					ImVec2 DisplaySize;
+					int32 TotalVtxCount;
+					int32 TotalIdxCount;
 
-#endif
+					~FRenderData()
+					{
+						for (ImDrawList* CmdList : DrawLists)
+						{
+							IM_FREE(CmdList);
+						}
+					}
+				};
+				FRenderData* RenderData = new FRenderData();
+				RenderData->DisplayPos = DrawData->DisplayPos;
+				RenderData->DisplaySize = DrawData->DisplaySize;
+				RenderData->TotalVtxCount = DrawData->TotalVtxCount;
+				RenderData->TotalIdxCount = DrawData->TotalIdxCount;
+				RenderData->DrawLists.SetNum(DrawData->CmdListsCount);
+				for (int ListIndex = 0; ListIndex < DrawData->CmdListsCount; ++ListIndex)
+				{
+					RenderData->DrawLists[ListIndex] = DrawData->CmdLists[ListIndex]->CloneOutput();
+				}
+
+				RenderData->BoundTextures.Reserve(ImGuiRuntimeModule.GetRegisteredBrushes().Num());
+				for (const FSlateBrush* SlateBrush : ImGuiRuntimeModule.GetRegisteredBrushes())
+				{
+					FTextureRHIRef TextureRHI = nullptr;
+
+					if (SlateBrush->ResourceHandle.GetResourceProxy() && SlateBrush->ResourceHandle.GetResourceProxy()->Resource)
+					{
+						FSlateShaderResource* ShaderResource = SlateBrush->ResourceHandle.GetResourceProxy()->Resource;
+						ESlateShaderResource::Type Type = ShaderResource->GetType();
+
+						if (Type == ESlateShaderResource::Type::TextureObject)
+						{
+							FSlateBaseUTextureResource* TextureObjectResource = static_cast<FSlateBaseUTextureResource*>(ShaderResource);
+							if (auto* Resource = TextureObjectResource->GetTextureObject()->GetResource())
+							{
+								TextureRHI = Resource->TextureRHI;
+							}
+						}
+						else if (Type == ESlateShaderResource::Type::NativeTexture)
+						{
+							if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTexture2DRHIRef>*)ShaderResource)->GetTypedResource())
+							{
+								TextureRHI = NativeTextureRHI;
+							}
+						}
+					}
+
+					RenderData->BoundTextures.Add(TextureRHI.IsValid() ? TextureRHI : GBlackTexture->TextureRHI);
+				}
+
+				ENQUEUE_RENDER_COMMAND(RenderImGui)([RenderData, Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
+					{
+						FRHIResourceCreateInfo VertexCreateInfo(TEXT("ImGui_VertexBuffer"));
+						FBufferRHIRef VertexBuffer = RHICreateIndexBuffer(sizeof(uint32), RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Static, VertexCreateInfo);
+						if (ImDrawVert* VertexDst = (ImDrawVert*)RHILockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
+						{
+							for (ImDrawList* CmdList : RenderData->DrawLists)
+							{
+								memcpy(VertexDst, CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size * sizeof(ImDrawVert));
+								VertexDst += CmdList->VtxBuffer.Size;
+							}
+							RHIUnlockBuffer(VertexBuffer);
+						}
+						FShaderResourceViewRHIRef VertexBufferSRV = RHICreateShaderResourceView(VertexBuffer, sizeof(uint32), PF_R32_UINT);
+
+						FRHIResourceCreateInfo IndexCreateInfo(TEXT("ImGui_IndexBuffer"));
+						FBufferRHIRef IndexBuffer = RHICreateIndexBuffer(sizeof(ImDrawIdx), RenderData->TotalIdxCount * sizeof(ImDrawIdx), BUF_Static, IndexCreateInfo);
+						if (ImDrawIdx* IndexDst = (ImDrawIdx*)RHILockBuffer(IndexBuffer, 0, RenderData->TotalIdxCount * sizeof(ImDrawIdx), RLM_WriteOnly))
+						{
+							for (ImDrawList* CmdList : RenderData->DrawLists)
+							{
+								memcpy(IndexDst, CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
+								IndexDst += CmdList->IdxBuffer.Size;
+							}
+							RHIUnlockBuffer(IndexBuffer);
+						}
+
+						FRHIRenderPassInfo RPInfo(Resource->TextureRHI, MakeRenderTargetActions(ERenderTargetLoadAction::EClear, ERenderTargetStoreAction::EStore));
+						RHICmdList.Transition(FRHITransitionInfo(Resource->TextureRHI, ERHIAccess::Unknown, ERHIAccess::RTV));
+						RHICmdList.BeginRenderPass(RPInfo, TEXT("RenderImGui"));
+						{
+							FGraphicsPipelineStateInitializer GraphicsPSOInit;
+							RHICmdList.ApplyCachedRenderTargets(GraphicsPSOInit);
+
+							GraphicsPSOInit.DepthStencilState = TStaticDepthStencilState<false, CF_Always>::GetRHI();
+							GraphicsPSOInit.RasterizerState = TStaticRasterizerState<FM_Solid, CM_None>::GetRHI();
+							GraphicsPSOInit.BlendState = TStaticBlendState<CW_RGBA, BO_Add, BF_SourceAlpha, BF_InverseSourceAlpha, BO_Add, BF_One, BF_One>::GetRHI();
+
+							TShaderMapRef<FImGuiVS> VertexShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+							TShaderMapRef<FImGuiPS> PixelShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+
+							GraphicsPSOInit.BoundShaderState.VertexDeclarationRHI = GEmptyVertexDeclaration.VertexDeclarationRHI;
+							GraphicsPSOInit.BoundShaderState.VertexShaderRHI = VertexShader.GetVertexShader();
+							GraphicsPSOInit.BoundShaderState.PixelShaderRHI = PixelShader.GetPixelShader();
+							GraphicsPSOInit.PrimitiveType = PT_TriangleList;
+
+							SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
+
+							auto SetupPerDrawRenderState = [&]()
+							{
+								const float L = RenderData->DisplayPos.x;
+								const float R = RenderData->DisplayPos.x + RenderData->DisplaySize.x;
+								const float T = RenderData->DisplayPos.y;
+								const float B = RenderData->DisplayPos.y + RenderData->DisplaySize.y;
+								const FMatrix44f ProjectionMatrix =
+								{
+									{ 2.0f / (R - L)	, 0.0f			   , 0.0f, 0.0f },
+									{ 0.0f				, 2.0f / (T - B)   , 0.0f, 0.0f },
+									{ 0.0f				, 0.0f			   , 0.5f, 0.0f },
+									{ (R + L) / (L - R)	, (T + B) / (B - T), 0.5f, 1.0f },
+								};
+
+								RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
+								VertexShader->SetProjectionMatrix(RHICmdList, ProjectionMatrix);
+							};
+
+							SetupPerDrawRenderState();
+
+							VertexShader->SetVertexBuffer(RHICmdList, VertexBufferSRV);
+
+							uint32 GlobalVertexOffset = 0;
+							uint32 GlobalIndexOffset = 0;
+							const ImVec2 ClipRectOffset = RenderData->DisplayPos;
+							for (const ImDrawList* CmdList : RenderData->DrawLists)
+							{
+								for (const ImDrawCmd& DrawCmd : CmdList->CmdBuffer)
+								{
+									if (DrawCmd.UserCallback != NULL)
+									{
+										// User callback, registered via ImDrawList::AddCallback()
+										// (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
+										if (DrawCmd.UserCallback == ImDrawCallback_ResetRenderState)
+										{
+											SetupPerDrawRenderState();
+										}
+										else
+										{
+											DrawCmd.UserCallback(CmdList, &DrawCmd);
+										}
+									}
+									else
+									{
+										RHICmdList.SetScissorRect(
+											true,
+											DrawCmd.ClipRect.x - ClipRectOffset.x,
+											DrawCmd.ClipRect.y - ClipRectOffset.y,
+											DrawCmd.ClipRect.z - ClipRectOffset.x,
+											DrawCmd.ClipRect.w - ClipRectOffset.y);
+
+										const uint32 Index = FImGuiRuntimeModule::ImGuiIDToIndex(DrawCmd.TextureId);
+										check(RenderData->BoundTextures.IsValidIndex(Index) && RenderData->BoundTextures[Index].IsValid());
+										PixelShader->SetTexture(RHICmdList, RenderData->BoundTextures[Index]);
+										
+										VertexShader->SetVertexOffset(RHICmdList, DrawCmd.VtxOffset + GlobalVertexOffset);
+
+										RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);
+									}
+								}
+								GlobalIndexOffset += CmdList->IdxBuffer.Size;
+								GlobalVertexOffset += CmdList->VtxBuffer.Size;
+							}
+
+							delete RenderData;
+						}
+						RHICmdList.EndRenderPass();
+						RHICmdList.Transition(FRHITransitionInfo(Resource->TextureRHI, ERHIAccess::RTV, ERHIAccess::SRVMask));
+					}
+				);
+
+				const FSlateRenderTransform WidgetOffsetTransform = FTransform2f(1.f, { 0.f, 0.f });
+
+				const FVector2D V0 = MyClippingRect.GetBottomLeft();
+				const FVector2D V1 = MyClippingRect.GetBottomRight();
+				const FVector2D V2 = MyClippingRect.GetTopRight();
+				const FVector2D V3 = MyClippingRect.GetTopLeft();
+
+				const TArray<FSlateVertex> Vertices =
+				{
+					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V0.X, (float)V0.Y }, FVector2f{ 0.f, 1.f }, FColor::White),
+					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V1.X, (float)V1.Y }, FVector2f{ 1.f, 1.f }, FColor::White),
+					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V2.X, (float)V2.Y }, FVector2f{ 1.f, 0.f }, FColor::White),
+					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V3.X, (float)V3.Y }, FVector2f{ 0.f, 0.f }, FColor::White)
+				};
+				const TArray<uint32> Indices =
+				{
+					0, 1, 2,
+					0, 2, 3,
+				};
+
+				OutDrawElements.PushClip(FSlateClippingZone{ MyClippingRect });
+				FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, m_ImGuiSlateBrush.GetRenderingResource(), Vertices, Indices, nullptr, 0, 0, ESlateDrawEffect::IgnoreTextureAlpha | ESlateDrawEffect::NoGamma | ESlateDrawEffect::NoBlending);
+				OutDrawElements.PopClip();
+			}
 		}
 	}
 
@@ -332,3 +567,5 @@ void SImGuiWidgetWindow::TickInternal(const FGeometry& AllottedGeometry, const d
 
 	m_OnTickDelegate.ExecuteIfBound(InDeltaTime);
 }
+
+PRAGMA_ENABLE_OPTIMIZATION

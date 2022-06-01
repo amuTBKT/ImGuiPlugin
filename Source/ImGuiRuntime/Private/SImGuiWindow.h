@@ -7,6 +7,7 @@
 #include "imgui.h"
 
 struct ImGuiContext;
+class UTextureRenderTarget2D;
 
 class IMGUIRUNTIME_API SImGuiWindow : public SCompoundWidget
 {
@@ -63,6 +64,9 @@ private:
 
 protected:
 	ImGuiContext* m_ImGuiContext = nullptr;
+
+	FSlateBrush m_ImGuiSlateBrush;
+	UTextureRenderTarget2D* m_ImGuiRT = nullptr;
 };
 
 /* Default window, only one instance active at a time */

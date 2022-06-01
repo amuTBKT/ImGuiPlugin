@@ -1,0 +1,64 @@
+#include "/Engine/Private/Common.ush"
+
+ByteAddressBuffer VertexBuffer;
+float4x4 ProjectionMatrix;
+uint GlobalVertexOffset;
+
+struct VertexFormat
+{
+	float2 Position;
+	float2 TexCoord;
+	float4 Color;
+};
+
+float4 DecodeColor(uint PackedColor)
+{
+	float4 color;
+
+	color.x = ((PackedColor) & 0xff) / 255.f;
+	color.y = ((PackedColor >> 8) & 0xff) / 255.f;
+	color.z = ((PackedColor >> 16) & 0xff) / 255.f;
+	color.w = ((PackedColor >> 24) & 0xff) / 255.f;
+
+	return color;
+}
+
+#define ImDrawVertSize         20
+#define ImDrawVert_PosStride   0
+#define ImDrawVert_UVStride    8
+#define ImDrawVert_ColorStride 16
+VertexFormat FetchVertex(uint vertexId)
+{
+	uint vertexOffset = vertexId * ImDrawVertSize;
+	VertexFormat vertex;
+	vertex.Position = asfloat(VertexBuffer.Load2(vertexOffset + ImDrawVert_PosStride));
+	vertex.TexCoord = asfloat(VertexBuffer.Load2(vertexOffset + ImDrawVert_UVStride));
+	vertex.Color = DecodeColor(asuint(VertexBuffer.Load(vertexOffset + ImDrawVert_ColorStride)));
+
+	return vertex;
+}
+
+void MainVS(
+	in uint VertexId : SV_VERTEXID,
+	out float4 ClipPosition : SV_POSITION,
+	out float2 OutUV : TEXCOORD0,
+	out float4 OutColor : COLOR0)
+{
+	VertexFormat Vertex = FetchVertex(GlobalVertexOffset + VertexId);
+
+	ClipPosition = mul(float4(Vertex.Position.xy, 0.f, 1.f), ProjectionMatrix);
+	OutUV = Vertex.TexCoord;
+	OutColor = Vertex.Color;
+}
+
+Texture2D Texture;
+SamplerState TextureSampler;
+
+void MainPS(
+	in float4 ScreenPosition : SV_POSITION,
+	in float2 InUV : TEXCOORD0,
+	in float4 InColor : COLOR0,
+	out float4 OutColor : SV_Target0)
+{
+	OutColor = InColor * Texture2DSample(Texture, TextureSampler, InUV);
+}

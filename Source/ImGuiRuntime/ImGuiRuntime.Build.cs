@@ -42,6 +42,17 @@ public class ImGuiRuntime : ModuleRules
 				"InputCore",
 				"Slate",
 				"SlateCore",
+				"RenderCore",
+				"RHI",
+				"ImGuiShaders",
+			}
+		);
+
+		var EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
+		PrivateIncludePaths.AddRange(
+			new string[]
+			{
+				Path.Combine(EngineDir, "Source/Runtime/SlateRHIRenderer/Private")
 			}
 		);
 
