@@ -158,7 +158,7 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 						std::swap(SlateVertex.Color.R, SlateVertex.Color.B);
 					}
 
-					for (int CmdBufferIndex = 0; CmdBufferIndex < CmdList->CmdBuffer.Size; CmdBufferIndex++)
+					for (int32 CmdBufferIndex = 0; CmdBufferIndex < CmdList->CmdBuffer.Size; CmdBufferIndex++)
 					{
 						const ImDrawCmd& DrawCommand = CmdList->CmdBuffer[CmdBufferIndex];
 
@@ -189,20 +189,28 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 			{
 				struct FRenderData
 				{
-					TArray<ImDrawList*> DrawLists;
-					TArray<FTextureRHIRef> BoundTextures;
-					ImVec2 DisplayPos;
-					ImVec2 DisplaySize;
-					int32 TotalVtxCount;
-					int32 TotalIdxCount;
-
-					~FRenderData()
+					struct FDrawListDeleter
 					{
-						for (ImDrawList* CmdList : DrawLists)
-						{
-							IM_FREE(CmdList);
-						}
-					}
+						void operator()(ImDrawList* Ptr) { IM_FREE(Ptr); }
+					};
+					using FDrawListPtr = TUniquePtr<ImDrawList, FDrawListDeleter>;
+
+					TArray<FDrawListPtr> DrawLists;
+					TArray<FTextureRHIRef> BoundTextures;
+					ImVec2 DisplayPos = {};
+					ImVec2 DisplaySize = {};
+					int32 TotalVtxCount = 0;
+					int32 TotalIdxCount = 0;
+
+					FRenderData() = default;
+					FRenderData(const FRenderData&) = delete;
+					FRenderData(FRenderData&&) = delete;
+					
+					~FRenderData() = default;
+
+					FRenderData& operator=(const FRenderData&) = delete;
+					FRenderData& operator=(FRenderData&&) = delete;
+
 				};
 				FRenderData* RenderData = new FRenderData();
 				RenderData->DisplayPos = DrawData->DisplayPos;
@@ -210,9 +218,9 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 				RenderData->TotalVtxCount = DrawData->TotalVtxCount;
 				RenderData->TotalIdxCount = DrawData->TotalIdxCount;
 				RenderData->DrawLists.SetNum(DrawData->CmdListsCount);
-				for (int ListIndex = 0; ListIndex < DrawData->CmdListsCount; ++ListIndex)
+				for (int32 ListIndex = 0; ListIndex < DrawData->CmdListsCount; ++ListIndex)
 				{
-					RenderData->DrawLists[ListIndex] = DrawData->CmdLists[ListIndex]->CloneOutput();
+					RenderData->DrawLists[ListIndex] = FRenderData::FDrawListPtr(DrawData->CmdLists[ListIndex]->CloneOutput());
 				}
 
 				RenderData->BoundTextures.Reserve(ImGuiRuntimeModule.GetResourceHandles().Num());
@@ -252,7 +260,7 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 						FBufferRHIRef VertexBuffer = RHICreateIndexBuffer(sizeof(uint32), RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Static, VertexCreateInfo);
 						if (ImDrawVert* VertexDst = (ImDrawVert*)RHILockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
 						{
-							for (ImDrawList* CmdList : RenderData->DrawLists)
+							for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
 							{
 								memcpy(VertexDst, CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size * sizeof(ImDrawVert));
 								VertexDst += CmdList->VtxBuffer.Size;
@@ -265,7 +273,7 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 						FBufferRHIRef IndexBuffer = RHICreateIndexBuffer(sizeof(ImDrawIdx), RenderData->TotalIdxCount * sizeof(ImDrawIdx), BUF_Static, IndexCreateInfo);
 						if (ImDrawIdx* IndexDst = (ImDrawIdx*)RHILockBuffer(IndexBuffer, 0, RenderData->TotalIdxCount * sizeof(ImDrawIdx), RLM_WriteOnly))
 						{
-							for (ImDrawList* CmdList : RenderData->DrawLists)
+							for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
 							{
 								memcpy(IndexDst, CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
 								IndexDst += CmdList->IdxBuffer.Size;
@@ -319,10 +327,11 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 							VertexShader->SetVertexBuffer(RHICmdList, VertexBufferSRV);
 							PixelShader->SetTextureSampler(RHICmdList, TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI());
 
+							// since we merged the vertex and index buffers, we need to track global offset
 							uint32 GlobalVertexOffset = 0;
 							uint32 GlobalIndexOffset = 0;
 							const ImVec2 ClipRectOffset = RenderData->DisplayPos;
-							for (const ImDrawList* CmdList : RenderData->DrawLists)
+							for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
 							{
 								for (const ImDrawCmd& DrawCmd : CmdList->CmdBuffer)
 								{
@@ -336,7 +345,7 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 										}
 										else
 										{
-											DrawCmd.UserCallback(CmdList, &DrawCmd);
+											DrawCmd.UserCallback(CmdList.Get(), &DrawCmd);
 										}
 									}
 									else
