@@ -15,10 +15,13 @@ static ImGuiTextFilter StatFilter = {};
 
 static constexpr float HeaderSizeY = 42.f;
 
-static FImGuiImageBindParams WatchIcon;
-static FImGuiImageBindParams UnwatchIcon;
-
-static TMap<FString, bool> StatGroups;
+struct FStatGroupData
+{
+    FString DisplayName = "None";
+    FString StatName = "None";
+    bool IsActive = false;
+};
+static TMap<FName, FStatGroupData> StatGroups;
 
 // helpers
 FORCEINLINE static FString ShortenName(TCHAR const* LongName)
@@ -100,8 +103,7 @@ FORCEINLINE static void RenderCounterHeadings()
     ImGui::TableSetupColumn("Counters", ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoHide);
     ImGui::TableSetupColumn("Average", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableSetupColumn("Watch", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
     ImGui::TableHeadersRow();
 }
@@ -402,55 +404,6 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
     {
         ImGui::Text("");
     }
-
-    // watcher
-    ImGui::TableSetColumnIndex(4);
-    {
-        struct FWatchValue
-        {
-            double Threshold = 10000.;
-            bool Enabled = false;
-        };
-        static TMap<FString, FWatchValue> WatchValues;
-
-        FWatchValue& Value = WatchValues.FindOrAdd(StatDisplay);
-        
-        FString NameBuffer;
-        if (Value.Enabled)
-        {
-            NameBuffer = FString::Printf(TEXT("Unwatch###%s"), *StatDisplay);
-        }
-        else
-        {
-            NameBuffer = FString::Printf(TEXT("Watch###%s"), *StatDisplay);
-        }
-
-        //if (ImGui::SmallButton((TCHAR_TO_ANSI(*NameBuffer))))
-        const FImGuiImageBindParams& Param = Value.Enabled ? UnwatchIcon : WatchIcon;
-        if (ImGui::ImageButton(Param.Id, Param.Size, Param.UV0, Param.UV1))
-        {
-            Value.Enabled = !Value.Enabled;
-        }
-        if (ImGui::BeginPopupContextItem(TCHAR_TO_ANSI(*NameBuffer)))
-        {
-            char InputBuffer[32];
-            if (ImGui::InputText("Value:", InputBuffer, sizeof(InputBuffer), ImGuiInputTextFlags_CharsDecimal | ImGuiInputTextFlags_EnterReturnsTrue))
-            {
-                Value.Threshold = FCString::Atod(ANSI_TO_TCHAR(InputBuffer));
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
-        }
-
-        if (Value.Enabled)
-        {
-            if (AvgValue > Value.Threshold)
-            {
-                GEngine->AddOnScreenDebugMessage(0, 5.f, FColor::Red, FString::Printf(TEXT("%f"), AvgValue));
-                Value.Enabled = false;
-            }
-        }
-    }
 }
 
 FORCEINLINE static void RenderHierCycles(const FActiveStatGroupInfo& HudGroup)
@@ -488,6 +441,25 @@ void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGa
     uint64 MaxTotalTime = 0;
 
     // Render all counters.
+#if 1
+    ImGuiListClipper clipper;
+    clipper.Begin(Aggregates.Num());
+    while (clipper.Step())
+    {
+        for (int32 RowIndex = clipper.DisplayStart; RowIndex < clipper.DisplayEnd; ++RowIndex)
+        {
+            const FComplexStatMessage& ComplexStat = Aggregates[RowIndex];
+            const bool bIsBudgetIgnored = IgnoreBudgetStats.Contains(ComplexStat.NameAndInfo.GetShortName());
+            if (bBudget && !bIsBudgetIgnored && ComplexStat.NameAndInfo.GetFlag(EStatMetaFlags::IsPackedCCAndDuration))
+            {
+                AvgTotalTime += ComplexStat.GetValue_Duration(EComplexStatField::IncAve);
+                MaxTotalTime += ComplexStat.GetValue_Duration(EComplexStatField::IncMax);
+            }
+
+            FunctionToCall(ViewData, ComplexStat, TotalGroupBudget, bIsBudgetIgnored);
+        }
+    }
+#else
     for (int32 RowIndex = 0; RowIndex < Aggregates.Num(); ++RowIndex)
     {
         const FComplexStatMessage& ComplexStat = Aggregates[RowIndex];
@@ -500,6 +472,7 @@ void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGa
 
         FunctionToCall(ViewData, ComplexStat, TotalGroupBudget, bIsBudgetIgnored);
     }
+#endif
 
     if (bBudget)
     {
@@ -520,16 +493,23 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
         const FActiveStatGroupInfo& StatGroup = ViewData.ActiveStatGroups[GroupIndex];
 
         // If the stat isn't enabled for this particular viewport, skip
-        FString StatGroupName = ViewData.GroupNames[GroupIndex].ToString();
-        StatGroupName.RemoveFromStart(TEXT("STATGROUP_"), ESearchCase::CaseSensitive);
+        const FName& StatGroupFName = ViewData.GroupNames[GroupIndex];
+        const FName& GroupName = ViewData.GroupNames[GroupIndex];
+        const FString& GroupDesc = ViewData.GroupDescriptions[GroupIndex];
 
-        StatGroups.FindOrAdd(StatGroupName) = true;
-
-        if (ImGui::CollapsingHeader(TCHAR_TO_ANSI(*StatGroupName), ImGuiTreeNodeFlags_DefaultOpen))
+        FStatGroupData* StatGroupData = StatGroups.Find(StatGroupFName);
+        if (!StatGroupData)
         {
-            const FName& GroupName = ViewData.GroupNames[GroupIndex];
-            const FString& GroupDesc = ViewData.GroupDescriptions[GroupIndex];
+            StatGroupData = &StatGroups.Add(StatGroupFName);
+            StatGroupData->DisplayName = GroupDesc;
 
+            StatGroupData->StatName = ViewData.GroupNames[GroupIndex].ToString();
+            StatGroupData->StatName.RemoveFromStart(TEXT("STATGROUP_"), ESearchCase::CaseSensitive);
+        };
+        StatGroupData->IsActive = true;
+
+        if (ImGui::CollapsingHeader(TCHAR_TO_ANSI(*StatGroupData->DisplayName), ImGuiTreeNodeFlags_DefaultOpen))
+        {
             const bool bBudget = StatGroup.ThreadBudgetMap.Num() > 0;
             const int32 NumThreadsBreakdown = bBudget ? StatGroup.FlatAggregateThreadBreakdown.Num() : 1;
             TArray<FName> ThreadNames;
@@ -561,7 +541,7 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
 
                 if (bHasHierarchy || bHasFlat)
                 {
-                    const FString CycleStatsTableName = StatGroupName + TEXT("_CycleStats");
+                    const FString CycleStatsTableName = StatGroupData->DisplayName + TEXT("_CycleStats");
 
                     if (ImGui::BeginTable(TCHAR_TO_ANSI(*CycleStatsTableName), bBudget ? 4 : 6, TableFlags))
                     {
@@ -588,7 +568,7 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
             // Render memory counters.
             if (StatGroup.MemoryAggregate.Num())
             {
-                const FString MemoryStatsTableName = StatGroupName + TEXT("_MemoryStats");
+                const FString MemoryStatsTableName = StatGroupData->DisplayName + TEXT("_MemoryStats");
 
                 if (ImGui::BeginTable(TCHAR_TO_ANSI(*MemoryStatsTableName), 5, TableFlags))
                 {
@@ -603,9 +583,9 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
             // Render remaining counters.
             if (StatGroup.CountersAggregate.Num())
             {
-                const FString CounterStatsTableName = StatGroupName + TEXT("_CounterStats");
+                const FString CounterStatsTableName = StatGroupData->DisplayName + TEXT("_CounterStats");
 
-                if (ImGui::BeginTable(TCHAR_TO_ANSI(*CounterStatsTableName), 5, TableFlags))
+                if (ImGui::BeginTable(TCHAR_TO_ANSI(*CounterStatsTableName), 4, TableFlags))
                 {
                     RenderCounterHeadings();
 
@@ -621,42 +601,37 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
 static void RenderStatsHeader()
 {
     int32 Index = -1;
-    for (auto& [StatGroupName, Enabled] : StatGroups)
+    for (auto& Itr : StatGroups)
     {
         ++Index;
 
         ImGui::SameLine();
 
-        const bool bApplyStyle = Enabled;
+        const bool bApplyStyle = Itr.Value.IsActive;
         if (bApplyStyle)
         {
             ImGui::PushID(Index);
 
-            // change text to black
-            const ImVec4 TextColor = (ImVec4)ImColor(0.f, 0.f, 0.f);
-            ImGui::PushStyleColor(ImGuiCol_Text, TextColor);
-
-            // change button to green
-            const ImVec4 ButtonColor = (ImVec4)ImColor(0.f, 0.64f, 0.f);
-            ImGui::PushStyleColor(ImGuiCol_Button, ButtonColor);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ButtonColor);
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ButtonColor);
+            ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor::HSV(2.f / 7.0f, 0.6f, 0.6f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, (ImVec4)ImColor::HSV(2.f / 7.0f, 0.7f, 0.7f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, (ImVec4)ImColor::HSV(2.f / 7.0f, 0.8f, 0.8f));
         }
 
-        const TCHAR* GroupName = *StatGroupName;
+        const TCHAR* GroupName = *Itr.Value.DisplayName;
         if (ImGui::Button(TCHAR_TO_ANSI(GroupName)))
         {
-            Enabled ^= 1;
-
-            const FString StatCommand = FString::Printf(TEXT("stat %s -nodisplay"), GroupName);
+            const FString StatCommand = FString::Printf(TEXT("stat %s -nodisplay"), *Itr.Value.StatName);
             GEngine->Exec(nullptr, *StatCommand);
         }
 
         if (bApplyStyle)
         {
-            ImGui::PopStyleColor(4);
+            ImGui::PopStyleColor(3);
             ImGui::PopID();
         }
+
+        // disable at the end, we'll re-enable if the stat groups are still encountered when displaying..
+        Itr.Value.IsActive = false;
     }
 
     StatFilter.Draw();
@@ -666,31 +641,24 @@ static void RenderStatsHeader()
     {
         StatFilter.Clear();
     }
-
-
-    for (auto& [StatGroupName, Enabled] : StatGroups)
-    {
-        Enabled = false;
-    }
 }
 
 namespace ImGuiStatsVizualizer
 {
     static void Initialize(FImGuiRuntimeModule& ImGuiRuntimeModule)
     {
-        StatGroups.FindOrAdd(TEXT("GPU")) = false;
-        StatGroups.FindOrAdd(TEXT("SceneRendering")) = false;
-        StatGroups.FindOrAdd(TEXT("NiagaraOverview")) = false;
-        StatGroups.FindOrAdd(TEXT("NiagaraSystems")) = false;
-        StatGroups.FindOrAdd(TEXT("NiagaraEmitters")) = false;
-        StatGroups.FindOrAdd(TEXT("ImGui")) = false;
+        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_GPU")))             = { TEXT("GPU"),              TEXT("GPU"),               false };
+        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_SceneRendering")))  = { TEXT("Scene Rendering"),  TEXT("SceneRendering"),    false };
+        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_Niagara")))         = { TEXT("Niagara"),          TEXT("Niagara"),           false };
+        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_NiagaraSystems")))  = { TEXT("Niagara Systems"),  TEXT("NiagaraSystems"),    false };
+        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_NiagaraEmitters"))) = { TEXT("Niagara Emitters"), TEXT("NiagaraEmitters"),   false };
+        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_ImGui")))           = { TEXT("ImGui"),            TEXT("ImGui"),             false };
     }
 
     static void RegisterOneFrameResources()
     {
         FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
-        WatchIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Visible").GetIcon(), { 10.f, 10.f }, 1.f);
-        UnwatchIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Hidden").GetIcon(), { 10.f, 10.f }, 1.f);
+        //ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Visible").GetIcon(), { 10.f, 10.f }, 1.f);
     }
 
     static void Tick(float DeltaTime)
