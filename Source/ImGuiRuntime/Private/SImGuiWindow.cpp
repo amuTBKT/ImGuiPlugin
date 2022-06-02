@@ -46,6 +46,17 @@ void SImGuiWindow::Construct(const FArguments& InArgs)
 
 	FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
 	io.Fonts->TexID = ImGuiRuntimeModule.GetDefaultFontTextureID();
+
+	// allocate rendering resources
+	m_ImGuiRT = NewObject<UTextureRenderTarget2D>();
+	m_ImGuiRT->bCanCreateUAV = false;
+	m_ImGuiRT->bAutoGenerateMips = false;
+	m_ImGuiRT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
+	m_ImGuiRT->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
+	m_ImGuiRT->InitAutoFormat(32, 32);
+	m_ImGuiRT->UpdateResourceImmediate(true);
+
+	m_ImGuiSlateBrush.SetResourceObject(m_ImGuiRT);
 }
 
 SImGuiWindow::~SImGuiWindow()
@@ -56,6 +67,18 @@ SImGuiWindow::~SImGuiWindow()
 		m_ImGuiContext = nullptr;
 	}
 }
+
+//~ GCObject Interface
+void SImGuiWindow::AddReferencedObjects(FReferenceCollector& Collector)
+{
+	Collector.AddReferencedObject(m_ImGuiRT);
+}
+
+FString SImGuiWindow::GetReferencerName() const
+{
+	return TEXT("SImGuiWindow");
+}
+//~ GCObject Interface
 
 void SImGuiWindow::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
@@ -73,20 +96,16 @@ void SImGuiWindow::Tick(const FGeometry& AllottedGeometry, const double InCurren
 		IO.DeltaTime = InDeltaTime;		
 	}
 
-	int32 NewSizeX = (int32)AllottedGeometry.GetAbsoluteSize().X;
-	int32 NewSizeY = (int32)AllottedGeometry.GetAbsoluteSize().Y;
-
-	if (!m_ImGuiRT || m_ImGuiRT->SizeX != NewSizeX || m_ImGuiRT->SizeY != NewSizeY)
+	// resize RT if needed
 	{
-		m_ImGuiRT = NewObject<UTextureRenderTarget2D>();
-		m_ImGuiRT->bCanCreateUAV = false;
-		m_ImGuiRT->bAutoGenerateMips = false;
-		m_ImGuiRT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
-		m_ImGuiRT->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
-		m_ImGuiRT->InitAutoFormat(NewSizeX, NewSizeY);
-		m_ImGuiRT->UpdateResourceImmediate(true);
+		int32 NewSizeX = (int32)AllottedGeometry.GetAbsoluteSize().X;
+		int32 NewSizeY = (int32)AllottedGeometry.GetAbsoluteSize().Y;
 
-		m_ImGuiSlateBrush.SetResourceObject(m_ImGuiRT);
+		//TODO: should only resize if NewSize > CurrentSize
+		if (m_ImGuiRT->SizeX != NewSizeX || m_ImGuiRT->SizeY != NewSizeY)
+		{
+			m_ImGuiRT->ResizeTarget(NewSizeX, NewSizeY);
+		}
 	}
 
 	TickInternal(AllottedGeometry, InCurrentTime, InDeltaTime);
@@ -226,7 +245,8 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 					RenderData->BoundTextures.Add(TextureRHI.IsValid() ? TextureRHI : GBlackTexture->TextureRHI);
 				}
 
-				ENQUEUE_RENDER_COMMAND(RenderImGui)([RenderData, Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
+				ENQUEUE_RENDER_COMMAND(RenderImGui)(
+					[RenderData, Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
 					{
 						FRHIResourceCreateInfo VertexCreateInfo(TEXT("ImGui_VertexBuffer"));
 						FBufferRHIRef VertexBuffer = RHICreateIndexBuffer(sizeof(uint32), RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Static, VertexCreateInfo);
@@ -257,6 +277,8 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 						RHICmdList.Transition(FRHITransitionInfo(Resource->TextureRHI, ERHIAccess::Unknown, ERHIAccess::RTV));
 						RHICmdList.BeginRenderPass(RPInfo, TEXT("RenderImGui"));
 						{
+							SCOPED_DRAW_EVENT(RHICmdList, RenderImGui);
+
 							FGraphicsPipelineStateInitializer GraphicsPSOInit;
 							RHICmdList.ApplyCachedRenderTargets(GraphicsPSOInit);
 
@@ -295,6 +317,7 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 							SetupPerDrawRenderState();
 
 							VertexShader->SetVertexBuffer(RHICmdList, VertexBufferSRV);
+							PixelShader->SetTextureSampler(RHICmdList, TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI());
 
 							uint32 GlobalVertexOffset = 0;
 							uint32 GlobalIndexOffset = 0;
@@ -325,11 +348,11 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 											DrawCmd.ClipRect.z - ClipRectOffset.x,
 											DrawCmd.ClipRect.w - ClipRectOffset.y);
 
+										VertexShader->SetVertexOffset(RHICmdList, DrawCmd.VtxOffset + GlobalVertexOffset);
+										
 										const uint32 Index = FImGuiRuntimeModule::ImGuiIDToIndex(DrawCmd.TextureId);
 										check(RenderData->BoundTextures.IsValidIndex(Index) && RenderData->BoundTextures[Index].IsValid());
 										PixelShader->SetTexture(RHICmdList, RenderData->BoundTextures[Index]);
-										
-										VertexShader->SetVertexOffset(RHICmdList, DrawCmd.VtxOffset + GlobalVertexOffset);
 
 										RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);
 									}

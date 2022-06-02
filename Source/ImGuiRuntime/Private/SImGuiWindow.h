@@ -1,15 +1,17 @@
 #pragma once
 
-#include <Widgets/DeclarativeSyntaxSupport.h>
-#include <Widgets/SCompoundWidget.h>
-#include <Textures/SlateShaderResource.h>
+#include "Widgets/DeclarativeSyntaxSupport.h"
+#include "Widgets/SCompoundWidget.h"
+#include "UObject/GCObject.h"
+
+#include "Textures/SlateShaderResource.h"
 #include "ImGuiPluginDelegates.h"
 #include "imgui.h"
 
 struct ImGuiContext;
 class UTextureRenderTarget2D;
 
-class IMGUIRUNTIME_API SImGuiWindow : public SCompoundWidget
+class IMGUIRUNTIME_API SImGuiWindow : public SCompoundWidget, public FGCObject
 {
 public:
 	SLATE_BEGIN_ARGS(SImGuiWindow)
@@ -19,6 +21,11 @@ public:
 
 	void Construct(const FArguments& InArgs);
 	~SImGuiWindow();
+
+	//~ GCObject Interface
+	virtual void AddReferencedObjects(FReferenceCollector& Collector) override;
+	virtual FString GetReferencerName() const override;
+	//~ GCObject Interface
 
 	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
