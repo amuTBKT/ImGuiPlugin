@@ -63,7 +63,7 @@ public:
 		return GetResourceHandle(ImGuiIDToIndex(ID));
 	}
 
-	const TArray<const FSlateBrush*> GetRegisteredBrushes() const { return OneFrameSlateBrushes; }
+	const TArray<FSlateResourceHandle>& GetResourceHandles() const { return OneFrameResourceHandles; }
 
 	FImGuiImageBindParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale);
 	FImGuiImageBindParams RegisterOneFrameResource(const FSlateBrush* SlateBrush);
@@ -86,8 +86,6 @@ private:
 	FImGuiImageBindParams m_DefaultFontImageParams = {};
 	FImGuiImageBindParams m_MissingImageParams = {};
 
-	TArray<const FSlateBrush*> OneFrameSlateBrushes;
-	
 	TArray<FSlateBrush> CreatedSlateBrushes;
 	TArray<FSlateResourceHandle> OneFrameResourceHandles;
 

@@ -215,20 +215,20 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 					RenderData->DrawLists[ListIndex] = DrawData->CmdLists[ListIndex]->CloneOutput();
 				}
 
-				RenderData->BoundTextures.Reserve(ImGuiRuntimeModule.GetRegisteredBrushes().Num());
-				for (const FSlateBrush* SlateBrush : ImGuiRuntimeModule.GetRegisteredBrushes())
+				RenderData->BoundTextures.Reserve(ImGuiRuntimeModule.GetResourceHandles().Num());
+				for (const FSlateResourceHandle& ResourceHandle : ImGuiRuntimeModule.GetResourceHandles())
 				{
 					FTextureRHIRef TextureRHI = nullptr;
 
-					if (SlateBrush->ResourceHandle.GetResourceProxy() && SlateBrush->ResourceHandle.GetResourceProxy()->Resource)
+					if (ResourceHandle.GetResourceProxy() && ResourceHandle.GetResourceProxy()->Resource)
 					{
-						FSlateShaderResource* ShaderResource = SlateBrush->ResourceHandle.GetResourceProxy()->Resource;
+						FSlateShaderResource* ShaderResource = ResourceHandle.GetResourceProxy()->Resource;
 						ESlateShaderResource::Type Type = ShaderResource->GetType();
 
 						if (Type == ESlateShaderResource::Type::TextureObject)
 						{
 							FSlateBaseUTextureResource* TextureObjectResource = static_cast<FSlateBaseUTextureResource*>(ShaderResource);
-							if (auto* Resource = TextureObjectResource->GetTextureObject()->GetResource())
+							if (FTextureResource* Resource = TextureObjectResource->GetTextureObject()->GetResource())
 							{
 								TextureRHI = Resource->TextureRHI;
 							}
@@ -369,18 +369,19 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 				);
 
 				const FSlateRenderTransform WidgetOffsetTransform = FTransform2f(1.f, { 0.f, 0.f });
+				const FSlateRect DrawRect = AllottedGeometry.GetRenderBoundingRect();
 
-				const FVector2D V0 = MyClippingRect.GetBottomLeft();
-				const FVector2D V1 = MyClippingRect.GetBottomRight();
-				const FVector2D V2 = MyClippingRect.GetTopRight();
-				const FVector2D V3 = MyClippingRect.GetTopLeft();
+				const FVector2D V0 = DrawRect.GetTopLeft();
+				const FVector2D V1 = DrawRect.GetTopRight();
+				const FVector2D V2 = DrawRect.GetBottomRight();
+				const FVector2D V3 = DrawRect.GetBottomLeft();
 
 				const TArray<FSlateVertex> Vertices =
 				{
-					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V0.X, (float)V0.Y }, FVector2f{ 0.f, 1.f }, FColor::White),
-					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V1.X, (float)V1.Y }, FVector2f{ 1.f, 1.f }, FColor::White),
-					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V2.X, (float)V2.Y }, FVector2f{ 1.f, 0.f }, FColor::White),
-					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V3.X, (float)V3.Y }, FVector2f{ 0.f, 0.f }, FColor::White)
+					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V0.X, (float)V0.Y }, FVector2f{ 0.f, 0.f }, FColor::White),
+					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V1.X, (float)V1.Y }, FVector2f{ 1.f, 0.f }, FColor::White),
+					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V2.X, (float)V2.Y }, FVector2f{ 1.f, 1.f }, FColor::White),
+					FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V3.X, (float)V3.Y }, FVector2f{ 0.f, 1.f }, FColor::White)
 				};
 				const TArray<uint32> Indices =
 				{

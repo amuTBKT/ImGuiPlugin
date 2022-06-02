@@ -141,7 +141,6 @@ TSharedPtr<SWindow> FImGuiRuntimeModule::CreateWidget(const FString& WindowName,
 void FImGuiRuntimeModule::OnBeginFrame()
 {
 	OneFrameResourceHandles.Reset();
-	OneFrameSlateBrushes.Reset();
 	CreatedSlateBrushes.Reset();
 	
 	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
@@ -149,9 +148,7 @@ void FImGuiRuntimeModule::OnBeginFrame()
 }
 
 FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
-{
-	OneFrameSlateBrushes.Add(SlateBrush);
-	
+{	
 	const uint32 NewIndex = OneFrameResourceHandles.Num();
 
 	const FSlateResourceHandle& ResourceHandle = SlateBrush->GetRenderingResource(LocalSize, DrawScale);
