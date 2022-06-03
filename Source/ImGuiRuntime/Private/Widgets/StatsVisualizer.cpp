@@ -40,11 +40,10 @@ FORCEINLINE static FString FormatStatValueInt64(const int64 Value)
 }
 
 // headings
-FORCEINLINE static void RenderGroupedHeadings(const bool bIsHierarchy, const bool bBudget)
+FORCEINLINE static void RenderGroupedHeadings(const bool bIsHierarchy)
 {
     // The heading looks like:
     // Stat [32chars]	CallCount [8chars]	IncAvg [8chars]	IncMax [8chars]	ExcAvg [8chars]	ExcMax [8chars]
-    // If we are in budget mode ignore ExcAvg and ExcMax
 
     static const char* CaptionFlat = "Cycle counters (flat)";
     static const char* CaptionHier = "Cycle counters (hierarchy)";
@@ -52,18 +51,11 @@ FORCEINLINE static void RenderGroupedHeadings(const bool bIsHierarchy, const boo
     ImGui::TableSetupColumn(bIsHierarchy ? CaptionHier : CaptionFlat, ImGuiTableColumnFlags_WidthFixed | ImGuiTableColumnFlags_NoReorder | ImGuiTableColumnFlags_NoHide);
     ImGui::TableSetupColumn("CallCount", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("InclusiveAvg", ImGuiTableColumnFlags_WidthFixed);
-    if (!bBudget)
-    {
-        ImGui::TableSetupColumn("InclusiveMax", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("ExclusiveAvg", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("ExclusiveMax", ImGuiTableColumnFlags_WidthStretch);
-    }
-    else
-    {
-        ImGui::TableSetupColumn("InclusiveMax", ImGuiTableColumnFlags_WidthStretch);
-    }
+    ImGui::TableSetupColumn("InclusiveMax", ImGuiTableColumnFlags_WidthFixed);
+    ImGui::TableSetupColumn("ExclusiveAvg", ImGuiTableColumnFlags_WidthFixed);
+    ImGui::TableSetupColumn("ExclusiveMax", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
-    ImGui::TableHeadersRow();
+    ImGui::TableHeadersRow(); 
 }
 
 FORCEINLINE static void RenderMemoryHeadings()
@@ -94,11 +86,8 @@ FORCEINLINE static void RenderCounterHeadings()
 }
 
 // body
-static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat, const float Budget, const bool bIsBudgetIgnored)
+static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
 {
-    const bool bBudget = Budget >= 0.f;
-    FColor Color = FColor::White;// Globals.StatColor.ToFColor(true);
-
     check(Item.NameAndInfo.GetFlag(EStatMetaFlags::IsCycle));
 
     const bool bIsInitialized = Item.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64;
@@ -147,27 +136,17 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat, 
                 ImGui::Text("");
             }
 
-            // Add the two inclusive columns if asked
             ImGui::TableSetColumnIndex(2);
             ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncAve)))));
 
             ImGui::TableSetColumnIndex(3);
             ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncMax)))));
 
-            if (!bBudget)
-            {
-                // And the exclusive if asked
-                ImGui::TableSetColumnIndex(4);
-                ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::ExcAve)))));
+            ImGui::TableSetColumnIndex(4);
+            ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::ExcAve)))));
 
-                ImGui::TableSetColumnIndex(5);
-                ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::ExcMax)))));
-            }
-            else
-            {
-                ImGui::TableSetColumnIndex(4); ImGui::Text("");
-                ImGui::TableSetColumnIndex(5); ImGui::Text("");
-            }
+            ImGui::TableSetColumnIndex(5);
+            ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::ExcMax)))));
         }
         else
         {
@@ -184,7 +163,7 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat, 
     }
 }
 
-static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FComplexStatMessage& All, const float Budget, const bool bIsBudgetIgnored)
+static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FComplexStatMessage& All)
 {
     if (!StatFilter.PassFilter(TCHAR_TO_ANSI(*All.GetDescription())))
     {
@@ -254,13 +233,13 @@ static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FCom
     }
 }
 
-static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexStatMessage& All, const float Budget, const bool bIsBudgetIgnored)
+static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexStatMessage& All)
 {
     // If this is a cycle, render it as a cycle. This is a special case for manually set cycle counters.
     const bool bIsCycle = All.NameAndInfo.GetFlag(EStatMetaFlags::IsCycle);
     if (bIsCycle)
     {
-        RenderCycle(All, false, Budget, bIsBudgetIgnored);
+        RenderCycle(All, false);
         return;
     }
 
@@ -361,32 +340,13 @@ FORCEINLINE static void RenderHierCycles(const FActiveStatGroupInfo& HudGroup)
         const FComplexStatMessage& ComplexStat = HudGroup.HierAggregate[RowIndex];
         const int32 Indent = HudGroup.Indentation[RowIndex];
 
-        RenderCycle(ComplexStat, true, -1.f, false);
+        RenderCycle(ComplexStat, true);
     }
 }
 
-static void RenderGroupBudget(const uint64 AvgTotalTime, const  uint64 MaxTotalTime, const float GroupBudget)
-{
-    // The budget looks like:
-    // Stat [32chars]	Value [8chars]	Average [8chars]
-    
-    const float AvgTotalMs = FPlatformTime::ToMilliseconds(AvgTotalTime);
-    const float MaxTotalMs = FPlatformTime::ToMilliseconds(MaxTotalTime);
-
-    FString BudgetString = FString::Printf(TEXT("Total (of %1.2f ms)"), GroupBudget);
-
-    ImGui::TableSetColumnIndex(0); ImGui::Text(TCHAR_TO_ANSI(*BudgetString));
-    ImGui::TableSetColumnIndex(1); ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), AvgTotalMs)));
-    ImGui::TableSetColumnIndex(2); ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), MaxTotalMs)));
-}
-
 template <typename T>
-void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGameThreadStatsData& ViewData, const TSet<FName>& IgnoreBudgetStats, const float TotalGroupBudget, const T& FunctionToCall)
+void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGameThreadStatsData& ViewData, const T& FunctionToCall)
 {
-    const bool bBudget = TotalGroupBudget >= 0.f;
-    uint64 AvgTotalTime = 0;
-    uint64 MaxTotalTime = 0;
-
     // Render all counters.
     if (!StatFilter.IsActive()) // clipper doesn't work properly with filter :(
     {        
@@ -396,15 +356,7 @@ void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGa
         {
             for (int32 RowIndex = clipper.DisplayStart; RowIndex < clipper.DisplayEnd; ++RowIndex)
             {
-                const FComplexStatMessage& ComplexStat = Aggregates[RowIndex];
-                const bool bIsBudgetIgnored = IgnoreBudgetStats.Contains(ComplexStat.NameAndInfo.GetShortName());
-                if (bBudget && !bIsBudgetIgnored && ComplexStat.NameAndInfo.GetFlag(EStatMetaFlags::IsPackedCCAndDuration))
-                {
-                    AvgTotalTime += ComplexStat.GetValue_Duration(EComplexStatField::IncAve);
-                    MaxTotalTime += ComplexStat.GetValue_Duration(EComplexStatField::IncMax);
-                }
-
-                FunctionToCall(ViewData, ComplexStat, TotalGroupBudget, bIsBudgetIgnored);
+                FunctionToCall(ViewData, Aggregates[RowIndex]);
             }
         }
         clipper.End();
@@ -413,27 +365,14 @@ void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGa
     {
         for (int32 RowIndex = 0; RowIndex < Aggregates.Num(); ++RowIndex)
         {
-            const FComplexStatMessage& ComplexStat = Aggregates[RowIndex];
-            const bool bIsBudgetIgnored = IgnoreBudgetStats.Contains(ComplexStat.NameAndInfo.GetShortName());
-            if (bBudget && !bIsBudgetIgnored && ComplexStat.NameAndInfo.GetFlag(EStatMetaFlags::IsPackedCCAndDuration))
-            {
-                AvgTotalTime += ComplexStat.GetValue_Duration(EComplexStatField::IncAve);
-                MaxTotalTime += ComplexStat.GetValue_Duration(EComplexStatField::IncMax);
-            }
-
-            FunctionToCall(ViewData, ComplexStat, TotalGroupBudget, bIsBudgetIgnored);
+            FunctionToCall(ViewData, Aggregates[RowIndex]);
         }
-    }
-
-    if (bBudget)
-    {
-        RenderGroupBudget(AvgTotalTime, MaxTotalTime, TotalGroupBudget);
     }
 }
 
-FORCEINLINE static void RenderFlatCycle(const FGameThreadStatsData& ViewData, const FComplexStatMessage& Item, const  float Budget, const bool bIsBudgetIgnored)
+FORCEINLINE static void RenderFlatCycle(const FGameThreadStatsData& ViewData, const FComplexStatMessage& Item)
 {
-    RenderCycle(Item, true, Budget, bIsBudgetIgnored);
+    RenderCycle(Item, true);
 }
 
 static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
@@ -447,11 +386,11 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
         const FName& StatGroupFName = ViewData.GroupNames[GroupIndex];
         const FName& GroupName = ViewData.GroupNames[GroupIndex];
         const FString& GroupDesc = ViewData.GroupDescriptions[GroupIndex];
-
+        
         FStatGroupData* StatGroupData = StatGroups.Find(StatGroupFName);
         if (!StatGroupData)
         {
-            FString StatName = ViewData.GroupNames[GroupIndex].ToString();
+            FString StatName = GroupName.ToString();
             StatName.RemoveFromStart(TEXT("STATGROUP_"), ESearchCase::CaseSensitive);
 
             StatGroupData = &StatGroups.Add(StatGroupFName, { GroupDesc, StatName, true });
@@ -460,32 +399,8 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
 
         if (ImGui::CollapsingHeader(TCHAR_TO_ANSI(*StatGroupData->DisplayName), ImGuiTreeNodeFlags_DefaultOpen))
         {
-            const bool bBudget = StatGroup.ThreadBudgetMap.Num() > 0;
-            const int32 NumThreadsBreakdown = bBudget ? StatGroup.FlatAggregateThreadBreakdown.Num() : 1;
-            TArray<FName> ThreadNames;
-            StatGroup.FlatAggregateThreadBreakdown.GetKeys(ThreadNames);
-
-            for (int32 ThreadBreakdownIdx = 0; ThreadBreakdownIdx < NumThreadsBreakdown; ++ThreadBreakdownIdx)
+            // Render cycles.
             {
-                FString GroupLongName = FString::Printf(TEXT("%s [%s]"), *GroupDesc, *GroupName.GetPlainNameString());
-
-                FName ThreadName;
-                FName ShortThreadName;
-                if (bBudget)
-                {
-                    ThreadName = ThreadNames[ThreadBreakdownIdx];
-                    ShortThreadName = FStatNameAndInfo::GetShortNameFrom(ThreadName);
-                    GroupLongName += FString::Printf(TEXT(" - %s"), *ShortThreadName.ToString());
-                }
-
-#if 0
-                if (!ViewData.RootFilter.IsEmpty())
-                {
-                    GroupLongName += FString::Printf(TEXT(" ROOT=%s"), *ViewData.RootFilter);
-                }
-                ImGui::TableSetColumnIndex(0); ImGui::Text(TCHAR_TO_ANSI(*GroupLongName));
-#endif
-
                 const bool bHasHierarchy = !!StatGroup.HierAggregate.Num();
                 const bool bHasFlat = !!StatGroup.FlatAggregate.Num();
 
@@ -493,9 +408,9 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
                 {
                     const FString CycleStatsTableName = StatGroupData->DisplayName + TEXT("_CycleStats");
 
-                    if (ImGui::BeginTable(TCHAR_TO_ANSI(*CycleStatsTableName), bBudget ? 4 : 6, TableFlags))
+                    if (ImGui::BeginTable(TCHAR_TO_ANSI(*CycleStatsTableName), 6, TableFlags))
                     {
-                        RenderGroupedHeadings(bHasHierarchy, bBudget);
+                        RenderGroupedHeadings(bHasHierarchy);
 
                         if (bHasHierarchy)
                         {
@@ -504,10 +419,7 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
                         
                         if (bHasFlat)
                         {
-                            const float* BudgetPtr = ShortThreadName != NAME_None ? StatGroup.ThreadBudgetMap.Find(ShortThreadName) : nullptr;
-                            const float Budget = BudgetPtr ? *BudgetPtr : -1.f;
-
-                            RenderArrayOfStats(bBudget ? StatGroup.FlatAggregateThreadBreakdown[ThreadName] : StatGroup.FlatAggregate, ViewData, StatGroup.BudgetIgnoreStats, Budget, RenderFlatCycle);
+                            RenderArrayOfStats(StatGroup.FlatAggregate, ViewData, RenderFlatCycle);
                         }
 
                         ImGui::EndTable();
@@ -524,7 +436,7 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
                 {
                     RenderMemoryHeadings();
 
-                    RenderArrayOfStats(StatGroup.MemoryAggregate, ViewData, StatGroup.BudgetIgnoreStats, -1.f, RenderMemoryCounter);
+                    RenderArrayOfStats(StatGroup.MemoryAggregate, ViewData, RenderMemoryCounter);
                 
                     ImGui::EndTable();
                 }
@@ -539,7 +451,7 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
                 {
                     RenderCounterHeadings();
 
-                    RenderArrayOfStats(StatGroup.CountersAggregate, ViewData, StatGroup.BudgetIgnoreStats, -1.f, RenderCounter);
+                    RenderArrayOfStats(StatGroup.CountersAggregate, ViewData, RenderCounter);
 
                     ImGui::EndTable();
                 }
@@ -584,13 +496,12 @@ static void RenderStatsHeader()
         Itr.Value.IsActive = false;
     }
 
-    constexpr float MarginX = 4.f;
+    constexpr float MarginX = 0.f;
 
     ImGui::Separator();
     
-    ImGui::Dummy(ImVec2(MarginX, 0.f)); ImGui::SameLine();
     StatFilter.Draw();
-    
+
     ImGui::SameLine();
     if (ImGui::Button("Clear"))
     {
@@ -599,8 +510,6 @@ static void RenderStatsHeader()
     
     if (StatFilter.IsActive())
     {
-        ImGui::Dummy(ImVec2(MarginX, 0.f)); ImGui::SameLine();
-
         const ImVec2 FilterInputTextSize = ImVec2(ImGui::CalcItemWidth(), ImGui::GetFrameHeight());
         const ImVec2 CursorPosition = ImGui::GetCursorScreenPos();
 
@@ -649,6 +558,13 @@ namespace ImGuiStatsVizualizer
                 FGameThreadStatsData* ViewData = FLatestGameThreadStatsData::Get().Latest;
                 if (ViewData/* || !ViewData->bRenderStats*/)
                 {
+                    if (!ViewData->RootFilter.IsEmpty())
+                    {
+                        ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("Root filter is active. ROOT=%s"), *ViewData->RootFilter)));
+                        
+                        ImGui::Separator();
+                    }
+
                     if (!ViewData->bDrawOnlyRawStats)
                     {
                         RenderGroupedWithHierarchy(*ViewData);
