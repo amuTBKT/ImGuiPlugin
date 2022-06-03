@@ -7,21 +7,21 @@
 
 #include "ImGuiRuntimeModule.h"
 
-//PRAGMA_DISABLE_OPTIMIZATION
+PRAGMA_DISABLE_OPTIMIZATION
 
 // config
 static constexpr ImGuiTableFlags TableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable;
-static ImGuiTextFilter StatFilter = {};
-
-static constexpr float HeaderSizeY = 42.f;
+static constexpr float HeaderSizeY = 68.f; //TODO: is there a way to auto size child window?
 
 struct FStatGroupData
 {
-    FString DisplayName = "None";
-    FString StatName = "None";
+    const FString DisplayName = "None";
+    const FString StatName = "None";
     bool IsActive = false;
 };
 static TMap<FName, FStatGroupData> StatGroups;
+
+static ImGuiTextFilter StatFilter = {};
 
 // helpers
 FORCEINLINE static FString ShortenName(TCHAR const* LongName)
@@ -441,12 +441,30 @@ void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGa
     uint64 MaxTotalTime = 0;
 
     // Render all counters.
-#if 1
-    ImGuiListClipper clipper;
-    clipper.Begin(Aggregates.Num());
-    while (clipper.Step())
+    if (!StatFilter.IsActive()) // clipper doesn't work properly with filter :(
+    {        
+        ImGuiListClipper clipper;
+        clipper.Begin(Aggregates.Num());
+        while (clipper.Step())
+        {
+            for (int32 RowIndex = clipper.DisplayStart; RowIndex < clipper.DisplayEnd; ++RowIndex)
+            {
+                const FComplexStatMessage& ComplexStat = Aggregates[RowIndex];
+                const bool bIsBudgetIgnored = IgnoreBudgetStats.Contains(ComplexStat.NameAndInfo.GetShortName());
+                if (bBudget && !bIsBudgetIgnored && ComplexStat.NameAndInfo.GetFlag(EStatMetaFlags::IsPackedCCAndDuration))
+                {
+                    AvgTotalTime += ComplexStat.GetValue_Duration(EComplexStatField::IncAve);
+                    MaxTotalTime += ComplexStat.GetValue_Duration(EComplexStatField::IncMax);
+                }
+
+                FunctionToCall(ViewData, ComplexStat, TotalGroupBudget, bIsBudgetIgnored);
+            }
+        }
+        clipper.End();
+    }
+    else
     {
-        for (int32 RowIndex = clipper.DisplayStart; RowIndex < clipper.DisplayEnd; ++RowIndex)
+        for (int32 RowIndex = 0; RowIndex < Aggregates.Num(); ++RowIndex)
         {
             const FComplexStatMessage& ComplexStat = Aggregates[RowIndex];
             const bool bIsBudgetIgnored = IgnoreBudgetStats.Contains(ComplexStat.NameAndInfo.GetShortName());
@@ -459,20 +477,6 @@ void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGa
             FunctionToCall(ViewData, ComplexStat, TotalGroupBudget, bIsBudgetIgnored);
         }
     }
-#else
-    for (int32 RowIndex = 0; RowIndex < Aggregates.Num(); ++RowIndex)
-    {
-        const FComplexStatMessage& ComplexStat = Aggregates[RowIndex];
-        const bool bIsBudgetIgnored = IgnoreBudgetStats.Contains(ComplexStat.NameAndInfo.GetShortName());
-        if (bBudget && !bIsBudgetIgnored && ComplexStat.NameAndInfo.GetFlag(EStatMetaFlags::IsPackedCCAndDuration))
-        {
-            AvgTotalTime += ComplexStat.GetValue_Duration(EComplexStatField::IncAve);
-            MaxTotalTime += ComplexStat.GetValue_Duration(EComplexStatField::IncMax);
-        }
-
-        FunctionToCall(ViewData, ComplexStat, TotalGroupBudget, bIsBudgetIgnored);
-    }
-#endif
 
     if (bBudget)
     {
@@ -500,11 +504,10 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
         FStatGroupData* StatGroupData = StatGroups.Find(StatGroupFName);
         if (!StatGroupData)
         {
-            StatGroupData = &StatGroups.Add(StatGroupFName);
-            StatGroupData->DisplayName = GroupDesc;
+            FString StatName = ViewData.GroupNames[GroupIndex].ToString();
+            StatName.RemoveFromStart(TEXT("STATGROUP_"), ESearchCase::CaseSensitive);
 
-            StatGroupData->StatName = ViewData.GroupNames[GroupIndex].ToString();
-            StatGroupData->StatName.RemoveFromStart(TEXT("STATGROUP_"), ESearchCase::CaseSensitive);
+            StatGroupData = &StatGroups.Add(StatGroupFName, { GroupDesc, StatName, true });
         };
         StatGroupData->IsActive = true;
 
@@ -634,25 +637,51 @@ static void RenderStatsHeader()
         Itr.Value.IsActive = false;
     }
 
-    StatFilter.Draw();
+    constexpr float MarginX = 4.f;
+    constexpr float MarginY = 2.f;
 
+    ImGui::Separator();
+    ImGui::Dummy(ImVec2(0.f, MarginY));
+
+    ImGui::Dummy(ImVec2(MarginX, 0.f)); ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.14f, 0.14f, 0.14f, 1.00f));
+    StatFilter.Draw();
+    ImGui::PopStyleColor(1);
+    
     ImGui::SameLine();
     if (ImGui::Button("Clear"))
     {
         StatFilter.Clear();
     }
+    
+    if (StatFilter.IsActive())
+    {
+        ImGui::Dummy(ImVec2(MarginX, 0.f)); ImGui::SameLine();
+
+        const ImVec2 FilterInputTextSize = ImVec2(ImGui::CalcItemWidth(), ImGui::GetFrameHeight());
+        const ImVec2 CursorPosition = ImGui::GetCursorScreenPos();
+
+        const ImVec2 p0 = ImVec2(CursorPosition.x, CursorPosition.y - FilterInputTextSize.y - 4.f);
+        const ImVec2 p1 = ImVec2(CursorPosition.x + FilterInputTextSize.x, CursorPosition.y - 4.f);
+        
+        ImDrawList* DrawList = ImGui::GetWindowDrawList();
+        DrawList->AddRect(p0, p1, ImColor(ImVec4(0.26f, 0.59f, 0.98f, 0.40f)), 0.f, ImDrawFlags_None, 2.f);
+    }
+
+    ImGui::Dummy(ImVec2(0.f, MarginY));
+    ImGui::Separator();
 }
 
 namespace ImGuiStatsVizualizer
 {
     static void Initialize(FImGuiRuntimeModule& ImGuiRuntimeModule)
     {
-        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_GPU")))             = { TEXT("GPU"),              TEXT("GPU"),               false };
-        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_SceneRendering")))  = { TEXT("Scene Rendering"),  TEXT("SceneRendering"),    false };
-        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_Niagara")))         = { TEXT("Niagara"),          TEXT("Niagara"),           false };
-        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_NiagaraSystems")))  = { TEXT("Niagara Systems"),  TEXT("NiagaraSystems"),    false };
-        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_NiagaraEmitters"))) = { TEXT("Niagara Emitters"), TEXT("NiagaraEmitters"),   false };
-        StatGroups.FindOrAdd(FName(TEXT("STATGROUP_ImGui")))           = { TEXT("ImGui"),            TEXT("ImGui"),             false };
+        StatGroups.Add(FName(TEXT("STATGROUP_GPU")),             { TEXT("GPU"),              TEXT("GPU"),               false });
+        StatGroups.Add(FName(TEXT("STATGROUP_SceneRendering")),  { TEXT("Scene Rendering"),  TEXT("SceneRendering"),    false });
+        StatGroups.Add(FName(TEXT("STATGROUP_Niagara")),         { TEXT("Niagara"),          TEXT("Niagara"),           false });
+        StatGroups.Add(FName(TEXT("STATGROUP_NiagaraSystems")),  { TEXT("Niagara Systems"),  TEXT("NiagaraSystems"),    false });
+        StatGroups.Add(FName(TEXT("STATGROUP_NiagaraEmitters")), { TEXT("Niagara Emitters"), TEXT("NiagaraEmitters"),   false });
+        StatGroups.Add(FName(TEXT("STATGROUP_ImGui")),           { TEXT("ImGui"),            TEXT("ImGui"),             false });
     }
 
     static void RegisterOneFrameResources()
@@ -666,14 +695,12 @@ namespace ImGuiStatsVizualizer
 	    if (ImGui::Begin("Stats", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
 	    {
             RegisterOneFrameResources();
-
+            
             if (ImGui::BeginChild("Header", ImVec2(0.f, HeaderSizeY), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
             {
                 RenderStatsHeader();
             }
             ImGui::EndChild();
-
-            ImGui::Separator();
 
             if (ImGui::BeginChild("Body"))
             {
@@ -700,6 +727,6 @@ namespace ImGuiStatsVizualizer
     IMGUI_REGISTER_GLOBAL_WIDGET(Initialize, Tick);
 }
 
-//PRAGMA_ENABLE_OPTIMIZATION
+PRAGMA_ENABLE_OPTIMIZATION
 
 #endif //#if STATS
