@@ -12,7 +12,7 @@ class FImGuiShadersModule : public IModuleInterface
 	virtual void ShutdownModule() override;
 };
 
-IMPLEMENT_MODULE(FImGuiShadersModule, ImGuiShadersModule)
+IMPLEMENT_MODULE(FImGuiShadersModule, ImGuiShaders)
 
 void FImGuiShadersModule::StartupModule()
 {

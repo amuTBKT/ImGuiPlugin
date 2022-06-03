@@ -23,7 +23,7 @@
 		{
 			"Name": "ImGuiRuntime",
 			"Type": "Runtime",
-			"LoadingPhase": "PostDefault"
+			"LoadingPhase": "Default"
 		}
 	]
 }

@@ -19,7 +19,7 @@ public class ImGuiRuntime : ModuleRules
 			PublicAdditionalLibraries.AddRange(
 				new string[]
 				{
-					Path.Combine(ModuleDirectory, "../../Thirdparty/ImGui/libs/Debug/ImGui.lib"),
+					Path.Combine(ModuleDirectory, "../../Thirdparty/ImGui/Binaries/Debug/ImGui.lib"),
 				}
 			);
 		}
@@ -28,7 +28,7 @@ public class ImGuiRuntime : ModuleRules
 			PublicAdditionalLibraries.AddRange(
 				new string[]
 				{
-					Path.Combine(ModuleDirectory, "../../Thirdparty/ImGui/libs/Release/ImGui.lib"),
+					Path.Combine(ModuleDirectory, "../../Thirdparty/ImGui/Binaries/Release/ImGui.lib"),
 				}
 			);
 		}

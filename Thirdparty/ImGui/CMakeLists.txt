@@ -14,4 +14,4 @@ add_library(ImGui STATIC ${SOURCE_FILES})
 
 set_target_properties(ImGui
 	PROPERTIES
-	ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/../libs/")
+	ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/../Binaries/")
