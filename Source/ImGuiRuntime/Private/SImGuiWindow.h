@@ -4,7 +4,6 @@
 #include "Widgets/SCompoundWidget.h"
 #include "UObject/GCObject.h"
 
-#include "Textures/SlateShaderResource.h"
 #include "ImGuiPluginDelegates.h"
 #include "imgui.h"
 

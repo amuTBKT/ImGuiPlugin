@@ -2,16 +2,14 @@
 
 #if STATS
 
-#include "Stats/StatsData.h"
-#include "Performance/EnginePerformanceTargets.h"
-
 #include "ImGuiRuntimeModule.h"
+#include "Stats/StatsData.h"
 
 PRAGMA_DISABLE_OPTIMIZATION
 
 // config
 static constexpr ImGuiTableFlags TableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable;
-static constexpr float HeaderSizeY = 68.f; //TODO: is there a way to auto size child window?
+static constexpr float HeaderSizeY = 52.f; //TODO: is there a way to auto size child window?
 
 struct FStatGroupData
 {
@@ -24,19 +22,6 @@ static TMap<FName, FStatGroupData> StatGroups;
 static ImGuiTextFilter StatFilter = {};
 
 // helpers
-FORCEINLINE static FString ShortenName(TCHAR const* LongName)
-{
-    FString Result(LongName);
-#if 0
-    const int32 Limit = GetStatRenderGlobals().GetNumCharsForStatName();
-    if (Result.Len() > Limit)
-    {
-        Result = FString(TEXT("...")) + Result.Right(Limit);
-    }
-#endif
-    return Result;
-}
-
 FORCEINLINE static FString FormatStatValueFloat(const float Value)
 {
     const float Frac = FMath::Frac(Value);
@@ -118,44 +103,13 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat, 
 
     const bool bIsInitialized = Item.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64;
 
-#if 0
-    if (bIsInitialized)
-    {
-        const float InMs = FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncAve));
-        // Color will be determined by the average value of history
-        // If show inclusive and and show exclusive is on, then it will choose color based on inclusive average
-        // #Stats: 2015-06-09 This is slow, fix this
-        FString CounterName = Item.GetShortName().ToString();
-        CounterName.RemoveFromStart(TEXT("STAT_"), ESearchCase::CaseSensitive);
-        GEngine->GetStatValueColoration(CounterName, InMs, Color);
-
-        // the time of a "full bar" in ms
-        const float MaxMeter = bBudget ? Budget : FEnginePerformanceTargets::GetTargetFrameTimeThresholdMS();
-
-        const int32 MeterWidth = Globals.AfterNameColumnOffset;
-
-        int32 BarWidth = int32((InMs / MaxMeter) * MeterWidth);
-        if (BarWidth > 2)
-        {
-            if (BarWidth > MeterWidth)
-            {
-                BarWidth = MeterWidth;
-            }
-
-            FCanvasBoxItem BoxItem(FVector2D(X + MeterWidth - BarWidth, Y + .4f * Globals.GetFontHeight()), FVector2D(BarWidth, 0.2f * Globals.GetFontHeight()));
-            BoxItem.SetColor(FLinearColor::Red);
-            BoxItem.Draw(Canvas);
-        }
-    }
-#endif
-
     if (bIsInitialized)
     {
         // #Stats: Move to the stats thread to avoid expensive computation on the game thread.
         const FString StatDesc = Item.GetDescription();
         const FString StatDisplay = StatDesc.Len() == 0 ? Item.GetShortName().GetPlainNameString() : StatDesc;
 
-        if (!StatFilter.PassFilter(TCHAR_TO_ANSI(*ShortenName(*StatDisplay))))
+        if (!StatFilter.PassFilter(TCHAR_TO_ANSI(*StatDisplay)))
         {
             return;
         }
@@ -167,7 +121,7 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat, 
             static TSet<FString> Selections;
 
             const bool IsItemSelected = Selections.Contains(StatDisplay);
-            if (ImGui::Selectable(TCHAR_TO_ANSI(*ShortenName(*StatDisplay)), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0)))
+            if (ImGui::Selectable(TCHAR_TO_ANSI(*StatDisplay), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0)))
             {
                 if (IsItemSelected)
                 {
@@ -232,7 +186,7 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat, 
 
 static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FComplexStatMessage& All, const float Budget, const bool bIsBudgetIgnored)
 {
-    if (!StatFilter.PassFilter(TCHAR_TO_ANSI(*ShortenName(*All.GetDescription()))))
+    if (!StatFilter.PassFilter(TCHAR_TO_ANSI(*All.GetDescription())))
     {
         return;
     }
@@ -250,7 +204,7 @@ static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FCom
         static TSet<FString> Selections;
 
         const bool IsItemSelected = Selections.Contains(All.GetDescription());
-        if (ImGui::Selectable(TCHAR_TO_ANSI(*ShortenName(*All.GetDescription())), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0)))
+        if (ImGui::Selectable(TCHAR_TO_ANSI(*All.GetDescription()), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0)))
         {
             if (IsItemSelected)
             {
@@ -310,25 +264,24 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
         return;
     }
 
-    const bool bDisplayAll = All.NameAndInfo.GetFlag(EStatMetaFlags::ShouldClearEveryFrame);
-
-    // Draw the label
     const FString StatDesc = All.GetDescription();
     const FString StatDisplay = StatDesc.Len() == 0 ? All.GetShortName().GetPlainNameString() : StatDesc;
     
-    if (!StatFilter.PassFilter(TCHAR_TO_ANSI(*ShortenName(*StatDisplay))))
+    if (!StatFilter.PassFilter(TCHAR_TO_ANSI(*StatDisplay)))
     {
         return;
     }
 
     ImGui::TableNextRow();
+
+    const bool bDisplayAll = All.NameAndInfo.GetFlag(EStatMetaFlags::ShouldClearEveryFrame);
     
     ImGui::TableSetColumnIndex(0);
     {
         static TSet<FString> Selections;
 
         const bool IsItemSelected = Selections.Contains(StatDisplay);
-        if (ImGui::Selectable(TCHAR_TO_ANSI(*ShortenName(*StatDisplay)), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap, ImVec2(0, 0)))
+        if (ImGui::Selectable(TCHAR_TO_ANSI(*StatDisplay), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap, ImVec2(0, 0)))
         {
             if (IsItemSelected)
             {
@@ -341,23 +294,17 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
         }
     }
 
-    double AvgValue = FLT_MAX;
-
     ImGui::TableSetColumnIndex(1);
     if (bDisplayAll)
     {
         // Append the average.
         if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_double)
         {
-            AvgValue = All.GetValue_double(EComplexStatField::IncAve);
-
             const FString ValueFormatted = FormatStatValueFloat(All.GetValue_double(EComplexStatField::IncAve));
             ImGui::Text(TCHAR_TO_ANSI(*ValueFormatted));
         }
         else if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64)
         {
-            AvgValue = All.GetValue_int64(EComplexStatField::IncAve);
-
             const FString ValueFormatted = FormatStatValueInt64(All.GetValue_int64(EComplexStatField::IncAve));
             ImGui::Text(TCHAR_TO_ANSI(*ValueFormatted));
         }
@@ -638,15 +585,11 @@ static void RenderStatsHeader()
     }
 
     constexpr float MarginX = 4.f;
-    constexpr float MarginY = 2.f;
 
     ImGui::Separator();
-    ImGui::Dummy(ImVec2(0.f, MarginY));
-
+    
     ImGui::Dummy(ImVec2(MarginX, 0.f)); ImGui::SameLine();
-    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.14f, 0.14f, 0.14f, 1.00f));
     StatFilter.Draw();
-    ImGui::PopStyleColor(1);
     
     ImGui::SameLine();
     if (ImGui::Button("Clear"))
@@ -665,10 +608,9 @@ static void RenderStatsHeader()
         const ImVec2 p1 = ImVec2(CursorPosition.x + FilterInputTextSize.x, CursorPosition.y - 4.f);
         
         ImDrawList* DrawList = ImGui::GetWindowDrawList();
-        DrawList->AddRect(p0, p1, ImColor(ImVec4(0.26f, 0.59f, 0.98f, 0.40f)), 0.f, ImDrawFlags_None, 2.f);
+        DrawList->AddRect(p0, p1, ImColor(ImVec4(0.26f, 0.59f, 0.98f, 0.67f)), 0.f, ImDrawFlags_None, 2.f);
     }
 
-    ImGui::Dummy(ImVec2(0.f, MarginY));
     ImGui::Separator();
 }
 

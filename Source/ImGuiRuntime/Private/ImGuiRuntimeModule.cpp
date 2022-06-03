@@ -149,7 +149,7 @@ void FImGuiRuntimeModule::OnBeginFrame()
 
 FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
 {	
-	const uint32 NewIndex = OneFrameResourceHandles.Num();
+	const uint32 ResourceHandleIndex = OneFrameResourceHandles.Num();
 
 	const FSlateResourceHandle& ResourceHandle = SlateBrush->GetRenderingResource(LocalSize, DrawScale);
 	OneFrameResourceHandles.Add(ResourceHandle);
@@ -162,7 +162,7 @@ FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlate
 	Params.Size = ImVec2(LocalSize.X, LocalSize.Y);
 	Params.UV0 = ImVec2(StartUV.X, StartUV.Y);
 	Params.UV1 = ImVec2(StartUV.X + SizeUV.X, StartUV.Y + SizeUV.Y);
-	Params.Id = IndexToImGuiID(NewIndex);
+	Params.Id = IndexToImGuiID(ResourceHandleIndex);
 
 	return Params;
 }

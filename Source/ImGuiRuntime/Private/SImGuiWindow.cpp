@@ -1,21 +1,16 @@
 #include "SImGuiWindow.h"
-#include "Engine/Texture2D.h"
-#include "Input/Events.h"
-#include "InputCoreTypes.h"
+#include "ImGuiShaders.h"
 #include "ImGuiRuntimeModule.h"
 
 #include "RHI.h"
-#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/Texture2D.h"
-#include "ImGuiShaders.h"
 #include "RenderGraphUtils.h"
 #include "CommonRenderResources.h"
-
 #include "SlateUTextureResource.h"
+#include "Engine/TextureRenderTarget2D.h"
 
-#if STATS
-#include "Stats/StatsData.h"
-#endif
+#include "Input/Events.h"
+#include "InputCoreTypes.h"
 
 DECLARE_CYCLE_STAT(TEXT("ImGui Tick"), STAT_TickWidget, STATGROUP_ImGui);
 DECLARE_CYCLE_STAT(TEXT("ImGui Render"), STAT_RenderWidget, STATGROUP_ImGui);
