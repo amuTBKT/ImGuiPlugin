@@ -63,9 +63,7 @@ public class ImGuiRuntime : ModuleRules
 				{
 					"UnrealEd",
 					"EditorStyle",
-					"Blutility",
-					"SourceControl",
-					"UncontrolledChangelists",
+					"AssetRegistry"
 				}
 			);
 		}

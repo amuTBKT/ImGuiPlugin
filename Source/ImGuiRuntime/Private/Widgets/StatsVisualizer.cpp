@@ -5,10 +5,18 @@
 #include "ImGuiRuntimeModule.h"
 #include "Stats/StatsData.h"
 
+#if WITH_EDITOR
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "Subsystems/AssetEditorSubsystem.h"
+#endif //#if WITH_EDITOR
+
 PRAGMA_DISABLE_OPTIMIZATION
 
 // config
 static constexpr ImGuiTableFlags TableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable;
+static constexpr float TableRowHeight = 0.f; //autosize, atm Tables API doesn't allow overriding RowHeader height
+static constexpr float TableItemIconSize = 8.f; //icon size to use for row item, should use >=12 to make the image clear but doesn't fit properly with default row size
+
 static constexpr float HeaderSizeY = 52.f; //TODO: is there a way to auto size child window?
 
 struct FStatGroupData
@@ -21,7 +29,22 @@ static TMap<FName, FStatGroupData> StatGroups;
 
 static ImGuiTextFilter StatFilter = {};
 
+static FImGuiImageBindParams ClearTextIcon;
+static FImGuiImageBindParams BrowseAssetIcon;
+static FImGuiImageBindParams EditAssetIcon;
+
 // helpers
+FORCEINLINE static FString ShortenName(TCHAR const* LongName)
+{
+	FString Result(LongName);
+	const int32 Limit = 72;
+	if (Result.Len() > Limit)
+	{
+		Result = FString(TEXT("...")) + Result.Right(Limit);
+	}
+	return Result;
+}
+
 FORCEINLINE static FString FormatStatValueFloat(const float Value)
 {
     const float Frac = FMath::Frac(Value);
@@ -39,7 +62,45 @@ FORCEINLINE static FString FormatStatValueInt64(const int64 Value)
     return IntString;
 }
 
+FORCEINLINE static bool AddSelectableRow(const char* Label, FName ItemName, TSet<FName>& SelectedItems)
+{
+	bool WasSelected = SelectedItems.Contains(ItemName);
+
+	bool IsSelected = ImGui::Selectable(Label, WasSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap, ImVec2(0, TableRowHeight));
+	
+	if (IsSelected)
+	{
+		if (WasSelected)
+		{
+			SelectedItems.Remove(ItemName);
+		}
+		else
+		{
+			if (!ImGui::GetIO().KeyCtrl)
+			{
+				SelectedItems.Reset();
+			}
+			SelectedItems.Add(ItemName);
+		}
+	}
+
+	return IsSelected;
+}
+
 // headings
+FORCEINLINE static int32 GetCycleStatsColumnCount()
+{
+	return 7;
+}
+FORCEINLINE static int32 GetMemoryStatsColumnCount()
+{
+	return 5;
+}
+FORCEINLINE static int32 GetCounterStatsColumnCount()
+{
+	return 4;
+}
+
 FORCEINLINE static void RenderGroupedHeadings(const bool bIsHierarchy)
 {
     // The heading looks like:
@@ -53,9 +114,17 @@ FORCEINLINE static void RenderGroupedHeadings(const bool bIsHierarchy)
     ImGui::TableSetupColumn("InclusiveAvg", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("InclusiveMax", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("ExclusiveAvg", ImGuiTableColumnFlags_WidthFixed);
-    ImGui::TableSetupColumn("ExclusiveMax", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn("ExclusiveMax", ImGuiTableColumnFlags_WidthFixed);
+    ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
-    ImGui::TableHeadersRow(); 
+
+    //ImGui::TableHeadersRow();
+	ImGui::TableNextRow(ImGuiTableRowFlags_Headers, TableRowHeight);
+	for (int32 column = 0; column < GetCycleStatsColumnCount(); column++)
+	{
+		ImGui::TableSetColumnIndex(column);
+		ImGui::TableHeader(ImGui::TableGetColumnName(column));
+	}
 }
 
 FORCEINLINE static void RenderMemoryHeadings()
@@ -69,7 +138,14 @@ FORCEINLINE static void RenderMemoryHeadings()
     ImGui::TableSetupColumn("MemPool", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("Pool Capacity", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
-    ImGui::TableHeadersRow();
+    
+	//ImGui::TableHeadersRow();
+	ImGui::TableNextRow(ImGuiTableRowFlags_Headers, TableRowHeight);
+	for (int column = 0; column < GetMemoryStatsColumnCount(); column++)
+	{
+		ImGui::TableSetColumnIndex(column);
+		ImGui::TableHeader(ImGui::TableGetColumnName(column));
+	}
 }
 
 FORCEINLINE static void RenderCounterHeadings()
@@ -82,7 +158,14 @@ FORCEINLINE static void RenderCounterHeadings()
     ImGui::TableSetupColumn("Max", ImGuiTableColumnFlags_WidthFixed);
     ImGui::TableSetupColumn("Min", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableSetupScrollFreeze(0, 1); // Make row always visible
-    ImGui::TableHeadersRow();
+    
+	//ImGui::TableHeadersRow();
+	ImGui::TableNextRow(ImGuiTableRowFlags_Headers, TableRowHeight);
+	for (int column = 0; column < GetCounterStatsColumnCount(); column++)
+	{
+		ImGui::TableSetColumnIndex(column);
+		ImGui::TableHeader(ImGui::TableGetColumnName(column));
+	}
 }
 
 // body
@@ -96,31 +179,21 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
     {
         // #Stats: Move to the stats thread to avoid expensive computation on the game thread.
         const FString StatDesc = Item.GetDescription();
-        const FString StatDisplay = StatDesc.Len() == 0 ? Item.GetShortName().GetPlainNameString() : StatDesc;
+        const FString StatDisplay = StatDesc.Len() == 0 ? ShortenName(*Item.GetShortName().GetPlainNameString()) : StatDesc;
+
+		const FName RawStatName = Item.NameAndInfo.GetRawName();
 
         if (!StatFilter.PassFilter(TCHAR_TO_ANSI(*StatDisplay)))
         {
             return;
         }
 
-        ImGui::TableNextRow();
+        ImGui::TableNextRow(ImGuiTableRowFlags_None, TableRowHeight);
         
         ImGui::TableSetColumnIndex(0);
         {
-            static TSet<FString> Selections;
-
-            const bool IsItemSelected = Selections.Contains(StatDisplay);
-            if (ImGui::Selectable(TCHAR_TO_ANSI(*StatDisplay), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0)))
-            {
-                if (IsItemSelected)
-                {
-                    Selections.Remove(StatDisplay);
-                }
-                else
-                {
-                    Selections.Add(StatDisplay);
-                }
-            }
+            static TSet<FName> Selections;
+			AddSelectableRow(TCHAR_TO_ANSI(*StatDisplay), RawStatName, Selections);
         }
 
         // Now append the call count
@@ -160,6 +233,74 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
             ImGui::TableSetColumnIndex(3);
             ImGui::Text("");
         }
+
+		if (bStackStat)
+		{
+			ImGui::TableSetColumnIndex(6);
+
+#if WITH_EDITOR
+			static TMap<FName, TWeakObjectPtr<UObject>> LinkedAsset;
+									
+			if (!LinkedAsset.Find(RawStatName))
+			{
+				FString AssetPath = Item.GetShortName().GetPlainNameString();
+				AssetPath.RemoveFromEnd(" [GT_CNC]", ESearchCase::IgnoreCase);
+				AssetPath.RemoveFromEnd(" [RT]", ESearchCase::IgnoreCase);
+				AssetPath.RemoveFromEnd(" [GT]", ESearchCase::IgnoreCase);
+
+				FAssetRegistryModule& AssetRegistryModule = FModuleManager::LoadModuleChecked<FAssetRegistryModule>("AssetRegistry");
+				IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+				FAssetData AssetData = AssetRegistry.GetAssetByObjectPath(*AssetPath);
+				if (AssetData.IsValid())
+				{
+					LinkedAsset.Add(RawStatName) = AssetData.GetAsset();
+				}
+				else
+				{
+					LinkedAsset.Add(RawStatName) = nullptr;
+				}
+			}
+
+			if (UObject* Asset = LinkedAsset.Find(RawStatName)->Get())
+			{
+				static const uint32 BrowseHash = GetTypeHash(TEXT("_Browse"));
+				static const uint32 EditHash = GetTypeHash(TEXT("_Edit"));
+				
+				const uint32 AssetHash = GetTypeHash(StatDisplay);
+
+				ImGui::PushID(HashCombine(AssetHash, BrowseHash));
+				if (ImGui::ImageButton(BrowseAssetIcon.Id, BrowseAssetIcon.Size, BrowseAssetIcon.UV0, BrowseAssetIcon.UV1))
+				{
+					TArray<UObject*> Objects = { Asset };
+					GEditor->SyncBrowserToObjects(Objects);					
+				}
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Browse to asset.");
+				}
+				ImGui::PopID();
+				
+				ImGui::SameLine();
+				
+				ImGui::PushID(HashCombine(AssetHash, EditHash));
+				if (ImGui::ImageButton(EditAssetIcon.Id, EditAssetIcon.Size, EditAssetIcon.UV0, EditAssetIcon.UV1))
+				{
+					UAssetEditorSubsystem* AssetEditorSubsystem = GEditor->GetEditorSubsystem<UAssetEditorSubsystem>();
+					if (AssetEditorSubsystem)
+					{
+						AssetEditorSubsystem->OpenEditorForAsset(Asset);
+					}
+				}
+				if (ImGui::IsItemHovered())
+				{
+					ImGui::SetTooltip("Edit asset.");
+				}
+				ImGui::PopID();
+			}
+#else
+			ImGui::Text("");
+#endif //#if WITH_EDITOR
+		}
     }
 }
 
@@ -170,7 +311,7 @@ static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FCom
         return;
     }
 
-    ImGui::TableNextRow();
+    ImGui::TableNextRow(ImGuiTableRowFlags_None, TableRowHeight);
 
     FPlatformMemory::EMemoryCounterRegion Region = FPlatformMemory::EMemoryCounterRegion(All.NameAndInfo.GetField<EMemoryRegion>());
     // At this moment we only have memory stats that are marked as non frame stats, so can't be cleared every frame.
@@ -180,20 +321,8 @@ static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FCom
     // Draw the label
     ImGui::TableSetColumnIndex(0);
     {
-        static TSet<FString> Selections;
-
-        const bool IsItemSelected = Selections.Contains(All.GetDescription());
-        if (ImGui::Selectable(TCHAR_TO_ANSI(*All.GetDescription()), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns, ImVec2(0, 0)))
-        {
-            if (IsItemSelected)
-            {
-                Selections.Remove(All.GetDescription());
-            }
-            else
-            {
-                Selections.Add(All.GetDescription());
-            }
-        }
+        static TSet<FName> Selections;
+		AddSelectableRow(TCHAR_TO_ANSI(*All.GetDescription()), All.NameAndInfo.GetRawName(), Selections);
     }
 
     // always use MB for easier comparisons
@@ -251,26 +380,14 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
         return;
     }
 
-    ImGui::TableNextRow();
+    ImGui::TableNextRow(ImGuiTableRowFlags_None, TableRowHeight);
 
     const bool bDisplayAll = All.NameAndInfo.GetFlag(EStatMetaFlags::ShouldClearEveryFrame);
     
     ImGui::TableSetColumnIndex(0);
     {
-        static TSet<FString> Selections;
-
-        const bool IsItemSelected = Selections.Contains(StatDisplay);
-        if (ImGui::Selectable(TCHAR_TO_ANSI(*StatDisplay), IsItemSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap, ImVec2(0, 0)))
-        {
-            if (IsItemSelected)
-            {
-                Selections.Remove(StatDisplay);
-            }
-            else
-            {
-                Selections.Add(StatDisplay);
-            }
-        }
+        static TSet<FName> Selections;
+		AddSelectableRow(TCHAR_TO_ANSI(*StatDisplay), All.NameAndInfo.GetRawName(), Selections);
     }
 
     ImGui::TableSetColumnIndex(1);
@@ -338,8 +455,6 @@ FORCEINLINE static void RenderHierCycles(const FActiveStatGroupInfo& HudGroup)
     for (int32 RowIndex = 0; RowIndex < HudGroup.HierAggregate.Num(); ++RowIndex)
     {
         const FComplexStatMessage& ComplexStat = HudGroup.HierAggregate[RowIndex];
-        const int32 Indent = HudGroup.Indentation[RowIndex];
-
         RenderCycle(ComplexStat, true);
     }
 }
@@ -348,7 +463,7 @@ template <typename T>
 void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGameThreadStatsData& ViewData, const T& FunctionToCall)
 {
     // Render all counters.
-    if (!StatFilter.IsActive()) // clipper doesn't work properly with filter :(
+    if (false && !StatFilter.IsActive()) // clipper doesn't work properly with filter :(
     {        
         ImGuiListClipper clipper;
         clipper.Begin(Aggregates.Num());
@@ -408,7 +523,7 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
                 {
                     const FString CycleStatsTableName = StatGroupData->DisplayName + TEXT("_CycleStats");
 
-                    if (ImGui::BeginTable(TCHAR_TO_ANSI(*CycleStatsTableName), 6, TableFlags))
+                    if (ImGui::BeginTable(TCHAR_TO_ANSI(*CycleStatsTableName), GetCycleStatsColumnCount(), TableFlags))
                     {
                         RenderGroupedHeadings(bHasHierarchy);
 
@@ -432,7 +547,7 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
             {
                 const FString MemoryStatsTableName = StatGroupData->DisplayName + TEXT("_MemoryStats");
 
-                if (ImGui::BeginTable(TCHAR_TO_ANSI(*MemoryStatsTableName), 5, TableFlags))
+                if (ImGui::BeginTable(TCHAR_TO_ANSI(*MemoryStatsTableName), GetMemoryStatsColumnCount(), TableFlags))
                 {
                     RenderMemoryHeadings();
 
@@ -447,7 +562,7 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
             {
                 const FString CounterStatsTableName = StatGroupData->DisplayName + TEXT("_CounterStats");
 
-                if (ImGui::BeginTable(TCHAR_TO_ANSI(*CounterStatsTableName), 4, TableFlags))
+                if (ImGui::BeginTable(TCHAR_TO_ANSI(*CounterStatsTableName), GetCounterStatsColumnCount(), TableFlags))
                 {
                     RenderCounterHeadings();
 
@@ -496,18 +611,24 @@ static void RenderStatsHeader()
         Itr.Value.IsActive = false;
     }
 
-    constexpr float MarginX = 0.f;
-
     ImGui::Separator();
     
-    StatFilter.Draw();
+	StatFilter.Draw("");
+	if (StatFilter.IsActive())
+	{
+		// allow overlapping with filter text input
+		ImGui::SetItemAllowOverlap();
+		ImGui::SameLine();
+		
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ClearTextIcon.Size.x * 2.2f);
+		if (ImGui::ImageButton(ClearTextIcon.Id, ClearTextIcon.Size, ClearTextIcon.UV0, ClearTextIcon.UV1))
+		{
+			StatFilter.Clear();
+		}
+	}
+	ImGui::SameLine();
+	ImGui::Text("Filter (inc,-exc)");
 
-    ImGui::SameLine();
-    if (ImGui::Button("Clear"))
-    {
-        StatFilter.Clear();
-    }
-    
     if (StatFilter.IsActive())
     {
         const ImVec2 FilterInputTextSize = ImVec2(ImGui::CalcItemWidth(), ImGui::GetFrameHeight());
@@ -538,7 +659,9 @@ namespace ImGuiStatsVizualizer
     static void RegisterOneFrameResources()
     {
         FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
-        //ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Visible").GetIcon(), { 10.f, 10.f }, 1.f);
+		ClearTextIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.X").GetIcon(), { 13.f, 13.f }, 1.f);
+		BrowseAssetIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Search").GetIcon(), { TableItemIconSize, TableItemIconSize }, 1.f);
+		EditAssetIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Edit").GetIcon(), { TableItemIconSize, TableItemIconSize }, 1.f);
     }
 
     static void Tick(float DeltaTime)
