@@ -252,12 +252,12 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 					[RenderData, Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
 					{
 						FRHIResourceCreateInfo VertexCreateInfo(TEXT("ImGui_VertexBuffer"));
-						FBufferRHIRef VertexBuffer = RHICreateIndexBuffer(sizeof(uint32), RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Static, VertexCreateInfo);
+						FBufferRHIRef VertexBuffer = RHICreateIndexBuffer(sizeof(uint32), RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Static|BUF_ByteAddressBuffer|BUF_ShaderResource, VertexCreateInfo);
 						if (ImDrawVert* VertexDst = (ImDrawVert*)RHILockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
 						{
 							for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
 							{
-								memcpy(VertexDst, CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size * sizeof(ImDrawVert));
+								FMemory::Memcpy(VertexDst, CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size * sizeof(ImDrawVert));
 								VertexDst += CmdList->VtxBuffer.Size;
 							}
 							RHIUnlockBuffer(VertexBuffer);
@@ -270,7 +270,7 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 						{
 							for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
 							{
-								memcpy(IndexDst, CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
+								FMemory::Memcpy(IndexDst, CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
 								IndexDst += CmdList->IdxBuffer.Size;
 							}
 							RHIUnlockBuffer(IndexBuffer);
