@@ -196,10 +196,9 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
 			AddSelectableRow(TCHAR_TO_ANSI(*StatDisplay), RawStatName, Selections);
         }
 
-        // Now append the call count
-        ImGui::TableSetColumnIndex(1);
         if (bStackStat)
         {
+			ImGui::TableSetColumnIndex(1);
             if (Item.NameAndInfo.GetFlag(EStatMetaFlags::IsPackedCCAndDuration))
             {
                 ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%u"), Item.GetValue_CallCount(EComplexStatField::IncAve))));
@@ -223,7 +222,6 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
         }
         else
         {
-            // Add the two inclusive columns if asked
             ImGui::TableSetColumnIndex(1);
             ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncAve)))));
 
@@ -329,7 +327,8 @@ static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FCom
     const bool bAutoType = false;
 
     // Now append the max value of the stat
-    ImGui::TableSetColumnIndex(1); ImGui::Text(TCHAR_TO_ANSI(*GetMemoryString(MaxMemUsed, bAutoType)));
+    ImGui::TableSetColumnIndex(1);
+	ImGui::Text(TCHAR_TO_ANSI(*GetMemoryString(MaxMemUsed, bAutoType)));
     
     ImGui::TableSetColumnIndex(2);
     if (ViewData.PoolCapacity.Contains(Region))
@@ -449,21 +448,11 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
     }
 }
 
-FORCEINLINE static void RenderHierCycles(const FActiveStatGroupInfo& HudGroup)
-{
-    // Render all cycle counters.
-    for (int32 RowIndex = 0; RowIndex < HudGroup.HierAggregate.Num(); ++RowIndex)
-    {
-        const FComplexStatMessage& ComplexStat = HudGroup.HierAggregate[RowIndex];
-        RenderCycle(ComplexStat, true);
-    }
-}
-
 template <typename T>
 void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGameThreadStatsData& ViewData, const T& FunctionToCall)
 {
     // Render all counters.
-    if (false && !StatFilter.IsActive()) // clipper doesn't work properly with filter :(
+    if (!StatFilter.IsActive()) // clipper doesn't work properly with filter :(
     {        
         ImGuiListClipper clipper;
         clipper.Begin(Aggregates.Num());
@@ -474,7 +463,6 @@ void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGa
                 FunctionToCall(ViewData, Aggregates[RowIndex]);
             }
         }
-        clipper.End();
     }
     else
     {
@@ -529,7 +517,7 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
 
                         if (bHasHierarchy)
                         {
-                            RenderHierCycles(StatGroup);
+							RenderArrayOfStats(StatGroup.HierAggregate, ViewData, RenderFlatCycle);
                         }
                         
                         if (bHasFlat)
@@ -607,7 +595,7 @@ static void RenderStatsHeader()
             ImGui::PopID();
         }
 
-        // disable at the end, we'll re-enable if the stat groups are still encountered when displaying..
+        // disable at the end, we'll re-enable when stat group is encountered when displaying..
         Itr.Value.IsActive = false;
     }
 
