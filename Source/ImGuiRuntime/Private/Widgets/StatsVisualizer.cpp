@@ -427,8 +427,10 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
 }
 
 template <typename T>
-void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGameThreadStatsData& ViewData, const T& FunctionToCall)
+int32 RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGameThreadStatsData& ViewData, const T& FunctionToCall)
 {
+	int32 RowIndex = 0;
+
     // Render all counters.
     if (!StatFilter.IsActive()) // clipper doesn't work properly with filter :(
     {        
@@ -436,7 +438,7 @@ void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGa
         clipper.Begin(Aggregates.Num());
         while (clipper.Step())
         {
-            for (int32 RowIndex = clipper.DisplayStart; RowIndex < clipper.DisplayEnd; ++RowIndex)
+            for (RowIndex = clipper.DisplayStart; RowIndex < clipper.DisplayEnd; ++RowIndex)
             {
                 FunctionToCall(ViewData, Aggregates[RowIndex]);
             }
@@ -444,11 +446,13 @@ void RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGa
     }
     else
     {
-        for (int32 RowIndex = 0; RowIndex < Aggregates.Num(); ++RowIndex)
+        for (RowIndex = 0; RowIndex < Aggregates.Num(); ++RowIndex)
         {
             FunctionToCall(ViewData, Aggregates[RowIndex]);
         }
     }
+
+	return RowIndex;
 }
 
 FORCEINLINE static void RenderFlatCycle(const FGameThreadStatsData& ViewData, const FComplexStatMessage& Item)
@@ -458,6 +462,8 @@ FORCEINLINE static void RenderFlatCycle(const FGameThreadStatsData& ViewData, co
 
 static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
 {
+	bool CullNextStat = false;
+
     // Render all groups.
     for (int32 GroupIndex = 0; GroupIndex < ViewData.ActiveStatGroups.Num(); ++GroupIndex)
     {
@@ -478,7 +484,7 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
         };
         StatGroupData->IsActive = true;
 
-        if (ImGui::CollapsingHeader(TCHAR_TO_ANSI(*StatGroupData->DisplayName), ImGuiTreeNodeFlags_DefaultOpen))
+        if (!CullNextStat && ImGui::CollapsingHeader(TCHAR_TO_ANSI(*StatGroupData->DisplayName), ImGuiTreeNodeFlags_DefaultOpen))
         {
             // Render cycles.
             {
@@ -491,50 +497,54 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
 
                     if (ImGui::BeginTable(TCHAR_TO_ANSI(*CycleStatsTableName), GetCycleStatsColumnCount(), TableFlags))
                     {
-                        RenderGroupedHeadings(bHasHierarchy);
+						RenderGroupedHeadings(bHasHierarchy);
 
-                        if (bHasHierarchy)
+						if (bHasHierarchy)
                         {
-							RenderArrayOfStats(StatGroup.HierAggregate, ViewData, RenderFlatCycle);
+							const int32 LastRowDisplayed = RenderArrayOfStats(StatGroup.HierAggregate, ViewData, RenderFlatCycle);							
+							CullNextStat = LastRowDisplayed < StatGroup.HierAggregate.Num();
                         }
                         
-                        if (bHasFlat)
+                        if (!CullNextStat && bHasFlat)
                         {
-                            RenderArrayOfStats(StatGroup.FlatAggregate, ViewData, RenderFlatCycle);
+							const int32 LastRowDisplayed = RenderArrayOfStats(StatGroup.FlatAggregate, ViewData, RenderFlatCycle);
+							CullNextStat = LastRowDisplayed < StatGroup.FlatAggregate.Num();
                         }
 
-                        ImGui::EndTable();
+						ImGui::EndTable();
                     }
                 }
             }
 
             // Render memory counters.
-            if (StatGroup.MemoryAggregate.Num())
+            if (!CullNextStat && StatGroup.MemoryAggregate.Num())
             {
                 const FString MemoryStatsTableName = StatGroupData->DisplayName + TEXT("_MemoryStats");
 
                 if (ImGui::BeginTable(TCHAR_TO_ANSI(*MemoryStatsTableName), GetMemoryStatsColumnCount(), TableFlags))
                 {
-                    RenderMemoryHeadings();
+					RenderMemoryHeadings();
 
-                    RenderArrayOfStats(StatGroup.MemoryAggregate, ViewData, RenderMemoryCounter);
-                
-                    ImGui::EndTable();
+					int32 LastRowDisplayed = RenderArrayOfStats(StatGroup.MemoryAggregate, ViewData, RenderMemoryCounter);
+					CullNextStat = LastRowDisplayed < StatGroup.MemoryAggregate.Num();
+
+					ImGui::EndTable();
                 }
             }
 
             // Render remaining counters.
-            if (StatGroup.CountersAggregate.Num())
+            if (!CullNextStat && StatGroup.CountersAggregate.Num())
             {
                 const FString CounterStatsTableName = StatGroupData->DisplayName + TEXT("_CounterStats");
 
                 if (ImGui::BeginTable(TCHAR_TO_ANSI(*CounterStatsTableName), GetCounterStatsColumnCount(), TableFlags))
                 {
-                    RenderCounterHeadings();
+					RenderCounterHeadings();
 
-                    RenderArrayOfStats(StatGroup.CountersAggregate, ViewData, RenderCounter);
-
-                    ImGui::EndTable();
+					int32 LastRowDisplayed = RenderArrayOfStats(StatGroup.CountersAggregate, ViewData, RenderCounter);
+					CullNextStat = LastRowDisplayed < StatGroup.CountersAggregate.Num();
+					
+					ImGui::EndTable();
                 }
             }
         }
