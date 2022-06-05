@@ -31,7 +31,7 @@ void FImGuiRuntimeModule::StartupModule()
 		.SetDisplayName(LOCTEXT("ImGuiTabTitle", "ImGui"))
 		.SetTooltipText(LOCTEXT("ImGuiTabToolTip", "ImGui UI"))
 		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "ClassIcon.WidgetBlueprint"))
-		.SetGroup(WorkspaceMenu::GetMenuStructure().GetDeveloperToolsLogCategory());
+		.SetGroup(WorkspaceMenu::GetMenuStructure().GetToolsCategory());
 #endif
 
 	UTexture2D* DefaultFontTexture = LoadObject<UTexture2D>(nullptr, TEXT("/ImGuiPlugin/T_DefaultFont.T_DefaultFont"));
