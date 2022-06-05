@@ -45,41 +45,28 @@ FORCEINLINE static FString ShortenName(TCHAR const* LongName)
 	return Result;
 }
 
-FORCEINLINE static FString FormatStatValueFloat(const float Value)
+FORCEINLINE static bool AddSelectableRow(const char* Label, FName ItemName)
 {
-    const float Frac = FMath::Frac(Value);
-    // #TODO: Move to stats thread, add support for int64 type, int32 may not be sufficient all the time.
-    const int32 Integer = FMath::FloorToInt(Value);
-    const FString IntString = FString::FormatAsNumber(Integer);
-    const FString FracString = FString::Printf(TEXT("%0.2f"), Frac);
-    const FString Result = FString::Printf(TEXT("%s.%s"), *IntString, *FracString.Mid(2));
-    return Result;
-}
+	static TSet<FName> SelectedItems;
 
-FORCEINLINE static FString FormatStatValueInt64(const int64 Value)
-{
-    const FString IntString = FString::FormatAsNumber((int32)Value);
-    return IntString;
-}
-
-FORCEINLINE static bool AddSelectableRow(const char* Label, FName ItemName, TSet<FName>& SelectedItems)
-{
 	bool WasSelected = SelectedItems.Contains(ItemName);
 
 	bool IsSelected = ImGui::Selectable(Label, WasSelected, ImGuiSelectableFlags_SpanAllColumns | ImGuiSelectableFlags_AllowItemOverlap, ImVec2(0, TableRowHeight));
 	
 	if (IsSelected)
 	{
-		if (WasSelected)
+		const int32 NumItemsSelected = SelectedItems.Num();
+		if (!ImGui::GetIO().KeyCtrl)
+		{
+			SelectedItems.Reset();
+		}
+
+		if (WasSelected && NumItemsSelected == 1)
 		{
 			SelectedItems.Remove(ItemName);
 		}
 		else
 		{
-			if (!ImGui::GetIO().KeyCtrl)
-			{
-				SelectedItems.Reset();
-			}
 			SelectedItems.Add(ItemName);
 		}
 	}
@@ -192,8 +179,7 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
         
         ImGui::TableSetColumnIndex(0);
         {
-            static TSet<FName> Selections;
-			AddSelectableRow(TCHAR_TO_ANSI(*StatDisplay), RawStatName, Selections);
+			AddSelectableRow(TCHAR_TO_ANSI(*StatDisplay), RawStatName);
         }
 
         if (bStackStat)
@@ -201,35 +187,35 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
 			ImGui::TableSetColumnIndex(1);
             if (Item.NameAndInfo.GetFlag(EStatMetaFlags::IsPackedCCAndDuration))
             {
-                ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%u"), Item.GetValue_CallCount(EComplexStatField::IncAve))));
+                ImGui::Text("%u", Item.GetValue_CallCount(EComplexStatField::IncAve));
             }
             else
             {
-                ImGui::Text("");
+                //ImGui::Text(""); leave the column empty?
             }
 
             ImGui::TableSetColumnIndex(2);
-            ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncAve)))));
+            ImGui::Text("%1.2f ms", FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncAve)));
 
             ImGui::TableSetColumnIndex(3);
-            ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncMax)))));
+            ImGui::Text("%1.2f ms", FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncMax)));
 
             ImGui::TableSetColumnIndex(4);
-            ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::ExcAve)))));
+            ImGui::Text("%1.2f ms", FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::ExcAve)));
 
             ImGui::TableSetColumnIndex(5);
-            ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::ExcMax)))));
+            ImGui::Text("%1.2f ms", FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::ExcMax)));
         }
         else
         {
             ImGui::TableSetColumnIndex(1);
-            ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncAve)))));
+            ImGui::Text("%1.2f ms", FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncAve)));
 
             ImGui::TableSetColumnIndex(2);
-            ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%1.2f ms"), FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncMax)))));
+            ImGui::Text("%1.2f ms", FPlatformTime::ToMilliseconds(Item.GetValue_Duration(EComplexStatField::IncMax)));
 
             ImGui::TableSetColumnIndex(3);
-            ImGui::Text("");
+            //ImGui::Text(""); leave the column empty?
         }
 
 		if (bStackStat)
@@ -296,7 +282,7 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
 				ImGui::PopID();
 			}
 #else
-			ImGui::Text("");
+			//ImGui::Text("");
 #endif //#if WITH_EDITOR
 		}
     }
@@ -319,8 +305,7 @@ static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FCom
     // Draw the label
     ImGui::TableSetColumnIndex(0);
     {
-        static TSet<FName> Selections;
-		AddSelectableRow(TCHAR_TO_ANSI(*All.GetDescription()), All.NameAndInfo.GetRawName(), Selections);
+		AddSelectableRow(TCHAR_TO_ANSI(*All.GetDescription()), All.NameAndInfo.GetRawName());
     }
 
     // always use MB for easier comparisons
@@ -328,16 +313,16 @@ static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FCom
 
     // Now append the max value of the stat
     ImGui::TableSetColumnIndex(1);
-	ImGui::Text(TCHAR_TO_ANSI(*GetMemoryString(MaxMemUsed, bAutoType)));
+	ImGui::Text("%.2f MB", float(MaxMemUsed / (1024.0 * 1024.0)));
     
     ImGui::TableSetColumnIndex(2);
     if (ViewData.PoolCapacity.Contains(Region))
     {
-        ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("%.0f%%"), float(100.0 * MaxMemUsed / double(ViewData.PoolCapacity[Region])))));
+        ImGui::Text("%.0f%%", float(100.0 * (double)MaxMemUsed / double(ViewData.PoolCapacity[Region])));
     }
     else
     {
-        ImGui::Text("");
+        //ImGui::Text(""); leave the column empty?
     }
     
     ImGui::TableSetColumnIndex(3);
@@ -347,17 +332,17 @@ static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FCom
     }
     else
     {
-        ImGui::Text("");
+        //ImGui::Text(""); leave the column empty?
     }
     
     ImGui::TableSetColumnIndex(4);
     if (ViewData.PoolCapacity.Contains(Region))
     {
-        ImGui::Text(TCHAR_TO_ANSI(*GetMemoryString(double(ViewData.PoolCapacity[Region]), bAutoType)));
+		ImGui::Text("%.2f MB", float(double(ViewData.PoolCapacity[Region]) / (1024. * 1024.)));
     }
     else
     {
-        ImGui::Text("");
+        //ImGui::Text(""); leave the column empty?
     }
 }
 
@@ -385,8 +370,7 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
     
     ImGui::TableSetColumnIndex(0);
     {
-        static TSet<FName> Selections;
-		AddSelectableRow(TCHAR_TO_ANSI(*StatDisplay), All.NameAndInfo.GetRawName(), Selections);
+		AddSelectableRow(TCHAR_TO_ANSI(*StatDisplay), All.NameAndInfo.GetRawName());
     }
 
     ImGui::TableSetColumnIndex(1);
@@ -395,56 +379,50 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
         // Append the average.
         if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_double)
         {
-            const FString ValueFormatted = FormatStatValueFloat(All.GetValue_double(EComplexStatField::IncAve));
-            ImGui::Text(TCHAR_TO_ANSI(*ValueFormatted));
+			ImGui::Text("%0.2f", All.GetValue_double(EComplexStatField::IncAve));
         }
         else if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64)
         {
-            const FString ValueFormatted = FormatStatValueInt64(All.GetValue_int64(EComplexStatField::IncAve));
-            ImGui::Text(TCHAR_TO_ANSI(*ValueFormatted));
+			ImGui::Text("%lld", All.GetValue_int64(EComplexStatField::IncAve));
         }
         else
         {
-            ImGui::Text("");
+            //ImGui::Text(""); leave the column empty?
         }
     }
     else
     {
-        ImGui::Text("");
+        //ImGui::Text(""); leave the column empty?
     }
     
     // Append the maximum.
     ImGui::TableSetColumnIndex(2);
     if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_double)
     {
-        const FString ValueFormatted = FormatStatValueFloat(All.GetValue_double(EComplexStatField::IncMax));
-        ImGui::Text(TCHAR_TO_ANSI(*ValueFormatted));
+		ImGui::Text("%0.2f", All.GetValue_double(EComplexStatField::IncMax));
     }
     else if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64)
     {
-        const FString ValueFormatted = FormatStatValueInt64(All.GetValue_int64(EComplexStatField::IncMax));
-        ImGui::Text(TCHAR_TO_ANSI(*ValueFormatted));
+		ImGui::Text("%lld", All.GetValue_int64(EComplexStatField::IncMax));
     }
     else
     {
-        ImGui::Text("");
+        //ImGui::Text(""); leave the column empty?
     }
 
     // Append the minimum.
     ImGui::TableSetColumnIndex(3);
     if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_double)
     {
-        const FString ValueFormatted = FormatStatValueFloat(All.GetValue_double(EComplexStatField::IncMin));
-        ImGui::Text(TCHAR_TO_ANSI(*ValueFormatted));
+		ImGui::Text("%0.2f", All.GetValue_double(EComplexStatField::IncMin));
     }
     else if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64)
     {
-        const FString ValueFormatted = FormatStatValueInt64(All.GetValue_int64(EComplexStatField::IncMin));
-        ImGui::Text(TCHAR_TO_ANSI(*ValueFormatted));
+		ImGui::Text("%lld", All.GetValue_int64(EComplexStatField::IncMin));
     }
     else
     {
-        ImGui::Text("");
+        //ImGui::Text(""); leave the column empty?
     }
 }
 
@@ -565,6 +543,25 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
 
 static void RenderStatsHeader()
 {
+	// add new stat
+	{
+		ImGui::PushItemWidth(64);
+
+		static char StatSourceBuffer[64] = { 0 };
+		if (ImGui::InputTextWithHint("###NewStat", "Add Stat", StatSourceBuffer, sizeof(StatSourceBuffer), ImGuiInputTextFlags_EnterReturnsTrue))
+		{
+			// execute command
+			const FString StatCommand = FString::Printf(TEXT("stat %s -nodisplay"), ANSI_TO_TCHAR(StatSourceBuffer));
+			GEngine->Exec(nullptr, *StatCommand);
+
+			// reset and keep focus
+			StatSourceBuffer[0] = 0;
+			ImGui::SetKeyboardFocusHere(-1);
+		}
+
+		ImGui::PopItemWidth();
+	}
+
     int32 Index = -1;
     for (auto& Itr : StatGroups)
     {
@@ -671,7 +668,7 @@ namespace ImGuiStatsVizualizer
                 {
                     if (!ViewData->RootFilter.IsEmpty())
                     {
-                        ImGui::Text(TCHAR_TO_ANSI(*FString::Printf(TEXT("Root filter is active. ROOT=%s"), *ViewData->RootFilter)));
+                        ImGui::Text("Root filter is active. ROOT=%s", TCHAR_TO_ANSI(*ViewData->RootFilter));
                         
                         ImGui::Separator();
                     }
