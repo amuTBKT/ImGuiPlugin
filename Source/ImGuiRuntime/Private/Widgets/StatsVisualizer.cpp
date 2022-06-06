@@ -21,7 +21,7 @@ static constexpr float HeaderSizeY = 52.f; //TODO: is there a way to auto size c
 
 struct FStatGroupData
 {
-    const FString DisplayName = "None";
+    const std::string DisplayName = "None";
     const FString StatName = "None";
     bool IsActive = false;
 };
@@ -43,6 +43,23 @@ FORCEINLINE static FString ShortenName(TCHAR const* LongName)
 		Result = FString(TEXT("...")) + Result.Right(Limit);
 	}
 	return Result;
+}
+
+FORCEINLINE static const char* GetStatDescription(const FComplexStatMessage& Stat)
+{
+	static TMap<FName, std::string> CachedDescriptions;
+
+	const FName RawStatName = Stat.NameAndInfo.GetRawName();
+	const std::string* CachedDescription = CachedDescriptions.Find(RawStatName);
+	if (!CachedDescription)
+	{
+		const FString StatDesc = Stat.GetDescription();
+		const FString StatDisplay = StatDesc.Len() == 0 ? Stat.GetShortName().GetPlainNameString() : StatDesc;
+
+		CachedDescription = &CachedDescriptions.Add(RawStatName, std::string(TCHAR_TO_ANSI(*StatDisplay)));
+	}
+
+	return CachedDescription->c_str();
 }
 
 FORCEINLINE static bool AddSelectableRow(const char* Label, FName ItemName)
@@ -163,14 +180,12 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
     const bool bIsInitialized = Item.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64;
 
     if (bIsInitialized)
-    {
-        // #Stats: Move to the stats thread to avoid expensive computation on the game thread.
-        const FString StatDesc = Item.GetDescription();
-        const FString StatDisplay = StatDesc.Len() == 0 ? ShortenName(*Item.GetShortName().GetPlainNameString()) : StatDesc;
+    {        
+		const char* StatDescription = GetStatDescription(Item);
 
 		const FName RawStatName = Item.NameAndInfo.GetRawName();
 
-        if (!StatFilter.PassFilter(TCHAR_TO_ANSI(*StatDisplay)))
+        if (!StatFilter.PassFilter(StatDescription))
         {
             return;
         }
@@ -179,7 +194,7 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
         
         ImGui::TableSetColumnIndex(0);
         {
-			AddSelectableRow(TCHAR_TO_ANSI(*StatDisplay), RawStatName);
+			AddSelectableRow(StatDescription, RawStatName);
         }
 
         if (bStackStat)
@@ -229,6 +244,7 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
 			{
 				FString AssetPath = Item.GetShortName().GetPlainNameString();
 				AssetPath.RemoveFromEnd(" [GT_CNC]", ESearchCase::IgnoreCase);
+				AssetPath.RemoveFromEnd(" [RT_CNC]", ESearchCase::IgnoreCase);
 				AssetPath.RemoveFromEnd(" [RT]", ESearchCase::IgnoreCase);
 				AssetPath.RemoveFromEnd(" [GT]", ESearchCase::IgnoreCase);
 
@@ -250,7 +266,7 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
 				static const uint32 BrowseHash = GetTypeHash(TEXT("_Browse"));
 				static const uint32 EditHash = GetTypeHash(TEXT("_Edit"));
 				
-				const uint32 AssetHash = GetTypeHash(StatDisplay);
+				const uint32 AssetHash = GetTypeHash(StatDescription);
 
 				ImGui::PushID(HashCombine(AssetHash, BrowseHash));
 				if (ImGui::ImageButton(BrowseAssetIcon.Id, BrowseAssetIcon.Size, BrowseAssetIcon.UV0, BrowseAssetIcon.UV1))
@@ -263,9 +279,11 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
 					ImGui::SetTooltip("Browse to asset.");
 				}
 				ImGui::PopID();
-				
+								
+#define ENABLE_EDIT_ICON 0 // seems to be crashing
+#if ENABLE_EDIT_ICON
 				ImGui::SameLine();
-				
+
 				ImGui::PushID(HashCombine(AssetHash, EditHash));
 				if (ImGui::ImageButton(EditAssetIcon.Id, EditAssetIcon.Size, EditAssetIcon.UV0, EditAssetIcon.UV1))
 				{
@@ -280,6 +298,7 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
 					ImGui::SetTooltip("Edit asset.");
 				}
 				ImGui::PopID();
+#endif //#if ENABLE_EDIT_ICON
 			}
 #else
 			//ImGui::Text("");
@@ -288,24 +307,26 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
     }
 }
 
-static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FComplexStatMessage& All)
+static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FComplexStatMessage& Item)
 {
-    if (!StatFilter.PassFilter(TCHAR_TO_ANSI(*All.GetDescription())))
+	const char* StatDescription = GetStatDescription(Item);
+
+    if (!StatFilter.PassFilter(StatDescription))
     {
         return;
     }
 
     ImGui::TableNextRow(ImGuiTableRowFlags_None, TableRowHeight);
 
-    FPlatformMemory::EMemoryCounterRegion Region = FPlatformMemory::EMemoryCounterRegion(All.NameAndInfo.GetField<EMemoryRegion>());
+    FPlatformMemory::EMemoryCounterRegion Region = FPlatformMemory::EMemoryCounterRegion(Item.NameAndInfo.GetField<EMemoryRegion>());
     // At this moment we only have memory stats that are marked as non frame stats, so can't be cleared every frame.
     //const bool bDisplayAll = All.NameAndInfo.GetFlag(EStatMetaFlags::ShouldClearEveryFrame);
-    const float MaxMemUsed = All.GetValue_double(EComplexStatField::IncMax);
+    const float MaxMemUsed = Item.GetValue_double(EComplexStatField::IncMax);
 
     // Draw the label
     ImGui::TableSetColumnIndex(0);
     {
-		AddSelectableRow(TCHAR_TO_ANSI(*All.GetDescription()), All.NameAndInfo.GetRawName());
+		AddSelectableRow(StatDescription, Item.NameAndInfo.GetRawName());
     }
 
     // always use MB for easier comparisons
@@ -346,44 +367,43 @@ static void RenderMemoryCounter(const FGameThreadStatsData& ViewData, const FCom
     }
 }
 
-static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexStatMessage& All)
+static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexStatMessage& Item)
 {
     // If this is a cycle, render it as a cycle. This is a special case for manually set cycle counters.
-    const bool bIsCycle = All.NameAndInfo.GetFlag(EStatMetaFlags::IsCycle);
+    const bool bIsCycle = Item.NameAndInfo.GetFlag(EStatMetaFlags::IsCycle);
     if (bIsCycle)
     {
-        RenderCycle(All, false);
+        RenderCycle(Item, false);
         return;
     }
 
-    const FString StatDesc = All.GetDescription();
-    const FString StatDisplay = StatDesc.Len() == 0 ? All.GetShortName().GetPlainNameString() : StatDesc;
-    
-    if (!StatFilter.PassFilter(TCHAR_TO_ANSI(*StatDisplay)))
+	const char* StatDescription = GetStatDescription(Item);
+
+    if (!StatFilter.PassFilter(StatDescription))
     {
         return;
     }
 
     ImGui::TableNextRow(ImGuiTableRowFlags_None, TableRowHeight);
 
-    const bool bDisplayAll = All.NameAndInfo.GetFlag(EStatMetaFlags::ShouldClearEveryFrame);
+    const bool bDisplayAll = Item.NameAndInfo.GetFlag(EStatMetaFlags::ShouldClearEveryFrame);
     
     ImGui::TableSetColumnIndex(0);
     {
-		AddSelectableRow(TCHAR_TO_ANSI(*StatDisplay), All.NameAndInfo.GetRawName());
+		AddSelectableRow(StatDescription, Item.NameAndInfo.GetRawName());
     }
 
     ImGui::TableSetColumnIndex(1);
     if (bDisplayAll)
     {
         // Append the average.
-        if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_double)
+        if (Item.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_double)
         {
-			ImGui::Text("%0.2f", All.GetValue_double(EComplexStatField::IncAve));
+			ImGui::Text("%0.2f", Item.GetValue_double(EComplexStatField::IncAve));
         }
-        else if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64)
+        else if (Item.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64)
         {
-			ImGui::Text("%lld", All.GetValue_int64(EComplexStatField::IncAve));
+			ImGui::Text("%lld", Item.GetValue_int64(EComplexStatField::IncAve));
         }
         else
         {
@@ -397,13 +417,13 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
     
     // Append the maximum.
     ImGui::TableSetColumnIndex(2);
-    if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_double)
+    if (Item.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_double)
     {
-		ImGui::Text("%0.2f", All.GetValue_double(EComplexStatField::IncMax));
+		ImGui::Text("%0.2f", Item.GetValue_double(EComplexStatField::IncMax));
     }
-    else if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64)
+    else if (Item.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64)
     {
-		ImGui::Text("%lld", All.GetValue_int64(EComplexStatField::IncMax));
+		ImGui::Text("%lld", Item.GetValue_int64(EComplexStatField::IncMax));
     }
     else
     {
@@ -412,13 +432,13 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
 
     // Append the minimum.
     ImGui::TableSetColumnIndex(3);
-    if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_double)
+    if (Item.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_double)
     {
-		ImGui::Text("%0.2f", All.GetValue_double(EComplexStatField::IncMin));
+		ImGui::Text("%0.2f", Item.GetValue_double(EComplexStatField::IncMin));
     }
-    else if (All.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64)
+    else if (Item.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64)
     {
-		ImGui::Text("%lld", All.GetValue_int64(EComplexStatField::IncMin));
+		ImGui::Text("%lld", Item.GetValue_int64(EComplexStatField::IncMin));
     }
     else
     {
@@ -462,7 +482,8 @@ FORCEINLINE static void RenderFlatCycle(const FGameThreadStatsData& ViewData, co
 
 static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
 {
-	bool CullNextStat = false;
+	// coarse culling for sections that are not visible
+	bool CullNextSection = false;
 
     // Render all groups.
     for (int32 GroupIndex = 0; GroupIndex < ViewData.ActiveStatGroups.Num(); ++GroupIndex)
@@ -480,12 +501,14 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
             FString StatName = GroupName.ToString();
             StatName.RemoveFromStart(TEXT("STATGROUP_"), ESearchCase::CaseSensitive);
 
-            StatGroupData = &StatGroups.Add(StatGroupFName, { GroupDesc, StatName, true });
+            StatGroupData = &StatGroups.Add(StatGroupFName, { std::string(TCHAR_TO_ANSI(*GroupDesc)), StatName, true });
         };
         StatGroupData->IsActive = true;
 
-        if (!CullNextStat && ImGui::CollapsingHeader(TCHAR_TO_ANSI(*StatGroupData->DisplayName), ImGuiTreeNodeFlags_DefaultOpen))
+        if (!CullNextSection && ImGui::CollapsingHeader(StatGroupData->DisplayName.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
         {
+			char ScratchTableIdBuffer[128];
+
             // Render cycles.
             {
                 const bool bHasHierarchy = !!StatGroup.HierAggregate.Num();
@@ -493,22 +516,21 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
 
                 if (bHasHierarchy || bHasFlat)
                 {
-                    const FString CycleStatsTableName = StatGroupData->DisplayName + TEXT("_CycleStats");
-
-                    if (ImGui::BeginTable(TCHAR_TO_ANSI(*CycleStatsTableName), GetCycleStatsColumnCount(), TableFlags))
+					sprintf_s(ScratchTableIdBuffer, sizeof(ScratchTableIdBuffer), "%s_CycleStats", StatGroupData->DisplayName.c_str());
+                    if (ImGui::BeginTable(ScratchTableIdBuffer, GetCycleStatsColumnCount(), TableFlags))
                     {
 						RenderGroupedHeadings(bHasHierarchy);
 
 						if (bHasHierarchy)
                         {
 							const int32 LastRowDisplayed = RenderArrayOfStats(StatGroup.HierAggregate, ViewData, RenderFlatCycle);							
-							CullNextStat = LastRowDisplayed < StatGroup.HierAggregate.Num();
+							CullNextSection = LastRowDisplayed < StatGroup.HierAggregate.Num();
                         }
                         
-                        if (!CullNextStat && bHasFlat)
+                        if (!CullNextSection && bHasFlat)
                         {
 							const int32 LastRowDisplayed = RenderArrayOfStats(StatGroup.FlatAggregate, ViewData, RenderFlatCycle);
-							CullNextStat = LastRowDisplayed < StatGroup.FlatAggregate.Num();
+							CullNextSection = LastRowDisplayed < StatGroup.FlatAggregate.Num();
                         }
 
 						ImGui::EndTable();
@@ -517,32 +539,30 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
             }
 
             // Render memory counters.
-            if (!CullNextStat && StatGroup.MemoryAggregate.Num())
+            if (!CullNextSection && StatGroup.MemoryAggregate.Num())
             {
-                const FString MemoryStatsTableName = StatGroupData->DisplayName + TEXT("_MemoryStats");
-
-                if (ImGui::BeginTable(TCHAR_TO_ANSI(*MemoryStatsTableName), GetMemoryStatsColumnCount(), TableFlags))
+				sprintf_s(ScratchTableIdBuffer, sizeof(ScratchTableIdBuffer), "%s_MemoryStats", StatGroupData->DisplayName.c_str());
+                if (ImGui::BeginTable(ScratchTableIdBuffer, GetMemoryStatsColumnCount(), TableFlags))
                 {
 					RenderMemoryHeadings();
 
 					int32 LastRowDisplayed = RenderArrayOfStats(StatGroup.MemoryAggregate, ViewData, RenderMemoryCounter);
-					CullNextStat = LastRowDisplayed < StatGroup.MemoryAggregate.Num();
+					CullNextSection = LastRowDisplayed < StatGroup.MemoryAggregate.Num();
 
 					ImGui::EndTable();
                 }
             }
 
             // Render remaining counters.
-            if (!CullNextStat && StatGroup.CountersAggregate.Num())
+            if (!CullNextSection && StatGroup.CountersAggregate.Num())
             {
-                const FString CounterStatsTableName = StatGroupData->DisplayName + TEXT("_CounterStats");
-
-                if (ImGui::BeginTable(TCHAR_TO_ANSI(*CounterStatsTableName), GetCounterStatsColumnCount(), TableFlags))
+				sprintf_s(ScratchTableIdBuffer, sizeof(ScratchTableIdBuffer), "%s_CounterStats", StatGroupData->DisplayName.c_str());
+                if (ImGui::BeginTable(ScratchTableIdBuffer, GetCounterStatsColumnCount(), TableFlags))
                 {
 					RenderCounterHeadings();
 
 					int32 LastRowDisplayed = RenderArrayOfStats(StatGroup.CountersAggregate, ViewData, RenderCounter);
-					CullNextStat = LastRowDisplayed < StatGroup.CountersAggregate.Num();
+					CullNextSection = LastRowDisplayed < StatGroup.CountersAggregate.Num();
 					
 					ImGui::EndTable();
                 }
@@ -589,8 +609,8 @@ static void RenderStatsHeader()
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, (ImVec4)ImColor::HSV(2.f / 7.0f, 0.8f, 0.8f));
         }
 
-        const TCHAR* GroupName = *Itr.Value.DisplayName;
-        if (ImGui::Button(TCHAR_TO_ANSI(GroupName)))
+        const char* GroupName = Itr.Value.DisplayName.c_str();
+        if (ImGui::Button(GroupName))
         {
             const FString StatCommand = FString::Printf(TEXT("stat %s -nodisplay"), *Itr.Value.StatName);
             GEngine->Exec(nullptr, *StatCommand);
@@ -643,12 +663,12 @@ namespace ImGuiStatsVizualizer
 {
     static void Initialize(FImGuiRuntimeModule& ImGuiRuntimeModule)
     {
-        StatGroups.Add(FName(TEXT("STATGROUP_GPU")),             { TEXT("GPU"),              TEXT("GPU"),               false });
-        StatGroups.Add(FName(TEXT("STATGROUP_SceneRendering")),  { TEXT("Scene Rendering"),  TEXT("SceneRendering"),    false });
-        StatGroups.Add(FName(TEXT("STATGROUP_Niagara")),         { TEXT("Niagara"),          TEXT("Niagara"),           false });
-        StatGroups.Add(FName(TEXT("STATGROUP_NiagaraSystems")),  { TEXT("Niagara Systems"),  TEXT("NiagaraSystems"),    false });
-        StatGroups.Add(FName(TEXT("STATGROUP_NiagaraEmitters")), { TEXT("Niagara Emitters"), TEXT("NiagaraEmitters"),   false });
-        StatGroups.Add(FName(TEXT("STATGROUP_ImGui")),           { TEXT("ImGui"),            TEXT("ImGui"),             false });
+        StatGroups.Add(FName(TEXT("STATGROUP_GPU")),             { "GPU",              TEXT("GPU"),               false });
+        StatGroups.Add(FName(TEXT("STATGROUP_SceneRendering")),  { "Scene Rendering",  TEXT("SceneRendering"),    false });
+        StatGroups.Add(FName(TEXT("STATGROUP_Niagara")),         { "Niagara",          TEXT("Niagara"),           false });
+        StatGroups.Add(FName(TEXT("STATGROUP_NiagaraSystems")),  { "Niagara Systems",  TEXT("NiagaraSystems"),    false });
+        StatGroups.Add(FName(TEXT("STATGROUP_NiagaraEmitters")), { "Niagara Emitters", TEXT("NiagaraEmitters"),   false });
+        StatGroups.Add(FName(TEXT("STATGROUP_ImGui")),           { "ImGui",            TEXT("ImGui"),             false });
     }
 
     static void RegisterOneFrameResources()
