@@ -31,7 +31,6 @@ public:
 	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyClippingRect,
 		FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const override;
 
-#pragma region SLATE_INPUT
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 
 	virtual FReply OnKeyChar(const FGeometry& MyGeometry, const FCharacterEvent& CharacterEvent) override;
@@ -49,12 +48,14 @@ public:
 	virtual FReply OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
 
 	virtual FReply OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
-#pragma endregion SLATE_INPUT
 
 private:
 	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) = 0;
 
-	ImGuiIO& GetImGuiIO()
+	void AddMouseButtonEvent(FKey MouseKey, bool IsDown);
+	void AddKeyEvent(FKeyEvent KeyEvent, bool IsDown);
+
+	ImGuiIO& GetImGuiIO() const
 	{
 		checkf(m_ImGuiContext, TEXT("ImGuiContext is invalid!"));
 
@@ -62,16 +63,13 @@ private:
 		return ImGui::GetIO();
 	}
 
-	void AddMouseButtonEvent(FKey MouseKey, bool IsDown);
-	void AddKeyEvent(FKeyEvent KeyEvent, bool IsDown);
-
 private:
 	using Super = SCompoundWidget;
 
 protected:
-	ImGuiContext* m_ImGuiContext = nullptr;
-
 	FSlateBrush m_ImGuiSlateBrush;
+
+	ImGuiContext* m_ImGuiContext = nullptr;
 	UTextureRenderTarget2D* m_ImGuiRT = nullptr;
 };
 

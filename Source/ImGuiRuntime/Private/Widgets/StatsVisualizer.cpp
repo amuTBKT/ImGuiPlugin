@@ -1,6 +1,6 @@
-#include "GlobalWidgets.h"
-
 #if STATS
+
+#include "StaticWidgets.h"
 
 #include "ImGuiRuntimeModule.h"
 #include "Stats/StatsData.h"
@@ -10,11 +10,9 @@
 #include "Subsystems/AssetEditorSubsystem.h"
 #endif //#if WITH_EDITOR
 
-PRAGMA_DISABLE_OPTIMIZATION
-
 // config
 static constexpr ImGuiTableFlags TableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable;
-static constexpr float TableRowHeight = 0.f; //autosize, atm Tables API doesn't allow overriding RowHeader height
+static constexpr float TableRowHeight = 0.f; //autosize, having issues setting center alignment for text
 static constexpr float TableItemIconSize = 8.f; //icon size to use for row item, should use >=12 to make the image clear but doesn't fit properly with default row size
 
 static constexpr float HeaderSizeY = 52.f; //TODO: is there a way to auto size child window?
@@ -29,9 +27,9 @@ static TMap<FName, FStatGroupData> StatGroups;
 
 static ImGuiTextFilter StatFilter = {};
 
-static FImGuiImageBindParams ClearTextIcon;
-static FImGuiImageBindParams BrowseAssetIcon;
-static FImGuiImageBindParams EditAssetIcon;
+static FImGuiImageBindingParams ClearTextIcon;
+static FImGuiImageBindingParams BrowseAssetIcon;
+static FImGuiImageBindingParams EditAssetIcon;
 
 // helpers
 FORCEINLINE static FString ShortenName(TCHAR const* LongName)
@@ -447,12 +445,12 @@ static void RenderCounter(const FGameThreadStatsData& ViewData, const FComplexSt
 }
 
 template <typename T>
-int32 RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGameThreadStatsData& ViewData, const T& FunctionToCall)
+static int32 RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, const FGameThreadStatsData& ViewData, const T& FunctionToCall)
 {
 	int32 RowIndex = 0;
 
     // Render all counters.
-    if (!StatFilter.IsActive()) // clipper doesn't work properly with filter :(
+    if (!StatFilter.IsActive()) // clipper does not work properly with filter :(
     {        
         ImGuiListClipper clipper;
         clipper.Begin(Aggregates.Num());
@@ -493,12 +491,13 @@ static void RenderGroupedWithHierarchy(const FGameThreadStatsData& ViewData)
         // If the stat isn't enabled for this particular viewport, skip
         const FName& StatGroupFName = ViewData.GroupNames[GroupIndex];
         const FName& GroupName = ViewData.GroupNames[GroupIndex];
-        const FString& GroupDesc = ViewData.GroupDescriptions[GroupIndex];
         
         FStatGroupData* StatGroupData = StatGroups.Find(StatGroupFName);
         if (!StatGroupData)
         {
-            FString StatName = GroupName.ToString();
+			const FString& GroupDesc = ViewData.GroupDescriptions[GroupIndex];
+            
+			FString StatName = GroupName.ToString();
             StatName.RemoveFromStart(TEXT("STATGROUP_"), ESearchCase::CaseSensitive);
 
             StatGroupData = &StatGroups.Add(StatGroupFName, { std::string(TCHAR_TO_ANSI(*GroupDesc)), StatName, true });
@@ -661,7 +660,7 @@ static void RenderStatsHeader()
 
 namespace ImGuiStatsVizualizer
 {
-    static void Initialize(FImGuiRuntimeModule& ImGuiRuntimeModule)
+    static void Initialize()
     {
         StatGroups.Add(FName(TEXT("STATGROUP_GPU")),             { "GPU",              TEXT("GPU"),               false });
         StatGroups.Add(FName(TEXT("STATGROUP_SceneRendering")),  { "Scene Rendering",  TEXT("SceneRendering"),    false });
@@ -720,9 +719,7 @@ namespace ImGuiStatsVizualizer
 	    }
     }
     
-    IMGUI_REGISTER_GLOBAL_WIDGET(Initialize, Tick);
+    IMGUI_REGISTER_STATIC_WIDGET(Initialize, Tick);
 }
-
-PRAGMA_ENABLE_OPTIMIZATION
 
 #endif //#if STATS

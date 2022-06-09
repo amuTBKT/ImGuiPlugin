@@ -21,16 +21,36 @@ const FName FImGuiRuntimeModule::ImGuiTabName = TEXT("ImGuiTab");
 #endif
 
 FOnImGuiPluginInitialized FImGuiRuntimeModule::OnPluginInitialized = {};
+bool FImGuiRuntimeModule::IsPluginInitialized = false;
+
+namespace ImGuiHooks
+{
+	void* AllocFunc(size_t Size, void* UserData = nullptr)
+	{
+		IM_UNUSED(UserData);
+
+		return FMemory::Malloc(Size);
+	}
+
+	void FreeFunc(void* Pointer, void* UserData = nullptr)
+	{
+		IM_UNUSED(UserData);
+
+		FMemory::Free(Pointer);
+	}
+}
 
 void FImGuiRuntimeModule::StartupModule()
 {
 	IMGUI_CHECKVERSION();
 
+	ImGui::SetAllocatorFunctions(ImGuiHooks::AllocFunc, ImGuiHooks::FreeFunc);
+
 #if WITH_EDITOR
 	FTabSpawnerEntry& SpawnerEntry = FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateStatic(&FImGuiRuntimeModule::SpawnImGuiTab))
 		.SetDisplayName(LOCTEXT("ImGuiTabTitle", "ImGui"))
 		.SetTooltipText(LOCTEXT("ImGuiTabToolTip", "ImGui UI"))
-		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "ClassIcon.WidgetBlueprint"))
+		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"))
 		.SetGroup(WorkspaceMenu::GetMenuStructure().GetToolsCategory());
 #endif
 
@@ -60,6 +80,7 @@ void FImGuiRuntimeModule::StartupModule()
 
 	FCoreDelegates::OnBeginFrame.AddRaw(this, &FImGuiRuntimeModule::OnBeginFrame);
 
+	IsPluginInitialized = true;
 	OnPluginInitialized.Broadcast(*this);
 }
 
@@ -83,7 +104,7 @@ TSharedRef<SDockTab> FImGuiRuntimeModule::SpawnImGuiTab(const FSpawnTabArgs& Spa
 	const TSharedRef<SDockTab> ImguiTab =
 		SNew(SDockTab)
 		.TabRole(ETabRole::NomadTab);
-	ImguiTab->SetTabIcon(FAppStyle::GetBrush("ClassIcon.WidgetBlueprint"));
+	ImguiTab->SetTabIcon(FAppStyle::GetBrush("Icons.Layout"));
 	ImguiTab->SetContent(SNew(SImGuiMainWindow));
 
 	return ImguiTab;
@@ -147,7 +168,7 @@ void FImGuiRuntimeModule::OnBeginFrame()
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
 }
 
-FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
+FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
 {	
 	const uint32 ResourceHandleIndex = OneFrameResourceHandles.Num();
 
@@ -158,7 +179,7 @@ FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlate
 	const FVector2f StartUV = Proxy->StartUV;
 	const FVector2f SizeUV = Proxy->SizeUV;
 
-	FImGuiImageBindParams Params = {};
+	FImGuiImageBindingParams Params = {};
 	Params.Size = ImVec2(LocalSize.X, LocalSize.Y);
 	Params.UV0 = ImVec2(StartUV.X, StartUV.Y);
 	Params.UV1 = ImVec2(StartUV.X + SizeUV.X, StartUV.Y + SizeUV.Y);
@@ -167,12 +188,12 @@ FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlate
 	return Params;
 }
 
-FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
+FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
 {
 	return RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f);
 }
 
-FImGuiImageBindParams FImGuiRuntimeModule::RegisterOneFrameResource(UTexture2D* Texture)
+FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(UTexture2D* Texture)
 {
 	FSlateBrush& NewBrush = CreatedSlateBrushes.AddDefaulted_GetRef();
 	NewBrush.SetResourceObject(Texture);

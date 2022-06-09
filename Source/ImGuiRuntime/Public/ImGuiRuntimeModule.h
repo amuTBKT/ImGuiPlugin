@@ -16,7 +16,7 @@ class FAutoConsoleCommand;
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
 
-struct FImGuiImageBindParams
+struct FImGuiImageBindingParams
 {
 	ImVec2 Size = ImVec2(1.f, 1.f);
 	ImVec2 UV0 = ImVec2(0.f, 0.f);
@@ -42,10 +42,10 @@ public:
 	static ImTextureID IndexToImGuiID(uint32 Index) { return reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(Index));  }
 	static uint32 ImGuiIDToIndex(ImTextureID ID) { return static_cast<uint32>(reinterpret_cast<uintptr_t>(ID));  }
 
-	ImTextureID GetDefaultFontTextureID() const
-	{
-		return m_DefaultFontImageParams.Id;
-	}
+	ImTextureID GetDefaultFontTextureID()	const { return m_DefaultFontImageParams.Id; }
+	ImTextureID GetMissingImageTextureID()	const { return m_MissingImageParams.Id; }
+	uint32 GetDefaultFontTextureIndex()		const { return ImGuiIDToIndex(m_DefaultFontImageParams.Id); }
+	uint32 GetMissingImageTextureIndex()	const { return ImGuiIDToIndex(m_MissingImageParams.Id); }
 	
 	const FSlateResourceHandle& GetResourceHandle(uint32 Index) const
 	{
@@ -57,22 +57,18 @@ public:
 		check(OneFrameResourceHandles.IsValidIndex(Index));
 		return OneFrameResourceHandles[Index];
 	}
-
-	const FSlateResourceHandle& GetResourceHandle(ImTextureID ID) const
-	{
-		return GetResourceHandle(ImGuiIDToIndex(ID));
-	}
-
+	const FSlateResourceHandle& GetResourceHandle(ImTextureID ID) const { return GetResourceHandle(ImGuiIDToIndex(ID)); }
 	const TArray<FSlateResourceHandle>& GetResourceHandles() const { return OneFrameResourceHandles; }
 
-	FImGuiImageBindParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale);
-	FImGuiImageBindParams RegisterOneFrameResource(const FSlateBrush* SlateBrush);
-	FImGuiImageBindParams RegisterOneFrameResource(UTexture2D* Texture);
+	FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale);
+	FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush);
+	FImGuiImageBindingParams RegisterOneFrameResource(UTexture2D* Texture);
 	
 	FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() { return m_ImGuiMainWindowTickDelegate; }
 	const FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() const { return m_ImGuiMainWindowTickDelegate; }
 
 	static FOnImGuiPluginInitialized OnPluginInitialized;
+	static bool IsPluginInitialized;
 
 protected:
 	void OnBeginFrame();
@@ -83,8 +79,8 @@ private:
 	FSlateBrush m_DefaultFontSlateBrush = {};
 	FSlateBrush m_MissingImageSlateBrush = {};
 
-	FImGuiImageBindParams m_DefaultFontImageParams = {};
-	FImGuiImageBindParams m_MissingImageParams = {};
+	FImGuiImageBindingParams m_DefaultFontImageParams = {};
+	FImGuiImageBindingParams m_MissingImageParams = {};
 
 	TArray<FSlateBrush> CreatedSlateBrushes;
 	TArray<FSlateResourceHandle> OneFrameResourceHandles;

@@ -1,12 +1,12 @@
 {
-	"FileVersion" : 3,
+	"FileVersion" : 1,
 	"Version" : 1,
 	"VersionName" : "1.0",
 	"FriendlyName" : "ImGui",
 	"Description" : "TODO.",
 	"Category" : "UI",
-	"CreatedBy" : "TODO",
-	"CreatedByURL" : "TODO",
+	"CreatedBy" : "Amit Mehar",
+	"CreatedByURL" : "https://twitter.com/amu_mhr",
 	"DocsURL" : "",
 	"MarketplaceURL" : "",
 	"SupportURL" : "",
@@ -23,7 +23,7 @@
 		{
 			"Name": "ImGuiRuntime",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PreDefault"
 		}
 	]
 }
