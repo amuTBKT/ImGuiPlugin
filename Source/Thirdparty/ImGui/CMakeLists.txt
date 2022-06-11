@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.10)
 
 project(ImGui)
 
-include_directories("imgui/")
+set(HEADER_FILES
+    imgui/imgui.h
+    imgui/imconfig.h)
 
 set(SOURCE_FILES
     imgui/imgui.cpp
@@ -10,7 +12,7 @@ set(SOURCE_FILES
     imgui/imgui_tables.cpp
     imgui/imgui_widgets.cpp)
 
-add_library(ImGui STATIC ${SOURCE_FILES})
+add_library(ImGui STATIC ${HEADER_FILES} ${SOURCE_FILES})
 
 set_target_properties(ImGui
 	PROPERTIES

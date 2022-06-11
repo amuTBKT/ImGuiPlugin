@@ -5,34 +5,6 @@ public class ImGuiRuntime : ModuleRules
 {
 	public ImGuiRuntime(ReadOnlyTargetRules Target) : base(Target)
 	{
-		PublicDefinitions.Add("WITH_IMGUI=1");
-
-		PublicIncludePaths.AddRange(
-			new string[]
-			{
-				Path.Combine(ModuleDirectory, "../../Thirdparty/ImGui/imgui"),
-			}
-		);
-
-		if (Target.Configuration == UnrealTargetConfiguration.Debug)
-		{
-			PublicAdditionalLibraries.AddRange(
-				new string[]
-				{
-					Path.Combine(ModuleDirectory, "../../Thirdparty/ImGui/Binaries/Debug/ImGui.lib"),
-				}
-			);
-		}
-		else
-        {
-			PublicAdditionalLibraries.AddRange(
-				new string[]
-				{
-					Path.Combine(ModuleDirectory, "../../Thirdparty/ImGui/Binaries/Release/ImGui.lib"),
-				}
-			);
-		}
-
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
@@ -48,13 +20,10 @@ public class ImGuiRuntime : ModuleRules
 			}
 		);
 
+		PublicDependencyModuleNames.Add("ImGui");
+
 		var EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-		PrivateIncludePaths.AddRange(
-			new string[]
-			{
-				Path.Combine(EngineDir, "Source/Runtime/SlateRHIRenderer/Private")
-			}
-		);
+		PrivateIncludePaths.Add(Path.Combine(EngineDir, "Source/Runtime/SlateRHIRenderer/Private"));
 
 		if (Target.bBuildEditor)
 		{
