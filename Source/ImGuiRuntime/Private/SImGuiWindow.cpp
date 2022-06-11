@@ -74,18 +74,20 @@ void SImGuiWindow::Tick(const FGeometry& AllottedGeometry, const double InCurren
 	
 	ImGuiIO& IO = GetImGuiIO();
 	
+	//[TODO] our RT size is in int and Viewport size is in float, can sometimes cause blurring. set imgui framebuffer scale...?
+
 	// new frame setup
 	{
-		ImGui::NewFrame();
-
 		IO.DisplaySize = { (float)AllottedGeometry.GetAbsoluteSize().X, (float)AllottedGeometry.GetAbsoluteSize().Y };
 		IO.DeltaTime = InDeltaTime;		
+
+		ImGui::NewFrame();
 	}
 
 	// resize RT if needed
 	{
-		int32 NewSizeX = (int32)AllottedGeometry.GetAbsoluteSize().X;
-		int32 NewSizeY = (int32)AllottedGeometry.GetAbsoluteSize().Y;
+		const int32 NewSizeX = (int32)AllottedGeometry.GetAbsoluteSize().X;
+		const int32 NewSizeY = (int32)AllottedGeometry.GetAbsoluteSize().Y;
 
 		//TODO: ideally should only resize if NewSize > CurrentSize
 		if (m_ImGuiRT->SizeX != NewSizeX || m_ImGuiRT->SizeY != NewSizeY)

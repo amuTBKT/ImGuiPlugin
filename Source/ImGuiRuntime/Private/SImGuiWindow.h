@@ -19,7 +19,7 @@ public:
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
-	~SImGuiWindow();
+	virtual ~SImGuiWindow();
 
 	//~ GCObject Interface
 	virtual void AddReferencedObjects(FReferenceCollector& Collector) override;

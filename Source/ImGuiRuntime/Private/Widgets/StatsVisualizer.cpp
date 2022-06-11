@@ -177,8 +177,8 @@ static void RenderCycle(const FComplexStatMessage& Item, const bool bStackStat)
 
     const bool bIsInitialized = Item.NameAndInfo.GetField<EStatDataType>() == EStatDataType::ST_int64;
 
-    if (bIsInitialized)
-    {        
+	//if (bIsInitialized) -> no need to worry about checking, default times will be 0ms (selectively disabling section breaks ImGui::Clipper)
+	{        
 		const char* StatDescription = GetStatDescription(Item);
 
 		const FName RawStatName = Item.NameAndInfo.GetRawName();
@@ -456,7 +456,7 @@ static int32 RenderArrayOfStats(const TArray<FComplexStatMessage>& Aggregates, c
         clipper.Begin(Aggregates.Num());
         while (clipper.Step())
         {
-            for (RowIndex = clipper.DisplayStart; RowIndex < clipper.DisplayEnd; ++RowIndex)
+            for (RowIndex = clipper.DisplayStart; RowIndex < clipper.DisplayEnd; RowIndex++)
             {
                 FunctionToCall(ViewData, Aggregates[RowIndex]);
             }
@@ -627,7 +627,7 @@ static void RenderStatsHeader()
 
     ImGui::Separator();
     
-	StatFilter.Draw("");
+	StatFilter.Draw("###FilterLabel");
 	if (StatFilter.IsActive())
 	{
 		// allow overlapping with filter text input
