@@ -4,6 +4,6 @@
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnImGuiPluginInitialized, class FImGuiRuntimeModule& /* ImGuiRuntimeModule */);
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnTickImGuiMainWindowDelegate, float /* DeltaTime */);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnTickImGuiMainWindowDelegate, struct ImGuiContext* /* Context */, float /* DeltaTime */);
 
-DECLARE_DELEGATE_OneParam(FOnTickImGuiWidgetDelegate, float /* DeltaTime */);
+DECLARE_DELEGATE_TwoParams(FOnTickImGuiWidgetDelegate, struct ImGuiContext* /* Context */, float /* DeltaTime */);

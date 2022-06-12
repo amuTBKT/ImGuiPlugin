@@ -678,8 +678,10 @@ namespace ImGuiStatsVizualizer
 		EditAssetIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Edit").GetIcon(), { TableItemIconSize, TableItemIconSize }, 1.f);
     }
 
-    static void Tick(float DeltaTime)
+    static void Tick(ImGuiContext* Context, float DeltaTime)
     {
+		FImGuiTickScope Scope{ Context };
+
 	    if (ImGui::Begin("Stats", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
 	    {
             RegisterOneFrameResources();
@@ -715,8 +717,8 @@ namespace ImGuiStatsVizualizer
             }
             ImGui::EndChild();
 
-            ImGui::End();
 	    }
+        ImGui::End();
     }
     
     IMGUI_REGISTER_STATIC_WIDGET(Initialize, Tick);

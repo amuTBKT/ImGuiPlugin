@@ -23,28 +23,11 @@ const FName FImGuiRuntimeModule::ImGuiTabName = TEXT("ImGuiTab");
 FOnImGuiPluginInitialized FImGuiRuntimeModule::OnPluginInitialized = {};
 bool FImGuiRuntimeModule::IsPluginInitialized = false;
 
-namespace ImGuiHooks
-{
-	void* AllocFunc(size_t Size, void* UserData = nullptr)
-	{
-		IM_UNUSED(UserData);
-
-		return FMemory::Malloc(Size);
-	}
-
-	void FreeFunc(void* Pointer, void* UserData = nullptr)
-	{
-		IM_UNUSED(UserData);
-
-		FMemory::Free(Pointer);
-	}
-}
-
 void FImGuiRuntimeModule::StartupModule()
 {
 	IMGUI_CHECKVERSION();
 
-	ImGui::SetAllocatorFunctions(ImGuiHooks::AllocFunc, ImGuiHooks::FreeFunc);
+	SETUP_DEFAULT_IMGUI_ALLOCATOR();
 
 #if WITH_EDITOR
 	FTabSpawnerEntry& SpawnerEntry = FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateStatic(&FImGuiRuntimeModule::SpawnImGuiTab))
@@ -62,6 +45,10 @@ void FImGuiRuntimeModule::StartupModule()
 	checkf(MissingImageTexture, TEXT("T_MissingImage texture not found, did you mark it for cooking?"));
 	m_MissingImageSlateBrush.SetResourceObject(MissingImageTexture);
 	
+	//[TODO] there are cases when NewFrame/Render can be called before we initialize these *required* resources, so register in advance.
+	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
+	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
+
 	// console command makes sense for Game worlds, for editor we should use ImGuiTab
 	FWorldDelegates::OnPreWorldInitialization.AddLambda(
 		[this](UWorld* World, const UWorld::InitializationValues IVS)

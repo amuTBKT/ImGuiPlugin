@@ -11,7 +11,8 @@
         {																							\
 			if (FImGuiRuntimeModule::IsPluginInitialized)											\
 			{																						\
-				FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime"); \
+				FImGuiRuntimeModule& ImGuiRuntimeModule =											\
+					FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");			\
 				InitFunction();																		\
 				ImGuiRuntimeModule.GetMainWindowTickDelegate().AddStatic(&TickFunction);			\
 			}																						\

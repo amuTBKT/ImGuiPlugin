@@ -16,12 +16,12 @@ public class ImGuiRuntime : ModuleRules
 				"SlateCore",
 				"RenderCore",
 				"RHI",
-				"ImGuiShaders",
 			}
 		);
 
-		PublicDependencyModuleNames.Add("ImGui");
+		PublicDependencyModuleNames.AddRange( new string[] { "ImGui", "ImGuiShaders" });
 
+		// need to include private header files for accessing slate resource
 		var EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
 		PrivateIncludePaths.Add(Path.Combine(EngineDir, "Source/Runtime/SlateRHIRenderer/Private"));
 

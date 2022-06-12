@@ -5,7 +5,6 @@
 #include "UObject/GCObject.h"
 
 #include "ImGuiPluginDelegates.h"
-#include "imgui.h"
 
 struct ImGuiContext;
 class UTextureRenderTarget2D;
@@ -50,18 +49,12 @@ public:
 	virtual FReply OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
 
 private:
+	FORCEINLINE ImGuiIO& GetImGuiIO() const;
+	
+	FORCEINLINE void AddMouseButtonEvent(FKey MouseKey, bool IsDown);
+	FORCEINLINE void AddKeyEvent(FKeyEvent KeyEvent, bool IsDown);
+
 	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) = 0;
-
-	void AddMouseButtonEvent(FKey MouseKey, bool IsDown);
-	void AddKeyEvent(FKeyEvent KeyEvent, bool IsDown);
-
-	ImGuiIO& GetImGuiIO() const
-	{
-		checkf(m_ImGuiContext, TEXT("ImGuiContext is invalid!"));
-
-		ImGui::SetCurrentContext(m_ImGuiContext);
-		return ImGui::GetIO();
-	}
 
 private:
 	using Super = SCompoundWidget;

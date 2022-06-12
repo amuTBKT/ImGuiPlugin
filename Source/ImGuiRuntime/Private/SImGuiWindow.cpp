@@ -54,6 +54,14 @@ SImGuiWindow::~SImGuiWindow()
 	}
 }
 
+ImGuiIO& SImGuiWindow::GetImGuiIO() const
+{
+	checkf(m_ImGuiContext, TEXT("ImGuiContext is invalid!"));
+
+	ImGui::SetCurrentContext(m_ImGuiContext);
+	return ImGui::GetIO();
+}
+
 //~ GCObject Interface
 void SImGuiWindow::AddReferencedObjects(FReferenceCollector& Collector)
 {
@@ -147,6 +155,7 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 			RenderData->DrawLists.SetNum(DrawData->CmdListsCount);
 			for (int32 ListIndex = 0; ListIndex < DrawData->CmdListsCount; ++ListIndex)
 			{
+				//[TODO] Clone allocates from heap, might be worth keeping some static buffer around and manually copying...
 				RenderData->DrawLists[ListIndex] = FRenderData::FDrawListPtr(DrawData->CmdLists[ListIndex]->CloneOutput());
 			}
 
@@ -495,7 +504,7 @@ void SImGuiMainWindow::TickInternal(const FGeometry& AllottedGeometry, const dou
 	if (ImGuiRuntimeModule.GetMainWindowTickDelegate().IsBound())
 	{
 		ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-		ImGuiRuntimeModule.GetMainWindowTickDelegate().Broadcast(InDeltaTime);
+		ImGuiRuntimeModule.GetMainWindowTickDelegate().Broadcast(m_ImGuiContext, InDeltaTime);
 	}
 	else
 	{
@@ -522,5 +531,5 @@ void SImGuiWidgetWindow::TickInternal(const FGeometry& AllottedGeometry, const d
 	const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
 	ImGui::SetNextWindowDockID(MainDockSpaceID);
 
-	m_OnTickDelegate.ExecuteIfBound(InDeltaTime);
+	m_OnTickDelegate.ExecuteIfBound(m_ImGuiContext, InDeltaTime);
 }

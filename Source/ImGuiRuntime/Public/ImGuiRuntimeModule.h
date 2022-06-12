@@ -5,7 +5,7 @@
 #include "Textures/SlateShaderResource.h"
 
 #include "ImGuiPluginDelegates.h"
-#include "imgui.h"
+#include "ImGuiPluginTypes.h"
 
 #if WITH_EDITOR
 class SDockTab;
@@ -15,14 +15,6 @@ class SWindow;
 class FAutoConsoleCommand;
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
-
-struct FImGuiImageBindingParams
-{
-	ImVec2 Size = ImVec2(1.f, 1.f);
-	ImVec2 UV0 = ImVec2(0.f, 0.f);
-	ImVec2 UV1 = ImVec2(1.f, 1.f);
-	ImTextureID Id = 0;
-};
 
 class IMGUIRUNTIME_API FImGuiRuntimeModule : public IModuleInterface
 {
