@@ -29,7 +29,7 @@ private:
 	void OpenImGuiMainWindow();
 
 public:
-	TSharedPtr<SWindow> CreateWidget(const FString& WindowName, const FVector2D& WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
+	TSharedPtr<SWindow> CreateWindow(const FString& WindowName, const FVector2D& WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
 
 	static ImTextureID IndexToImGuiID(uint32 Index) { return reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(Index));  }
 	static uint32 ImGuiIDToIndex(ImTextureID ID) { return static_cast<uint32>(reinterpret_cast<uintptr_t>(ID));  }

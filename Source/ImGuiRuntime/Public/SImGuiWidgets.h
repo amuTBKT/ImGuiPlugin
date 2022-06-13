@@ -9,16 +9,16 @@
 struct ImGuiContext;
 class UTextureRenderTarget2D;
 
-class IMGUIRUNTIME_API SImGuiWindow : public SCompoundWidget, public FGCObject
+class IMGUIRUNTIME_API SImGuiWidgetBase : public SCompoundWidget, public FGCObject
 {
 public:
-	SLATE_BEGIN_ARGS(SImGuiWindow)
+	SLATE_BEGIN_ARGS(SImGuiWidgetBase)
 	{		
 	}
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
-	virtual ~SImGuiWindow();
+	virtual ~SImGuiWidgetBase();
 
 	//~ GCObject Interface
 	virtual void AddReferencedObjects(FReferenceCollector& Collector) override;
@@ -64,25 +64,31 @@ protected:
 
 	ImGuiContext* m_ImGuiContext = nullptr;
 	UTextureRenderTarget2D* m_ImGuiRT = nullptr;
+
+	bool m_ContainsMouse = false;
+	bool m_HasMouseCapture = false;
 };
 
-/* Default window, only one instance active at a time */
-class SImGuiMainWindow : public SImGuiWindow
+/* Main window widget, only one instance active at a time */
+class SImGuiMainWindowWidget : public SImGuiWidgetBase
 {
 private:
 	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
 private:
-	using Super = SImGuiWindow;
+	using Super = SImGuiWidgetBase;
 };
 
-/* Window used for dynamic widgets (ColorPicker etc..) */
-class SImGuiWidgetWindow : public SImGuiWindow
+/* Dynamic widgets (ColorPicker etc..) */
+class IMGUIRUNTIME_API SImGuiWidget : public SImGuiWidgetBase
 {
 public:
-	SLATE_BEGIN_ARGS(SImGuiWidgetWindow)
-		:_OnTickDelegate() {}
+	SLATE_BEGIN_ARGS(SImGuiWidget)
+		: _OnTickDelegate()
+		, _AllowUndocking(true)
+		{}
 		SLATE_EVENT(FOnTickImGuiWidgetDelegate, OnTickDelegate);	
+		SLATE_ATTRIBUTE(bool, AllowUndocking);	
 	SLATE_END_ARGS()
 	
 	void Construct(const FArguments& InArgs);
@@ -91,7 +97,8 @@ private:
 	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
 private:
-	using Super = SImGuiWindow;
+	using Super = SImGuiWidgetBase;
 
 	FOnTickImGuiWidgetDelegate m_OnTickDelegate = {};
+	bool m_AllowUndocking = false;
 };

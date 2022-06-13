@@ -12,7 +12,7 @@
 
 #include "Engine/Texture2D.h"
 #include "Widgets/SWindow.h"
-#include "SImGuiWindow.h"
+#include "SImGuiWidgets.h"
 
 #define LOCTEXT_NAMESPACE "ImGuiPlugin"
 
@@ -92,7 +92,7 @@ TSharedRef<SDockTab> FImGuiRuntimeModule::SpawnImGuiTab(const FSpawnTabArgs& Spa
 		SNew(SDockTab)
 		.TabRole(ETabRole::NomadTab);
 	ImguiTab->SetTabIcon(FAppStyle::GetBrush("Icons.Layout"));
-	ImguiTab->SetContent(SNew(SImGuiMainWindow));
+	ImguiTab->SetContent(SNew(SImGuiMainWindowWidget));
 
 	return ImguiTab;
 }
@@ -113,7 +113,7 @@ void FImGuiRuntimeModule::OpenImGuiMainWindow()
 			//.UserResizeBorder(FMargin(0.f))
 			.SizingRule(ESizingRule::UserSized);
 		m_ImGuiMainWindow = FSlateApplication::Get().AddWindow(m_ImGuiMainWindow.ToSharedRef());
-		m_ImGuiMainWindow->SetContent(SNew(SImGuiMainWindow));
+		m_ImGuiMainWindow->SetContent(SNew(SImGuiMainWindowWidget));
 
 		m_ImGuiMainWindow->GetOnWindowClosedEvent().AddLambda(
 			[this](const TSharedRef<SWindow>& Window)
@@ -128,7 +128,7 @@ void FImGuiRuntimeModule::OpenImGuiMainWindow()
 	}
 }
 
-TSharedPtr<SWindow> FImGuiRuntimeModule::CreateWidget(const FString& WindowName, const FVector2D& WindowSize, FOnTickImGuiWidgetDelegate TickDelegate)
+TSharedPtr<SWindow> FImGuiRuntimeModule::CreateWindow(const FString& WindowName, const FVector2D& WindowSize, FOnTickImGuiWidgetDelegate TickDelegate)
 {	
 	TSharedPtr<SWindow> Window = SNew(SWindow)
 		.Title(FText::FromString(WindowName))
@@ -140,7 +140,7 @@ TSharedPtr<SWindow> FImGuiRuntimeModule::CreateWidget(const FString& WindowName,
 		.SizingRule(ESizingRule::UserSized);
 	Window = FSlateApplication::Get().AddWindow(Window.ToSharedRef());
 
-	TSharedPtr<SImGuiWidgetWindow> ImGuiWindow = SNew(SImGuiWidgetWindow).OnTickDelegate(TickDelegate);
+	TSharedPtr<SImGuiWidget> ImGuiWindow = SNew(SImGuiWidget).OnTickDelegate(TickDelegate);
 	Window->SetContent(ImGuiWindow.ToSharedRef());
 
 	return Window;

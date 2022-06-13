@@ -1,4 +1,4 @@
-#include "SImGuiWindow.h"
+#include "SImGuiWidgets.h"
 #include "ImGuiShaders.h"
 #include "ImGuiRuntimeModule.h"
 
@@ -15,13 +15,13 @@
 DECLARE_CYCLE_STAT(TEXT("ImGui Tick"), STAT_TickWidget, STATGROUP_ImGui);
 DECLARE_CYCLE_STAT(TEXT("ImGui Render"), STAT_RenderWidget, STATGROUP_ImGui);
 
-void SImGuiWindow::Construct(const FArguments& InArgs)
+void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 {
 	m_ImGuiContext = ImGui::CreateContext();
 
 	ImGuiIO& io = GetImGuiIO();
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
 	//[TODO] setting?
@@ -45,7 +45,7 @@ void SImGuiWindow::Construct(const FArguments& InArgs)
 	m_ImGuiSlateBrush.SetResourceObject(m_ImGuiRT);
 }
 
-SImGuiWindow::~SImGuiWindow()
+SImGuiWidgetBase::~SImGuiWidgetBase()
 {
 	if (m_ImGuiContext)
 	{
@@ -54,7 +54,7 @@ SImGuiWindow::~SImGuiWindow()
 	}
 }
 
-ImGuiIO& SImGuiWindow::GetImGuiIO() const
+ImGuiIO& SImGuiWidgetBase::GetImGuiIO() const
 {
 	checkf(m_ImGuiContext, TEXT("ImGuiContext is invalid!"));
 
@@ -63,18 +63,18 @@ ImGuiIO& SImGuiWindow::GetImGuiIO() const
 }
 
 //~ GCObject Interface
-void SImGuiWindow::AddReferencedObjects(FReferenceCollector& Collector)
+void SImGuiWidgetBase::AddReferencedObjects(FReferenceCollector& Collector)
 {
 	Collector.AddReferencedObject(m_ImGuiRT);
 }
 
-FString SImGuiWindow::GetReferencerName() const
+FString SImGuiWidgetBase::GetReferencerName() const
 {
-	return TEXT("SImGuiWindow");
+	return TEXT("SImGuiWidgetBase");
 }
 //~ GCObject Interface
 
-void SImGuiWindow::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+void SImGuiWidgetBase::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
 	SCOPE_CYCLE_COUNTER(STAT_TickWidget);
 
@@ -87,7 +87,7 @@ void SImGuiWindow::Tick(const FGeometry& AllottedGeometry, const double InCurren
 	// new frame setup
 	{
 		IO.DisplaySize = { (float)AllottedGeometry.GetAbsoluteSize().X, (float)AllottedGeometry.GetAbsoluteSize().Y };
-		IO.DeltaTime = InDeltaTime;		
+		IO.DeltaTime = InDeltaTime;
 
 		ImGui::NewFrame();
 	}
@@ -107,7 +107,7 @@ void SImGuiWindow::Tick(const FGeometry& AllottedGeometry, const double InCurren
 	TickInternal(AllottedGeometry, InCurrentTime, InDeltaTime);
 }
 
-int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyClippingRect,
+int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyClippingRect,
 	FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const
 {
 	SCOPE_CYCLE_COUNTER(STAT_RenderWidget);
@@ -333,7 +333,7 @@ int32 SImGuiWindow::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
 			};
 
 			OutDrawElements.PushClip(FSlateClippingZone{ MyClippingRect });
-			FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, m_ImGuiSlateBrush.GetRenderingResource(), Vertices, Indices, nullptr, 0, 0, ESlateDrawEffect::IgnoreTextureAlpha | ESlateDrawEffect::NoGamma | ESlateDrawEffect::NoBlending);
+			FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, m_ImGuiSlateBrush.GetRenderingResource(), Vertices, Indices, nullptr, 0, 0, ESlateDrawEffect::NoGamma);
 			OutDrawElements.PopClip();
 		}
 	}
@@ -413,13 +413,13 @@ static int32 FMouseKeyToImGuiKey(FKey MouseKey)
 	return MouseButton;
 }
 
-void SImGuiWindow::AddMouseButtonEvent(FKey MouseKey, bool IsDown)
+void SImGuiWidgetBase::AddMouseButtonEvent(FKey MouseKey, bool IsDown)
 {
 	ImGuiIO& IO = GetImGuiIO();
 	IO.AddMouseButtonEvent(FMouseKeyToImGuiKey(MouseKey), IsDown);
 }
 
-void SImGuiWindow::AddKeyEvent(FKeyEvent KeyEvent, bool IsDown)
+void SImGuiWidgetBase::AddKeyEvent(FKeyEvent KeyEvent, bool IsDown)
 {
 	ImGuiIO& IO = GetImGuiIO();
 
@@ -434,7 +434,7 @@ void SImGuiWindow::AddKeyEvent(FKeyEvent KeyEvent, bool IsDown)
 	IO.AddKeyEvent(ImGuiKey_ModAlt, KeyEvent.GetModifierKeys().IsAltDown());
 }
 
-FReply SImGuiWindow::OnKeyChar(const FGeometry& MyGeometry, const FCharacterEvent& CharacterEvent)
+FReply SImGuiWidgetBase::OnKeyChar(const FGeometry& MyGeometry, const FCharacterEvent& CharacterEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
 	IO.AddInputCharacterUTF16(CharacterEvent.GetCharacter());
@@ -442,7 +442,7 @@ FReply SImGuiWindow::OnKeyChar(const FGeometry& MyGeometry, const FCharacterEven
 	return FReply::Handled();
 }
 
-FReply SImGuiWindow::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& KeyEvent)
+FReply SImGuiWidgetBase::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& KeyEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
 	AddKeyEvent(KeyEvent, true);
@@ -450,7 +450,7 @@ FReply SImGuiWindow::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& Key
 	return FReply::Handled();
 }
 
-FReply SImGuiWindow::OnKeyUp(const FGeometry& MyGeometry, const FKeyEvent& KeyEvent)
+FReply SImGuiWidgetBase::OnKeyUp(const FGeometry& MyGeometry, const FKeyEvent& KeyEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
 	AddKeyEvent(KeyEvent, false);
@@ -458,28 +458,28 @@ FReply SImGuiWindow::OnKeyUp(const FGeometry& MyGeometry, const FKeyEvent& KeyEv
 	return FReply::Handled();
 }
 
-FReply SImGuiWindow::OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+FReply SImGuiWidgetBase::OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
 	AddMouseButtonEvent(MouseEvent.GetEffectingButton(), true);
 
 	return FReply::Handled().CaptureMouse(SharedThis(this));
 }
 
-FReply SImGuiWindow::OnMouseButtonUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+FReply SImGuiWidgetBase::OnMouseButtonUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
 	AddMouseButtonEvent(MouseEvent.GetEffectingButton(), false);
 
 	return FReply::Handled().ReleaseMouseCapture();
 }
 
-FReply SImGuiWindow::OnMouseButtonDoubleClick(const FGeometry& InMyGeometry, const FPointerEvent& MouseEvent)
+FReply SImGuiWidgetBase::OnMouseButtonDoubleClick(const FGeometry& InMyGeometry, const FPointerEvent& MouseEvent)
 {
 	AddMouseButtonEvent(MouseEvent.GetEffectingButton(), true);
 
 	return FReply::Handled();
 }
 
-FReply SImGuiWindow::OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+FReply SImGuiWidgetBase::OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
 	IO.AddMouseWheelEvent(0.f, MouseEvent.GetWheelDelta());
@@ -487,18 +487,18 @@ FReply SImGuiWindow::OnMouseWheel(const FGeometry& MyGeometry, const FPointerEve
 	return FReply::Handled();
 }
 
-FReply SImGuiWindow::OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
+FReply SImGuiWidgetBase::OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
 	const FVector2D LocalMousePosition = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
 
 	ImGuiIO& IO = GetImGuiIO();
-	IO.AddMousePosEvent(LocalMousePosition.X, LocalMousePosition.Y);
+	IO.AddMousePosEvent(LocalMousePosition.X * MyGeometry.Scale, LocalMousePosition.Y * MyGeometry.Scale);
 
 	return FReply::Handled();
 }
 #pragma endregion SLATE_INPUT
 
-void SImGuiMainWindow::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+void SImGuiMainWindowWidget::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
 	FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
 	if (ImGuiRuntimeModule.GetMainWindowTickDelegate().IsBound())
@@ -519,17 +519,21 @@ void SImGuiMainWindow::TickInternal(const FGeometry& AllottedGeometry, const dou
 	}
 }
 
-void SImGuiWidgetWindow::Construct(const FArguments& InArgs)
+void SImGuiWidget::Construct(const FArguments& InArgs)
 {
 	Super::Construct(Super::FArguments());
 
 	m_OnTickDelegate = InArgs._OnTickDelegate;
+	m_AllowUndocking = InArgs._AllowUndocking.Get();
 }
 
-void SImGuiWidgetWindow::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+void SImGuiWidget::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
-	const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-	ImGui::SetNextWindowDockID(MainDockSpaceID);
+	const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+	if (!m_AllowUndocking)
+	{
+		ImGui::SetNextWindowDockID(MainDockSpaceID);
+	}
 
 	m_OnTickDelegate.ExecuteIfBound(m_ImGuiContext, InDeltaTime);
 }
