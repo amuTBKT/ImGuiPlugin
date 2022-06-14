@@ -64,9 +64,6 @@ protected:
 
 	ImGuiContext* m_ImGuiContext = nullptr;
 	UTextureRenderTarget2D* m_ImGuiRT = nullptr;
-
-	bool m_ContainsMouse = false;
-	bool m_HasMouseCapture = false;
 };
 
 /* Main window widget, only one instance active at a time */

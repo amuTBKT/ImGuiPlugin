@@ -82,8 +82,6 @@ void SImGuiWidgetBase::Tick(const FGeometry& AllottedGeometry, const double InCu
 	
 	ImGuiIO& IO = GetImGuiIO();
 	
-	//[TODO] our RT size is in int and Viewport size is in float, can sometimes cause blurring. set imgui framebuffer scale...?
-
 	// new frame setup
 	{
 		IO.DisplaySize = { (float)AllottedGeometry.GetAbsoluteSize().X, (float)AllottedGeometry.GetAbsoluteSize().Y };
@@ -94,11 +92,10 @@ void SImGuiWidgetBase::Tick(const FGeometry& AllottedGeometry, const double InCu
 
 	// resize RT if needed
 	{
-		const int32 NewSizeX = (int32)AllottedGeometry.GetAbsoluteSize().X;
-		const int32 NewSizeY = (int32)AllottedGeometry.GetAbsoluteSize().Y;
+		const int32 NewSizeX = FMath::CeilToInt(IO.DisplaySize.x);
+		const int32 NewSizeY = FMath::CeilToInt(IO.DisplaySize.y);
 
-		//TODO: ideally should only resize if NewSize > CurrentSize
-		if (m_ImGuiRT->SizeX != NewSizeX || m_ImGuiRT->SizeY != NewSizeY)
+		if (m_ImGuiRT->SizeX < NewSizeX || m_ImGuiRT->SizeY < NewSizeY)
 		{
 			m_ImGuiRT->ResizeTarget(NewSizeX, NewSizeY);
 		}
@@ -167,9 +164,9 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 				if (ResourceHandle.GetResourceProxy() && ResourceHandle.GetResourceProxy()->Resource)
 				{
 					FSlateShaderResource* ShaderResource = ResourceHandle.GetResourceProxy()->Resource;
-					ESlateShaderResource::Type Type = ShaderResource->GetType();
+					ESlateShaderResource::Type ResourceType = ShaderResource->GetType();
 
-					if (Type == ESlateShaderResource::Type::TextureObject)
+					if (ResourceType == ESlateShaderResource::Type::TextureObject)
 					{
 						FSlateBaseUTextureResource* TextureObjectResource = static_cast<FSlateBaseUTextureResource*>(ShaderResource);
 						if (FTextureResource* Resource = TextureObjectResource->GetTextureObject()->GetResource())
@@ -177,7 +174,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 							TextureRHI = Resource->TextureRHI;
 						}
 					}
-					else if (Type == ESlateShaderResource::Type::NativeTexture)
+					else if (ResourceType == ESlateShaderResource::Type::NativeTexture)
 					{
 						if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTexture2DRHIRef>*)ShaderResource)->GetTypedResource())
 						{
@@ -193,7 +190,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 				[RenderData, RT_Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
 				{
 					FRHIResourceCreateInfo VertexCreateInfo(TEXT("ImGui_VertexBuffer"));
-					FBufferRHIRef VertexBuffer = RHICreateIndexBuffer(sizeof(uint32), RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Static|BUF_ByteAddressBuffer|BUF_ShaderResource, VertexCreateInfo);
+					FBufferRHIRef VertexBuffer = RHICreateVertexBuffer(RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Static|BUF_ByteAddressBuffer|BUF_ShaderResource, VertexCreateInfo);
 					if (ImDrawVert* VertexDst = (ImDrawVert*)RHILockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
 					{
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
@@ -314,17 +311,23 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 			const FSlateRenderTransform WidgetOffsetTransform = FTransform2f(1.f, { 0.f, 0.f });
 			const FSlateRect DrawRect = AllottedGeometry.GetRenderBoundingRect();
 
-			const FVector2D V0 = DrawRect.GetTopLeft();
-			const FVector2D V1 = DrawRect.GetTopRight();
-			const FVector2D V2 = DrawRect.GetBottomRight();
-			const FVector2D V3 = DrawRect.GetBottomLeft();
+			const FVector2f V0 = (FVector2f)DrawRect.GetTopLeft();
+			const FVector2f V1 = (FVector2f)DrawRect.GetTopRight();
+			const FVector2f V2 = (FVector2f)DrawRect.GetBottomRight();
+			const FVector2f V3 = (FVector2f)DrawRect.GetBottomLeft();
+
+			// adjust UVs based on RT vs Viewport scaling
+			const float UVMinX = 0.f;
+			const float UVMinY = 0.f;
+			const float UVMaxX = (float)(DrawRect.Right - DrawRect.Left) / (float)m_ImGuiRT->SizeX;
+			const float UVMaxY = (float)(DrawRect.Bottom - DrawRect.Top) / (float)m_ImGuiRT->SizeY;
 
 			const TArray<FSlateVertex> Vertices =
 			{
-				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V0.X, (float)V0.Y }, FVector2f{ 0.f, 0.f }, FColor::White),
-				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V1.X, (float)V1.Y }, FVector2f{ 1.f, 0.f }, FColor::White),
-				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V2.X, (float)V2.Y }, FVector2f{ 1.f, 1.f }, FColor::White),
-				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, FVector2f{ (float)V3.X, (float)V3.Y }, FVector2f{ 0.f, 1.f }, FColor::White)
+				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V0, FVector2f{ UVMinX, UVMinY }, FColor::White),
+				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V1, FVector2f{ UVMaxX, UVMinY }, FColor::White),
+				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V2, FVector2f{ UVMaxX, UVMaxY }, FColor::White),
+				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V3, FVector2f{ UVMinX, UVMaxY }, FColor::White)
 			};
 			const TArray<uint32> Indices =
 			{
