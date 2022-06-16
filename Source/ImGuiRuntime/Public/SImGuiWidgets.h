@@ -48,6 +48,8 @@ public:
 
 	virtual FReply OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
 
+	virtual FCursorReply OnCursorQuery(const FGeometry& MyGeometry, const FPointerEvent& CursorEvent) const override;
+
 private:
 	FORCEINLINE ImGuiIO& GetImGuiIO() const;
 	

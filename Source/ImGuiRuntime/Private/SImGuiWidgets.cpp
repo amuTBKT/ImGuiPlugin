@@ -92,8 +92,8 @@ void SImGuiWidgetBase::Tick(const FGeometry& AllottedGeometry, const double InCu
 
 	// resize RT if needed
 	{
-		const int32 NewSizeX = FMath::CeilToInt(IO.DisplaySize.x);
-		const int32 NewSizeY = FMath::CeilToInt(IO.DisplaySize.y);
+		const int32 NewSizeX = FMath::Max(1, FMath::CeilToInt(IO.DisplaySize.x));
+		const int32 NewSizeY = FMath::Max(1, FMath::CeilToInt(IO.DisplaySize.y));
 
 		if (m_ImGuiRT->SizeX < NewSizeX || m_ImGuiRT->SizeY < NewSizeY)
 		{
@@ -499,6 +499,28 @@ FReply SImGuiWidgetBase::OnMouseMove(const FGeometry& MyGeometry, const FPointer
 
 	return FReply::Handled();
 }
+
+FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& MyGeometry, const FPointerEvent& CursorEvent) const
+{
+	const static EMouseCursor::Type ImGuiToUMGCursor[] =
+	{
+		EMouseCursor::Default,
+		EMouseCursor::TextEditBeam,
+		EMouseCursor::CardinalCross,
+		EMouseCursor::ResizeUpDown,
+		EMouseCursor::ResizeLeftRight,
+		EMouseCursor::ResizeSouthWest,
+		EMouseCursor::ResizeSouthEast,
+		EMouseCursor::Hand,
+		EMouseCursor::SlashedCircle,
+	};
+
+	ImGuiIO& IO = GetImGuiIO();
+
+	const ImGuiMouseCursor MouseCursor = ImGui::GetMouseCursor();
+	return MouseCursor == ImGuiMouseCursor_None ? FCursorReply::Unhandled() : FCursorReply::Cursor(ImGuiToUMGCursor[MouseCursor]);
+}
+
 #pragma endregion SLATE_INPUT
 
 void SImGuiMainWindowWidget::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
