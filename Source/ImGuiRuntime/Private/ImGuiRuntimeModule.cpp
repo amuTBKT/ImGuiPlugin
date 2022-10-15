@@ -16,6 +16,12 @@
 
 #define LOCTEXT_NAMESPACE "ImGuiPlugin"
 
+static int32 CaptureNextGpuFrames = 0;
+static FAutoConsoleVariableRef CVarRenderCaptureNextImGuiFrame(
+	TEXT("imgui.CaptureGpuFrames"),
+	CaptureNextGpuFrames,
+	TEXT("Enable capturing of ImGui rendering for the next N draws"));
+
 #if WITH_EDITOR
 const FName FImGuiRuntimeModule::ImGuiTabName = TEXT("ImGuiTab");
 #endif
@@ -153,6 +159,13 @@ void FImGuiRuntimeModule::OnBeginFrame()
 	
 	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
+
+	CaptureNextGpuFrames = FMath::Max(0, CaptureNextGpuFrames - 1);
+}
+
+bool FImGuiRuntimeModule::CaptureGpuFrame() const
+{
+	return CaptureNextGpuFrames > 0;
 }
 
 FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)

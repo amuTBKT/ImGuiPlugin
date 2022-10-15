@@ -12,6 +12,8 @@
 #include "Input/Events.h"
 #include "InputCoreTypes.h"
 
+#include "RenderCaptureInterface.h"
+
 DECLARE_CYCLE_STAT(TEXT("ImGui Tick"), STAT_TickWidget, STATGROUP_ImGui);
 DECLARE_CYCLE_STAT(TEXT("ImGui Render"), STAT_RenderWidget, STATGROUP_ImGui);
 
@@ -119,7 +121,9 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 		if (DrawData->TotalVtxCount > 0 && DrawData->TotalIdxCount > 0)
 		{
 			FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
-		
+			
+			RenderCaptureInterface::FScopedCapture RenderCapture(ImGuiRuntimeModule.CaptureGpuFrame(), TEXT("ImGuiWidget"));
+
 			struct FRenderData
 			{
 				struct FDrawListDeleter
@@ -134,15 +138,14 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 				ImVec2 DisplaySize = {};
 				int32 TotalVtxCount = 0;
 				int32 TotalIdxCount = 0;
+				int32 MissingTextureIndex = INDEX_NONE;
 
 				FRenderData() = default;
 				FRenderData(const FRenderData&) = delete;
 				FRenderData(FRenderData&&) = delete;
-					
-				~FRenderData() = default;
-
 				FRenderData& operator=(const FRenderData&) = delete;
-				FRenderData& operator=(FRenderData&&) = delete;
+				FRenderData& operator=(FRenderData&&) = delete;					
+				~FRenderData() = default;
 			};
 			FRenderData* RenderData = new FRenderData();
 			RenderData->DisplayPos = DrawData->DisplayPos;
@@ -156,6 +159,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 				RenderData->DrawLists[ListIndex] = FRenderData::FDrawListPtr(DrawData->CmdLists[ListIndex]->CloneOutput());
 			}
 
+			RenderData->MissingTextureIndex = ImGuiRuntimeModule.GetMissingImageTextureIndex();
 			RenderData->BoundTextures.Reserve(ImGuiRuntimeModule.GetResourceHandles().Num());
 			for (const FSlateResourceHandle& ResourceHandle : ImGuiRuntimeModule.GetResourceHandles())
 			{
@@ -291,8 +295,14 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 									VertexShader->SetVertexOffset(RHICmdList, DrawCmd.VtxOffset + GlobalVertexOffset);
 										
 									const uint32 Index = FImGuiRuntimeModule::ImGuiIDToIndex(DrawCmd.TextureId);
-									check(RenderData->BoundTextures.IsValidIndex(Index) && RenderData->BoundTextures[Index].IsValid());
-									PixelShader->SetTexture(RHICmdList, RenderData->BoundTextures[Index]);
+									if (ensure(RenderData->BoundTextures.IsValidIndex(Index) && RenderData->BoundTextures[Index].IsValid()))
+									{
+										PixelShader->SetTexture(RHICmdList, RenderData->BoundTextures[Index]);
+									}
+									else
+									{
+										PixelShader->SetTexture(RHICmdList, RenderData->BoundTextures[RenderData->MissingTextureIndex]);
+									}
 
 									RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);
 								}

@@ -59,6 +59,8 @@ public:
 	FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() { return m_ImGuiMainWindowTickDelegate; }
 	const FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() const { return m_ImGuiMainWindowTickDelegate; }
 
+	bool CaptureGpuFrame() const;
+
 	static FOnImGuiPluginInitialized OnPluginInitialized;
 	static bool IsPluginInitialized;
 
