@@ -24,6 +24,11 @@
 			"Name": "ImGuiRuntime",
 			"Type": "Runtime",
 			"LoadingPhase": "PreDefault"
+		},
+		{
+			"Name": "ImGuiWidgets",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
 		}
 	]
 }
