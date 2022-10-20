@@ -2,15 +2,20 @@ cmake_minimum_required(VERSION 3.10)
 
 project(ImGui)
 
+include_directories(imgui/)
+
 set(HEADER_FILES
     imgui/imgui.h
-    imgui/imconfig.h)
+    imgui/imconfig.h
+    implot/implot.h)
 
 set(SOURCE_FILES
     imgui/imgui.cpp
     imgui/imgui_draw.cpp
     imgui/imgui_tables.cpp
-    imgui/imgui_widgets.cpp)
+    imgui/imgui_widgets.cpp
+    implot/implot.cpp
+    implot/implot_items.cpp)
 
 add_library(ImGui STATIC ${HEADER_FILES} ${SOURCE_FILES})
 

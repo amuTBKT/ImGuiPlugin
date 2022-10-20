@@ -10,6 +10,7 @@ public class ImGui : ModuleRules
 		PublicDefinitions.Add("WITH_IMGUI");
 
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/imgui"));
+		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/implot"));
 
 		if (Target.Configuration == UnrealTargetConfiguration.Shipping || Target.Configuration == UnrealTargetConfiguration.Test)
 		{
