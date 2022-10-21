@@ -237,7 +237,7 @@ namespace ImGuiStatsVizualizer
 			{
 				ImGui::TableSetColumnIndex(6);
 
-	#if WITH_EDITOR
+#if WITH_EDITOR
 				static TMap<FName, TWeakObjectPtr<UObject>> LinkedAsset;
 									
 				if (!LinkedAsset.Find(RawStatName))
@@ -280,8 +280,8 @@ namespace ImGuiStatsVizualizer
 					}
 					ImGui::PopID();
 								
-	#define ENABLE_EDIT_ICON 0 // seems to be crashing
-	#if ENABLE_EDIT_ICON
+#define ENABLE_EDIT_ICON 0 // seems to be crashing
+#if ENABLE_EDIT_ICON
 					ImGui::SameLine();
 
 					ImGui::PushID(HashCombine(AssetHash, EditHash));
@@ -298,11 +298,11 @@ namespace ImGuiStatsVizualizer
 						ImGui::SetTooltip("Edit asset.");
 					}
 					ImGui::PopID();
-	#endif //#if ENABLE_EDIT_ICON
+#endif //#if ENABLE_EDIT_ICON
 				}
-	#else
+#else
 				//ImGui::Text("");
-	#endif //#if WITH_EDITOR
+#endif //#if WITH_EDITOR
 			}
 		}
 	}
@@ -678,7 +678,7 @@ namespace ImGuiStatsVizualizer
 		EditAssetIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Edit").GetIcon(), { TableItemIconSize, TableItemIconSize }, 1.f);
     }
 
-    static void Tick(ImGuiContext* Context, float DeltaTime)
+    static void Tick(ImGuiContext* Context)
     {
 		FImGuiTickScope Scope{ Context };
 

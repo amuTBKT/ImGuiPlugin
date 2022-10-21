@@ -77,7 +77,7 @@ namespace ImGuiNiagaraProfiler
 		GPUCaptureIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Profiler.Tab").GetIcon(), { 16.f, 16.f }, 1.f);
     }
 
-    static void Tick(ImGuiContext* Context, float DeltaTime)
+    static void Tick(ImGuiContext* Context)
     {
 		FImGuiTickScope Scope{ Context };
 

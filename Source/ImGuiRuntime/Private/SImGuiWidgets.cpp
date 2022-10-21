@@ -539,7 +539,7 @@ void SImGuiMainWindowWidget::TickInternal(const FGeometry& AllottedGeometry, con
 	if (ImGuiRuntimeModule.GetMainWindowTickDelegate().IsBound())
 	{
 		ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-		ImGuiRuntimeModule.GetMainWindowTickDelegate().Broadcast(m_ImGuiContext, InDeltaTime);
+		ImGuiRuntimeModule.GetMainWindowTickDelegate().Broadcast(m_ImGuiContext);
 	}
 	else
 	{
@@ -570,5 +570,5 @@ void SImGuiWidget::TickInternal(const FGeometry& AllottedGeometry, const double 
 		ImGui::SetNextWindowDockID(MainDockSpaceID);
 	}
 
-	m_OnTickDelegate.ExecuteIfBound(m_ImGuiContext, InDeltaTime);
+	m_OnTickDelegate.ExecuteIfBound(m_ImGuiContext);
 }
