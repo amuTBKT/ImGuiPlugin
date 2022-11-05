@@ -16,13 +16,13 @@ PRAGMA_DISABLE_OPTIMIZATION
 namespace ImGuiNiagaraProfiler
 {
 	static TWeakObjectPtr<UWorld> CurrentWorld = nullptr;
-	static FNiagaraGpuProfilerListener* NiagaraGPUProfilerListener = nullptr;
+	static TUniquePtr<FNiagaraGpuProfilerListener> NiagaraGPUProfilerListener = nullptr;
 	
 	static ImGuiTextFilter StatFilter = {};
 	static FImGuiImageBindingParams ClearTextIcon;
 	static FImGuiImageBindingParams GPUCaptureIcon;
 
-	static bool IsEnabled = false;
+	static bool bIsCapturing = false;
 
 	struct FSimStageStatData
 	{
@@ -31,15 +31,16 @@ namespace ImGuiNiagaraProfiler
 	};
 	static TMap<UNiagaraSystem*, TMap<FVersionedNiagaraEmitterWeakPtr, TArray<FSimStageStatData>>> CapturedStats;
 
+
     static void Initialize()
     {
-		NiagaraGPUProfilerListener = new FNiagaraGpuProfilerListener();
-		NiagaraGPUProfilerListener->SetEnabled(true);
+		NiagaraGPUProfilerListener = MakeUnique<FNiagaraGpuProfilerListener>();
+		NiagaraGPUProfilerListener->SetEnabled(bIsCapturing);
 		NiagaraGPUProfilerListener->SetHandler(
 			[](const FNiagaraGpuFrameResultsPtr& FrameResults)
 			{
 				CapturedStats.Reset();
-				if (IsEnabled)
+				if (bIsCapturing)
 				{
 					CapturedStats.Reserve(FrameResults->DispatchResults.Num());
 
@@ -62,7 +63,7 @@ namespace ImGuiNiagaraProfiler
 				}
 			}
 		);
-		
+
 		FWorldDelegates::OnPreWorldInitialization.AddLambda(
 			[](UWorld* World, const UWorld::InitializationValues IVS)
 			{
@@ -90,8 +91,9 @@ namespace ImGuiNiagaraProfiler
 
 		if (ImGui::Begin("Niagara Profiler", nullptr, ImGuiWindowFlags_None))
 		{
-			ImGui::Checkbox("Enable profiling", &IsEnabled);
-			if (IsEnabled)
+			ImGui::Checkbox("Enable profiling", &bIsCapturing);
+			NiagaraGPUProfilerListener->SetEnabled(bIsCapturing);
+			if (bIsCapturing)
 			{
 				RegisterOneFrameResources();
 
