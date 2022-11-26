@@ -10,6 +10,7 @@
 #include "NiagaraGpuComputeDispatch.h"
 
 #include "implot.h"
+#include <string>
 
 PRAGMA_DISABLE_OPTIMIZATION
 
@@ -196,7 +197,7 @@ namespace ImGuiNiagaraProfiler
 																ENQUEUE_RENDER_COMMAND(AddNiagaraCapture)(
 																	[StageFName = Stat.StageName](FRHICommandListImmediate& RHICmdList)
 																	{
-																		g_SimStagesToCapture.Add(StageFName);
+																		//g_SimStagesToCapture.Add(StageFName);
 																	}
 																);
 															}

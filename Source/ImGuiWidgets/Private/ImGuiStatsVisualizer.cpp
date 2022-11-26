@@ -4,6 +4,7 @@
 
 #include "ImGuiRuntimeModule.h"
 #include "Stats/StatsData.h"
+#include <string>
 
 #if WITH_EDITOR
 #include "AssetRegistry/AssetRegistryModule.h"
