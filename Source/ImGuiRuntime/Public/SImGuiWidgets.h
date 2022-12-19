@@ -66,6 +66,9 @@ protected:
 
 	ImGuiContext* m_ImGuiContext = nullptr;
 	UTextureRenderTarget2D* m_ImGuiRT = nullptr;
+
+	// TODO: initial zoom support, can we do better than this?
+	float m_WindowScale = 1.f;
 };
 
 /* Main window widget, only one instance active at a time */

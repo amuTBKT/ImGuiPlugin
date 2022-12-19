@@ -16,10 +16,12 @@ namespace ImGuiStatsVizualizer
 	// config
 	static constexpr ImGuiTableFlags TableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_Reorderable | ImGuiTableFlags_Hideable;
 	static constexpr float TableRowHeight = 0.f; //autosize, having issues setting center alignment for text
-	static constexpr float TableItemIconSize = 8.f; //icon size to use for row item, should use >=12 to make the image clear but doesn't fit properly with default row size
+	static const FVector2D TableItemIconSize = FVector2D{ 8., 8. }; //icon size to use for row item, should use >=12 to make the image clear but doesn't fit properly with default row size
 
 	static constexpr float HeaderSizeY = 52.f; //TODO: is there a way to auto size child window?
 
+	static const FVector2D ClearIconSize = FVector2D{ 13., 13. };
+	
 	struct FStatGroupData
 	{
 		const std::string DisplayName = "None";
@@ -637,7 +639,7 @@ namespace ImGuiStatsVizualizer
 			ImGui::SetItemAllowOverlap();
 			ImGui::SameLine();
 		
-			ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ClearTextIcon.Size.x * 2.2f);
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ClearIconSize.X * 2.2f - ClearIconSize.X * (ImGui::GetIO().FontGlobalScale-1));
 			if (ImGui::ImageButton(ClearTextIcon.Id, ClearTextIcon.Size, ClearTextIcon.UV0, ClearTextIcon.UV1))
 			{
 				StatFilter.Clear();
@@ -674,9 +676,9 @@ namespace ImGuiStatsVizualizer
     static void RegisterOneFrameResources()
     {
         FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
-		ClearTextIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.X").GetIcon(), { 13.f, 13.f }, 1.f);
-		BrowseAssetIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Search").GetIcon(), { TableItemIconSize, TableItemIconSize }, 1.f);
-		EditAssetIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Edit").GetIcon(), { TableItemIconSize, TableItemIconSize }, 1.f);
+		ClearTextIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.X").GetIcon(), ClearIconSize * ImGui::GetIO().FontGlobalScale, 1.f);
+		BrowseAssetIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Search").GetIcon(), TableItemIconSize * ImGui::GetIO().FontGlobalScale, 1.f);
+		EditAssetIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.Edit").GetIcon(), TableItemIconSize * ImGui::GetIO().FontGlobalScale, 1.f);
     }
 
     static void Tick(ImGuiContext* Context)
@@ -687,7 +689,7 @@ namespace ImGuiStatsVizualizer
 	    {
             RegisterOneFrameResources();
             
-            if (ImGui::BeginChild("Header", ImVec2(0.f, HeaderSizeY), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+            if (ImGui::BeginChild("Header", ImVec2(0.f, HeaderSizeY * 0.5f + HeaderSizeY * ImGui::GetIO().FontGlobalScale * 0.5f), false, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
             {
                 RenderStatsHeader();
             }

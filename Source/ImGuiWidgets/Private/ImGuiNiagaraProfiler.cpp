@@ -12,17 +12,18 @@
 #include "implot.h"
 #include <string>
 
-PRAGMA_DISABLE_OPTIMIZATION
+UE_DISABLE_OPTIMIZATION
 
 namespace ImGuiNiagaraProfiler
 {
 	static TWeakObjectPtr<UWorld> CurrentWorld = nullptr;
 	static TUniquePtr<FNiagaraGpuProfilerListener> NiagaraGPUProfilerListener = nullptr;
 	
+	static const FVector2D ClearIconSize = FVector2D{ 13., 13. };
+
 	static ImGuiTextFilter StatFilter = {};
 	static FImGuiImageBindingParams ClearTextIcon;
 	static FImGuiImageBindingParams GPUCaptureIcon;
-
 	static bool bIsCapturing = false;
 
 	struct FSimStageStatData
@@ -82,8 +83,8 @@ namespace ImGuiNiagaraProfiler
     static void RegisterOneFrameResources()
     {
 		FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
-		ClearTextIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.X").GetIcon(), { 13.f, 13.f }, 1.f);
-		GPUCaptureIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Profiler.Tab").GetIcon(), { 16.f, 16.f }, 1.f);
+		ClearTextIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Icons.X").GetIcon(), ClearIconSize * ImGui::GetIO().FontGlobalScale, 1.f);
+		GPUCaptureIcon = ImGuiRuntimeModule.RegisterOneFrameResource(FSlateIcon(FAppStyle::Get().GetStyleSetName(), "Profiler.Tab").GetIcon(), FVector2D{ 16.f, 16.f }*ImGui::GetIO().FontGlobalScale, 1.f);
     }
 
     static void Tick(ImGuiContext* Context)
@@ -109,7 +110,7 @@ namespace ImGuiNiagaraProfiler
 
 						if (StatFilter.IsActive())
 						{
-							ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ClearTextIcon.Size.x * 2.2f);
+							ImGui::SetCursorPosX(ImGui::GetCursorPosX() - ClearIconSize.X * 2.2f - ClearIconSize.X * (ImGui::GetIO().FontGlobalScale - 1));
 							if (ImGui::ImageButton(ClearTextIcon.Id, ClearTextIcon.Size, ClearTextIcon.UV0, ClearTextIcon.UV1))
 							{
 								StatFilter.Clear();
@@ -260,6 +261,6 @@ namespace ImGuiNiagaraProfiler
     IMGUI_REGISTER_STATIC_WIDGET(Initialize, Tick);
 }
 
-PRAGMA_ENABLE_OPTIMIZATION
+UE_ENABLE_OPTIMIZATION
 
 #endif //#if STATS

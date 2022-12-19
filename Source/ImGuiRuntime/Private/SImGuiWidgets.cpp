@@ -39,6 +39,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	m_ImGuiRT = NewObject<UTextureRenderTarget2D>();
 	m_ImGuiRT->bCanCreateUAV = false;
 	m_ImGuiRT->bAutoGenerateMips = false;
+	m_ImGuiRT->Filter = TextureFilter::TF_Nearest;
 	m_ImGuiRT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
 	m_ImGuiRT->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
 	m_ImGuiRT->InitAutoFormat(32, 32);
@@ -496,6 +497,14 @@ FReply SImGuiWidgetBase::OnMouseWheel(const FGeometry& MyGeometry, const FPointe
 {
 	ImGuiIO& IO = GetImGuiIO();
 	IO.AddMouseWheelEvent(0.f, MouseEvent.GetWheelDelta());
+
+	// TODO: initial zoom support, can we do better than this?
+	if (IO.KeyCtrl)
+	{
+		m_WindowScale += MouseEvent.GetWheelDelta() * 0.25f;
+		m_WindowScale = FMath::Clamp(m_WindowScale, 1.f, 4.f);
+		IO.FontGlobalScale = m_WindowScale;
+	}
 
 	return FReply::Handled();
 }
