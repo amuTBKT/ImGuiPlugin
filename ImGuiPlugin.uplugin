@@ -3,13 +3,13 @@
 	"Version" : 1,
 	"VersionName" : "1.0",
 	"FriendlyName" : "ImGui",
-	"Description" : "TODO.",
+	"Description" : "ImGui debug tools for Unreal Engine",
 	"Category" : "UI",
 	"CreatedBy" : "Amit Mehar",
 	"CreatedByURL" : "https://twitter.com/amu_mhr",
 	"DocsURL" : "",
 	"MarketplaceURL" : "",
-	"SupportURL" : "",
+	"SupportURL" : "https://github.com/amuTBKT/ImGuiPlugin/issues",
 	"EnabledByDefault" : false,
 	"CanContainContent" : true,
 	"IsBetaVersion" : false,
@@ -24,11 +24,6 @@
 			"Name": "ImGuiRuntime",
 			"Type": "Runtime",
 			"LoadingPhase": "PreDefault"
-		},
-		{
-			"Name": "ImGuiWidgets",
-			"Type": "Runtime",
-			"LoadingPhase": "Default"
 		}
 	]
 }
