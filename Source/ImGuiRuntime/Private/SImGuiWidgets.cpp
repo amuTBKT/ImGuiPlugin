@@ -195,7 +195,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 				[RenderData, RT_Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
 				{
 					FRHIResourceCreateInfo VertexCreateInfo(TEXT("ImGui_VertexBuffer"));
-					FBufferRHIRef VertexBuffer = RHICreateVertexBuffer(RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Static|BUF_ByteAddressBuffer|BUF_ShaderResource, VertexCreateInfo);
+					FBufferRHIRef VertexBuffer = RHICreateVertexBuffer(RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Volatile|BUF_ByteAddressBuffer|BUF_ShaderResource, VertexCreateInfo);
 					if (ImDrawVert* VertexDst = (ImDrawVert*)RHILockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
 					{
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
@@ -208,7 +208,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 					FShaderResourceViewRHIRef VertexBufferSRV = RHICreateShaderResourceView(VertexBuffer, sizeof(uint32), PF_R32_UINT);
 
 					FRHIResourceCreateInfo IndexCreateInfo(TEXT("ImGui_IndexBuffer"));
-					FBufferRHIRef IndexBuffer = RHICreateIndexBuffer(sizeof(ImDrawIdx), RenderData->TotalIdxCount * sizeof(ImDrawIdx), BUF_Static, IndexCreateInfo);
+					FBufferRHIRef IndexBuffer = RHICreateIndexBuffer(sizeof(ImDrawIdx), RenderData->TotalIdxCount * sizeof(ImDrawIdx), BUF_Volatile, IndexCreateInfo);
 					if (ImDrawIdx* IndexDst = (ImDrawIdx*)RHILockBuffer(IndexBuffer, 0, RenderData->TotalIdxCount * sizeof(ImDrawIdx), RLM_WriteOnly))
 					{
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
