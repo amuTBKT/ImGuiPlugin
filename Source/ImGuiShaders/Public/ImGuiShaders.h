@@ -72,7 +72,7 @@ public:
 
 	void SetTextureSampler(FRHICommandList& RHICmdList, FRHISamplerState* SamplerState)
 	{
-		SetSamplerParameter(RHICmdList, RHICmdList.GetBoundVertexShader(), TextureSamplerParam, SamplerState);
+		SetSamplerParameter(RHICmdList, RHICmdList.GetBoundPixelShader(), TextureSamplerParam, SamplerState);
 	}
 
 private:
