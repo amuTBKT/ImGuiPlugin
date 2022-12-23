@@ -11,6 +11,7 @@ class UTextureRenderTarget2D;
 
 class IMGUIRUNTIME_API SImGuiWidgetBase : public SCompoundWidget, public FGCObject
 {
+	using Super = SCompoundWidget;
 public:
 	SLATE_BEGIN_ARGS(SImGuiWidgetBase)
 	{		
@@ -58,9 +59,6 @@ private:
 
 	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) = 0;
 
-private:
-	using Super = SCompoundWidget;
-
 protected:
 	FSlateBrush m_ImGuiSlateBrush;
 
@@ -74,16 +72,15 @@ protected:
 /* Main window widget, only one instance active at a time */
 class SImGuiMainWindowWidget : public SImGuiWidgetBase
 {
+	using Super = SImGuiWidgetBase;
 private:
 	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
-
-private:
-	using Super = SImGuiWidgetBase;
 };
 
 /* Dynamic widgets (ColorPicker etc..) */
 class IMGUIRUNTIME_API SImGuiWidget : public SImGuiWidgetBase
 {
+	using Super = SImGuiWidgetBase;
 public:
 	SLATE_BEGIN_ARGS(SImGuiWidget)
 		: _OnTickDelegate()
@@ -99,8 +96,6 @@ private:
 	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
 private:
-	using Super = SImGuiWidgetBase;
-
 	FOnTickImGuiWidgetDelegate m_OnTickDelegate = {};
 	bool m_AllowUndocking = false;
 };
