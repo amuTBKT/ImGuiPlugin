@@ -57,6 +57,7 @@ public:
 	{
 		TextureParam.Bind(Initializer.ParameterMap, TEXT("Texture"));
 		TextureSamplerParam.Bind(Initializer.ParameterMap, TEXT("TextureSampler"));
+		SrgbParam.Bind(Initializer.ParameterMap, TEXT("IsTextureSrgb"));
 	}
 	FImGuiPS() {}
 
@@ -75,7 +76,13 @@ public:
 		SetSamplerParameter(RHICmdList, RHICmdList.GetBoundPixelShader(), TextureSamplerParam, SamplerState);
 	}
 
+	void SetSrgbEnabled(FRHICommandList& RHICmdList, bool EnableSrgb)
+	{
+		SetShaderValue(RHICmdList, RHICmdList.GetBoundPixelShader(), SrgbParam, EnableSrgb ? 1 : 0);
+	}
+
 private:
 	LAYOUT_FIELD(FShaderResourceParameter, TextureParam);
 	LAYOUT_FIELD(FShaderResourceParameter, TextureSamplerParam);
+	LAYOUT_FIELD(FShaderParameter, SrgbParam);
 };

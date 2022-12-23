@@ -132,9 +132,14 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 					void operator()(ImDrawList* Ptr) { IM_FREE(Ptr); }
 				};
 				using FDrawListPtr = TUniquePtr<ImDrawList, FDrawListDeleter>;
-
+				struct FTextureInfo
+				{
+					FTextureRHIRef TextureRHI = nullptr;
+					FSamplerStateRHIRef SamplerRHI = nullptr;
+					bool IsSRGB = false;
+				};
 				TArray<FDrawListPtr> DrawLists;
-				TArray<FTextureRHIRef> BoundTextures;
+				TArray<FTextureInfo> BoundTextures;
 				ImVec2 DisplayPos = {};
 				ImVec2 DisplaySize = {};
 				int32 TotalVtxCount = 0;
@@ -164,7 +169,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 			RenderData->BoundTextures.Reserve(ImGuiRuntimeModule.GetResourceHandles().Num());
 			for (const FSlateResourceHandle& ResourceHandle : ImGuiRuntimeModule.GetResourceHandles())
 			{
-				FTextureRHIRef TextureRHI = nullptr;
+				auto& TextureInfo = RenderData->BoundTextures.AddDefaulted_GetRef();
 
 				if (ResourceHandle.GetResourceProxy() && ResourceHandle.GetResourceProxy()->Resource)
 				{
@@ -176,19 +181,28 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						FSlateBaseUTextureResource* TextureObjectResource = static_cast<FSlateBaseUTextureResource*>(ShaderResource);
 						if (FTextureResource* Resource = TextureObjectResource->GetTextureObject()->GetResource())
 						{
-							TextureRHI = Resource->TextureRHI;
+							TextureInfo.TextureRHI = Resource->TextureRHI;
+							TextureInfo.SamplerRHI = Resource->SamplerStateRHI;
+							TextureInfo.IsSRGB = Resource->bSRGB;
 						}
 					}
 					else if (ResourceType == ESlateShaderResource::Type::NativeTexture)
 					{
 						if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTexture2DRHIRef>*)ShaderResource)->GetTypedResource())
 						{
-							TextureRHI = NativeTextureRHI;
+							TextureInfo.TextureRHI = NativeTextureRHI;
 						}
 					}
 				}
 
-				RenderData->BoundTextures.Add(TextureRHI.IsValid() ? TextureRHI : GBlackTexture->TextureRHI);
+				if (TextureInfo.TextureRHI == nullptr)
+				{
+					TextureInfo.TextureRHI = GBlackTexture->TextureRHI;
+				}
+				if (TextureInfo.SamplerRHI == nullptr)
+				{
+					TextureInfo.SamplerRHI = TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
+				}
 			}
 
 			ENQUEUE_RENDER_COMMAND(RenderImGui)(
@@ -260,8 +274,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						SetViewportState();
 
 						VertexShader->SetVertexBuffer(RHICmdList, VertexBufferSRV);
-						PixelShader->SetTextureSampler(RHICmdList, TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI());
-
+						
 						const ImVec2 ClipRectOffset = RenderData->DisplayPos;
 
 						// since we merged the vertex and index buffers, we need to track global offset
@@ -295,15 +308,14 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 
 									VertexShader->SetVertexOffset(RHICmdList, DrawCmd.VtxOffset + GlobalVertexOffset);
 										
-									const uint32 Index = FImGuiRuntimeModule::ImGuiIDToIndex(DrawCmd.TextureId);
-									if (ensure(RenderData->BoundTextures.IsValidIndex(Index) && RenderData->BoundTextures[Index].IsValid()))
+									uint32 Index = FImGuiRuntimeModule::ImGuiIDToIndex(DrawCmd.TextureId);
+									if (!(RenderData->BoundTextures.IsValidIndex(Index)/* && RenderData->BoundTextures[Index].IsValid()*/))
 									{
-										PixelShader->SetTexture(RHICmdList, RenderData->BoundTextures[Index]);
+										Index = RenderData->MissingTextureIndex;
 									}
-									else
-									{
-										PixelShader->SetTexture(RHICmdList, RenderData->BoundTextures[RenderData->MissingTextureIndex]);
-									}
+									PixelShader->SetTexture(RHICmdList, RenderData->BoundTextures[Index].TextureRHI);
+									PixelShader->SetTextureSampler(RHICmdList, RenderData->BoundTextures[Index].SamplerRHI);
+									PixelShader->SetSrgbEnabled(RHICmdList, RenderData->BoundTextures[Index].IsSRGB);
 
 									RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);
 								}

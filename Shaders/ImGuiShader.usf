@@ -1,4 +1,5 @@
 #include "/Engine/Private/Common.ush"
+#include "/Engine/Private/GammaCorrectionCommon.ush"
 
 ByteAddressBuffer VertexBuffer;
 float4x4 ProjectionMatrix;
@@ -53,6 +54,7 @@ void MainVS(
 
 Texture2D Texture;
 SamplerState TextureSampler;
+int IsTextureSrgb;
 
 void MainPS(
 	in float4 ScreenPosition : SV_POSITION,
@@ -60,5 +62,13 @@ void MainPS(
 	in float4 InColor : COLOR0,
 	out float4 OutColor : SV_Target0)
 {
-	OutColor = InColor * Texture2DSample(Texture, TextureSampler, InUV);
+	float4 TextureColor = Texture2DSample(Texture, TextureSampler, InUV);
+
+	// source texture is SRGB, need to handle the conversion inside shader
+	if (IsTextureSrgb > 0)
+	{
+		TextureColor.xyz = LinearToSrgb(saturate(TextureColor.rgb));
+	}
+
+	OutColor = InColor * TextureColor;
 }
