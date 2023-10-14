@@ -26,19 +26,15 @@ public:
 		return true;
 	}
 
-	void SetVertexOffset(FRHICommandList& RHICmdList, uint32 VertexOffset)
+	void SetParameters(
+		FRHIBatchedShaderParameters& BatchedParameters,
+		FRHIShaderResourceView* VertexBufferSRV,
+		const FMatrix44f& ProjectionMatrix,
+		uint32 VertexOffset)
 	{
-		SetShaderValue(RHICmdList, RHICmdList.GetBoundVertexShader(), GlobalVertexOffsetParam, VertexOffset);
-	}
-
-	void SetProjectionMatrix(FRHICommandList& RHICmdList, const FMatrix44f& ProjectionMatrix)
-	{
-		SetShaderValue(RHICmdList, RHICmdList.GetBoundVertexShader(), ProjectionMatrixParam, ProjectionMatrix);
-	}
-
-	void SetVertexBuffer(FRHICommandList& RHICmdList, FRHIShaderResourceView* VertexSRV)
-	{
-		SetSRVParameter(RHICmdList, RHICmdList.GetBoundVertexShader(), VertexBufferParam, VertexSRV);
+		SetSRVParameter(BatchedParameters, VertexBufferParam, VertexBufferSRV);
+		SetShaderValue(BatchedParameters, ProjectionMatrixParam, ProjectionMatrix);
+		SetShaderValue(BatchedParameters, GlobalVertexOffsetParam, VertexOffset);
 	}
 
 private:
@@ -66,19 +62,15 @@ public:
 		return true;
 	}
 
-	void SetTexture(FRHICommandList& RHICmdList, FRHITexture* Texture)
+	void SetParameters(
+		FRHIBatchedShaderParameters& BatchedParameters,
+		FRHITexture* Texture,
+		FRHISamplerState* SamplerState,
+		bool EnableSrgb)
 	{
-		SetTextureParameter(RHICmdList, RHICmdList.GetBoundPixelShader(), TextureParam, Texture);
-	}
-
-	void SetTextureSampler(FRHICommandList& RHICmdList, FRHISamplerState* SamplerState)
-	{
-		SetSamplerParameter(RHICmdList, RHICmdList.GetBoundPixelShader(), TextureSamplerParam, SamplerState);
-	}
-
-	void SetSrgbEnabled(FRHICommandList& RHICmdList, bool EnableSrgb)
-	{
-		SetShaderValue(RHICmdList, RHICmdList.GetBoundPixelShader(), SrgbParam, EnableSrgb ? 1 : 0);
+		SetTextureParameter(BatchedParameters, TextureParam, Texture);
+		SetSamplerParameter(BatchedParameters, TextureSamplerParam, SamplerState);
+		SetShaderValue(BatchedParameters, SrgbParam, EnableSrgb ? 1 : 0);
 	}
 
 private:
