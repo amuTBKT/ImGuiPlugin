@@ -209,28 +209,28 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 				[RenderData, RT_Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
 				{
 					FRHIResourceCreateInfo VertexCreateInfo(TEXT("ImGui_VertexBuffer"));
-					FBufferRHIRef VertexBuffer = RHICreateVertexBuffer(RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Volatile|BUF_ByteAddressBuffer|BUF_ShaderResource, VertexCreateInfo);
-					if (ImDrawVert* VertexDst = (ImDrawVert*)RHILockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
+					FBufferRHIRef VertexBuffer = RHICmdList.CreateVertexBuffer(RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Volatile|BUF_ByteAddressBuffer|BUF_ShaderResource, VertexCreateInfo);
+					if (ImDrawVert* VertexDst = (ImDrawVert*)RHICmdList.LockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
 					{
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
 						{
 							FMemory::Memcpy(VertexDst, CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size * sizeof(ImDrawVert));
 							VertexDst += CmdList->VtxBuffer.Size;
 						}
-						RHIUnlockBuffer(VertexBuffer);
+						RHICmdList.UnlockBuffer(VertexBuffer);
 					}
-					FShaderResourceViewRHIRef VertexBufferSRV = RHICreateShaderResourceView(VertexBuffer, sizeof(uint32), PF_R32_UINT);
+					FShaderResourceViewRHIRef VertexBufferSRV = RHICmdList.CreateShaderResourceView(VertexBuffer, sizeof(uint32), PF_R32_UINT);
 
 					FRHIResourceCreateInfo IndexCreateInfo(TEXT("ImGui_IndexBuffer"));
-					FBufferRHIRef IndexBuffer = RHICreateIndexBuffer(sizeof(ImDrawIdx), RenderData->TotalIdxCount * sizeof(ImDrawIdx), BUF_Volatile, IndexCreateInfo);
-					if (ImDrawIdx* IndexDst = (ImDrawIdx*)RHILockBuffer(IndexBuffer, 0, RenderData->TotalIdxCount * sizeof(ImDrawIdx), RLM_WriteOnly))
+					FBufferRHIRef IndexBuffer = RHICmdList.CreateIndexBuffer(sizeof(ImDrawIdx), RenderData->TotalIdxCount * sizeof(ImDrawIdx), BUF_Volatile, IndexCreateInfo);
+					if (ImDrawIdx* IndexDst = (ImDrawIdx*)RHICmdList.LockBuffer(IndexBuffer, 0, RenderData->TotalIdxCount * sizeof(ImDrawIdx), RLM_WriteOnly))
 					{
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
 						{
 							FMemory::Memcpy(IndexDst, CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
 							IndexDst += CmdList->IdxBuffer.Size;
 						}
-						RHIUnlockBuffer(IndexBuffer);
+						RHICmdList.UnlockBuffer(IndexBuffer);
 					}
 
 					FRHIRenderPassInfo RPInfo(RT_Resource->TextureRHI, MakeRenderTargetActions(ERenderTargetLoadAction::EClear, ERenderTargetStoreAction::EStore));
@@ -253,29 +253,25 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						GraphicsPSOInit.PrimitiveType = PT_TriangleList;
 						SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
 
-						auto SetViewportState = [&]()
+						auto CalculateProjectionMatrix = [&]() -> FMatrix44f
 						{
 							const float L = RenderData->DisplayPos.x;
 							const float R = RenderData->DisplayPos.x + RenderData->DisplaySize.x;
 							const float T = RenderData->DisplayPos.y;
 							const float B = RenderData->DisplayPos.y + RenderData->DisplaySize.y;
-							const FMatrix44f ProjectionMatrix =
+							FMatrix44f ProjectionMatrix =
 							{
 								{ 2.0f / (R - L)	, 0.0f			   , 0.0f, 0.0f },
 								{ 0.0f				, 2.0f / (T - B)   , 0.0f, 0.0f },
 								{ 0.0f				, 0.0f			   , 0.5f, 0.0f },
 								{ (R + L) / (L - R)	, (T + B) / (B - T), 0.5f, 1.0f },
 							};
-
-							RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
-							VertexShader->SetProjectionMatrix(RHICmdList, ProjectionMatrix);
+							return ProjectionMatrix;
 						};
 
-						SetViewportState();
-
-						VertexShader->SetVertexBuffer(RHICmdList, VertexBufferSRV);
+						RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
 						
-						const ImVec2 ClipRectOffset = RenderData->DisplayPos;
+						FMatrix44f ProjectionMatrix = CalculateProjectionMatrix();
 
 						// since we merged the vertex and index buffers, we need to track global offset
 						uint32 GlobalVertexOffset = 0;
@@ -290,7 +286,9 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 									// (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
 									if (DrawCmd.UserCallback == ImDrawCallback_ResetRenderState)
 									{
-										SetViewportState();
+										RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
+
+										ProjectionMatrix = CalculateProjectionMatrix();
 									}
 									else
 									{
@@ -299,23 +297,33 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 								}
 								else
 								{
+									const ImVec2& ClipRectOffset = RenderData->DisplayPos;
 									RHICmdList.SetScissorRect(
 										true,
 										DrawCmd.ClipRect.x - ClipRectOffset.x,
 										DrawCmd.ClipRect.y - ClipRectOffset.y,
 										DrawCmd.ClipRect.z - ClipRectOffset.x,
 										DrawCmd.ClipRect.w - ClipRectOffset.y);
-
-									VertexShader->SetVertexOffset(RHICmdList, DrawCmd.VtxOffset + GlobalVertexOffset);
-										
-									uint32 Index = FImGuiRuntimeModule::ImGuiIDToIndex(DrawCmd.TextureId);
-									if (!(RenderData->BoundTextures.IsValidIndex(Index)/* && RenderData->BoundTextures[Index].IsValid()*/))
+									
+									uint32 TextureIndex = FImGuiRuntimeModule::ImGuiIDToIndex(DrawCmd.TextureId);
+									if (!(RenderData->BoundTextures.IsValidIndex(TextureIndex)/* && RenderData->BoundTextures[Index].IsValid()*/))
 									{
-										Index = RenderData->MissingTextureIndex;
+										TextureIndex = RenderData->MissingTextureIndex;
 									}
-									PixelShader->SetTexture(RHICmdList, RenderData->BoundTextures[Index].TextureRHI);
-									PixelShader->SetTextureSampler(RHICmdList, RenderData->BoundTextures[Index].SamplerRHI);
-									PixelShader->SetSrgbEnabled(RHICmdList, RenderData->BoundTextures[Index].IsSRGB);
+									
+									SetShaderParametersLegacyPS(
+										RHICmdList,
+										PixelShader,
+										RenderData->BoundTextures[TextureIndex].TextureRHI,
+										RenderData->BoundTextures[TextureIndex].SamplerRHI,
+										RenderData->BoundTextures[TextureIndex].IsSRGB);
+
+									SetShaderParametersLegacyVS(
+										RHICmdList,
+										VertexShader,
+										VertexBufferSRV,
+										ProjectionMatrix,
+										DrawCmd.VtxOffset + GlobalVertexOffset);
 
 									RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);
 								}
@@ -370,7 +378,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 #pragma region SLATE_INPUT
 static ImGuiKey FKeyToImGuiKey(FName Keyname)
 {
-#define LITERAL_TRANSLATION(Key) { EKeys::##Key.GetFName(), ImGuiKey_##Key }
+#define LITERAL_TRANSLATION(Key) { EKeys::Key.GetFName(), ImGuiKey_##Key }
 	// not an exhaustive mapping, some keys are missing :^|
 	static const TMap<FName, ImGuiKey> FKeyToImGuiKey =
 	{
