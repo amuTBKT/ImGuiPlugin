@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Styling/SlateBrush.h"
 #include "Modules/ModuleInterface.h"
 #include "Textures/SlateShaderResource.h"
 
@@ -9,9 +10,11 @@
 
 #if WITH_EDITOR
 class SDockTab;
+class FSpawnTabArgs;
 #endif
 
 class SWindow;
+class UTexture2D;
 class FAutoConsoleCommand;
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);

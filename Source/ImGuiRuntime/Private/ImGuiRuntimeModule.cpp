@@ -3,6 +3,7 @@
 #if WITH_EDITOR
 #include "EditorStyleSet.h"
 #include "Widgets/Docking/SDockTab.h"
+#include "Framework/Docking/TabManager.h"
 #include "Editor/WorkspaceMenuStructure/Public/WorkspaceMenuStructure.h"
 #include "Editor/WorkspaceMenuStructure/Public/WorkspaceMenuStructureModule.h"
 #endif
@@ -13,6 +14,7 @@
 #include "Engine/Texture2D.h"
 #include "Widgets/SWindow.h"
 #include "SImGuiWidgets.h"
+#include "Engine/World.h"
 
 #define LOCTEXT_NAMESPACE "ImGuiPlugin"
 

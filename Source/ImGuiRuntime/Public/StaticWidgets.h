@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CoreMinimal.h"
 #include "ImGuiRuntimeModule.h"
 
 // Static widgets are registered at ModuleInit, so we cannot use logic that relies on initialization order.

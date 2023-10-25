@@ -3,8 +3,10 @@
 #include "ImGuiRuntimeModule.h"
 
 #include "RHI.h"
+#include "RHIStaticStates.h"
 #include "Engine/Texture2D.h"
 #include "RenderGraphUtils.h"
+#include "GlobalRenderResources.h"
 #include "CommonRenderResources.h"
 #include "SlateUTextureResource.h"
 #include "Engine/TextureRenderTarget2D.h"
