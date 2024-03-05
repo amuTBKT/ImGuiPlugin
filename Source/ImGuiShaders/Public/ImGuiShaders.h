@@ -54,6 +54,7 @@ public:
 		TextureParam.Bind(Initializer.ParameterMap, TEXT("Texture"));
 		TextureSamplerParam.Bind(Initializer.ParameterMap, TEXT("TextureSampler"));
 		SrgbParam.Bind(Initializer.ParameterMap, TEXT("IsTextureSrgb"));
+		RenderStateOverridesParam.Bind(Initializer.ParameterMap, TEXT("RenderStateOverrides"));
 	}
 	FImGuiPS() {}
 
@@ -66,15 +67,18 @@ public:
 		FRHIBatchedShaderParameters& BatchedParameters,
 		FRHITexture* Texture,
 		FRHISamplerState* SamplerState,
-		bool EnableSrgb)
+		bool EnableSrgb,
+		uint32 RenderStateOverrides)
 	{
 		SetTextureParameter(BatchedParameters, TextureParam, Texture);
 		SetSamplerParameter(BatchedParameters, TextureSamplerParam, SamplerState);
 		SetShaderValue(BatchedParameters, SrgbParam, EnableSrgb ? 1 : 0);
+		SetShaderValue(BatchedParameters, RenderStateOverridesParam, RenderStateOverrides);
 	}
 
 private:
 	LAYOUT_FIELD(FShaderResourceParameter, TextureParam);
 	LAYOUT_FIELD(FShaderResourceParameter, TextureSamplerParam);
 	LAYOUT_FIELD(FShaderParameter, SrgbParam);
+	LAYOUT_FIELD(FShaderParameter, RenderStateOverridesParam);
 };

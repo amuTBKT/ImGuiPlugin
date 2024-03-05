@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Styling/SlateBrush.h"
+#include "Modules/ModuleManager.h"
 #include "Modules/ModuleInterface.h"
 #include "Textures/SlateShaderResource.h"
 
@@ -16,8 +17,35 @@ class FSpawnTabArgs;
 class SWindow;
 class UTexture2D;
 class FAutoConsoleCommand;
+class FSlateShaderResource;
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
+
+class FImGuiTextureResource
+{
+public:
+	FImGuiTextureResource() = default;
+	FImGuiTextureResource(const FImGuiTextureResource&) = default;
+	FImGuiTextureResource& operator=(const FImGuiTextureResource&) = default;
+	FImGuiTextureResource(FImGuiTextureResource&&) = default;
+	FImGuiTextureResource& operator=(FImGuiTextureResource&&) = default;
+	~FImGuiTextureResource() {}
+
+	explicit FImGuiTextureResource(FSlateShaderResource* InShaderResource)
+	{
+		UnderlyingResource.Set<FSlateShaderResource*>(InShaderResource);
+	}
+
+	explicit FImGuiTextureResource(const FSlateResourceHandle& InResourceHandle)
+	{
+		UnderlyingResource.Set<FSlateResourceHandle>(InResourceHandle);
+	}
+
+	FSlateShaderResource* GetSlateShaderResource() const;
+
+private:
+	TVariant<FSlateResourceHandle, FSlateShaderResource*> UnderlyingResource;
+};
 
 class IMGUIRUNTIME_API FImGuiRuntimeModule : public IModuleInterface
 {
@@ -42,22 +70,23 @@ public:
 	uint32 GetDefaultFontTextureIndex()		const { return ImGuiIDToIndex(m_DefaultFontImageParams.Id); }
 	uint32 GetMissingImageTextureIndex()	const { return ImGuiIDToIndex(m_MissingImageParams.Id); }
 	
-	const FSlateResourceHandle& GetResourceHandle(uint32 Index) const
+	const FImGuiTextureResource& GetResource(uint32 Index) const
 	{
-		if (!OneFrameResourceHandles.IsValidIndex(Index))
+		if (!OneFrameResources.IsValidIndex(Index))
 		{
 			Index = ImGuiIDToIndex(m_MissingImageParams.Id);
 		}
 
-		check(OneFrameResourceHandles.IsValidIndex(Index));
-		return OneFrameResourceHandles[Index];
+		check(OneFrameResources.IsValidIndex(Index));
+		return OneFrameResources[Index];
 	}
-	const FSlateResourceHandle& GetResourceHandle(ImTextureID ID) const { return GetResourceHandle(ImGuiIDToIndex(ID)); }
-	const TArray<FSlateResourceHandle>& GetResourceHandles() const { return OneFrameResourceHandles; }
+	const FImGuiTextureResource& GetResource(ImTextureID ID) const { return GetResource(ImGuiIDToIndex(ID)); }
+	const TArray<FImGuiTextureResource>& GetOneFrameResources() const { return OneFrameResources; }
 
 	FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale);
 	FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush);
 	FImGuiImageBindingParams RegisterOneFrameResource(UTexture2D* Texture);
+	FImGuiImageBindingParams RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource);
 	
 	FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() { return m_ImGuiMainWindowTickDelegate; }
 	const FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() const { return m_ImGuiMainWindowTickDelegate; }
@@ -80,7 +109,7 @@ private:
 	FImGuiImageBindingParams m_MissingImageParams = {};
 
 	TArray<FSlateBrush> CreatedSlateBrushes;
-	TArray<FSlateResourceHandle> OneFrameResourceHandles;
+	TArray<FImGuiTextureResource> OneFrameResources;
 
 #if WITH_EDITOR
 	static const FName ImGuiTabName;

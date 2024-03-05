@@ -168,14 +168,14 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 			}
 
 			RenderData->MissingTextureIndex = ImGuiRuntimeModule.GetMissingImageTextureIndex();
-			RenderData->BoundTextures.Reserve(ImGuiRuntimeModule.GetResourceHandles().Num());
-			for (const FSlateResourceHandle& ResourceHandle : ImGuiRuntimeModule.GetResourceHandles())
+			RenderData->BoundTextures.Reserve(ImGuiRuntimeModule.GetOneFrameResources().Num());
+			for (const FImGuiTextureResource& TextureResource : ImGuiRuntimeModule.GetOneFrameResources())
 			{
 				auto& TextureInfo = RenderData->BoundTextures.AddDefaulted_GetRef();
 
-				if (ResourceHandle.GetResourceProxy() && ResourceHandle.GetResourceProxy()->Resource)
+				FSlateShaderResource* ShaderResource = TextureResource.GetSlateShaderResource();
+				if (ShaderResource)
 				{
-					FSlateShaderResource* ShaderResource = ResourceHandle.GetResourceProxy()->Resource;
 					ESlateShaderResource::Type ResourceType = ShaderResource->GetType();
 
 					if (ResourceType == ESlateShaderResource::Type::TextureObject)
@@ -193,6 +193,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTexture2DRHIRef>*)ShaderResource)->GetTypedResource())
 						{
 							TextureInfo.TextureRHI = NativeTextureRHI;
+							TextureInfo.IsSRGB = EnumHasAnyFlags(NativeTextureRHI->GetFlags(), ETextureCreateFlags::SRGB);
 						}
 					}
 				}
@@ -211,7 +212,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 				[RenderData, RT_Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
 				{
 					FRHIResourceCreateInfo VertexCreateInfo(TEXT("ImGui_VertexBuffer"));
-					FBufferRHIRef VertexBuffer = RHICmdList.CreateVertexBuffer(RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Volatile|BUF_ByteAddressBuffer|BUF_ShaderResource, VertexCreateInfo);
+					FBufferRHIRef VertexBuffer = RHICmdList.CreateVertexBuffer(RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Volatile | BUF_ByteAddressBuffer | BUF_ShaderResource, VertexCreateInfo);
 					if (ImDrawVert* VertexDst = (ImDrawVert*)RHICmdList.LockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
 					{
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
@@ -272,8 +273,9 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						};
 
 						RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
-						
+
 						FMatrix44f ProjectionMatrix = CalculateProjectionMatrix();
+						uint32_t RenderStateOverrides = 0;
 
 						// since we merged the vertex and index buffers, we need to track global offset
 						uint32 GlobalVertexOffset = 0;
@@ -284,13 +286,16 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 							{
 								if (DrawCmd.UserCallback != NULL)
 								{
-									// User callback, registered via ImDrawList::AddCallback()
-									// (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
 									if (DrawCmd.UserCallback == ImDrawCallback_ResetRenderState)
 									{
 										RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
 
 										ProjectionMatrix = CalculateProjectionMatrix();
+										RenderStateOverrides = 0;
+									}
+									else if (DrawCmd.UserCallback == ImDrawCallback_SetRenderState)
+									{
+										RenderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
 									}
 									else
 									{
@@ -318,7 +323,8 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 										PixelShader,
 										RenderData->BoundTextures[TextureIndex].TextureRHI,
 										RenderData->BoundTextures[TextureIndex].SamplerRHI,
-										RenderData->BoundTextures[TextureIndex].IsSRGB);
+										RenderData->BoundTextures[TextureIndex].IsSRGB,
+										RenderStateOverrides);
 
 									SetShaderParametersLegacyVS(
 										RHICmdList,

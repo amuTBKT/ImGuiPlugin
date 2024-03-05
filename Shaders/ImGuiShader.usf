@@ -55,6 +55,7 @@ void MainVS(
 Texture2D Texture;
 SamplerState TextureSampler;
 int IsTextureSrgb;
+uint RenderStateOverrides;
 
 void MainPS(
 	in float4 ScreenPosition : SV_POSITION,
@@ -62,6 +63,9 @@ void MainPS(
 	in float4 InColor : COLOR0,
 	out float4 OutColor : SV_Target0)
 {
+	// read overrides (should match EImGuiRenderState)
+	const bool bDisableAlphaBlending = ((RenderStateOverrides & 0x1) > 0);
+
 	float4 TextureColor = Texture2DSample(Texture, TextureSampler, InUV);
 
 	// source texture is SRGB, need to handle the conversion inside shader
@@ -71,4 +75,9 @@ void MainPS(
 	}
 
 	OutColor = InColor * TextureColor;
+
+	if (bDisableAlphaBlending)
+	{
+		OutColor.a = 1;
+	}
 }

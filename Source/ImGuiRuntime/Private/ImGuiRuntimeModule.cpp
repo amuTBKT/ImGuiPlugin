@@ -15,6 +15,7 @@
 #include "Widgets/SWindow.h"
 #include "SImGuiWidgets.h"
 #include "Engine/World.h"
+#include "Misc/App.h"
 
 #define LOCTEXT_NAMESPACE "ImGuiPlugin"
 
@@ -156,7 +157,7 @@ TSharedPtr<SWindow> FImGuiRuntimeModule::CreateWindow(const FString& WindowName,
 
 void FImGuiRuntimeModule::OnBeginFrame()
 {
-	OneFrameResourceHandles.Reset();
+	OneFrameResources.Reset();
 	CreatedSlateBrushes.Reset();
 	
 	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
@@ -171,11 +172,15 @@ bool FImGuiRuntimeModule::CaptureGpuFrame() const
 }
 
 FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
-{	
-	const uint32 ResourceHandleIndex = OneFrameResourceHandles.Num();
+{
+	// TODO: Better way to handle headless client/cooker
+	if (!FApp::CanEverRender())
+	{
+		return {};
+	}
 
 	const FSlateResourceHandle& ResourceHandle = SlateBrush->GetRenderingResource(LocalSize, DrawScale);
-	OneFrameResourceHandles.Add(ResourceHandle);
+	const uint32 ResourceHandleIndex = OneFrameResources.Add(FImGuiTextureResource(ResourceHandle));
 
 	const FSlateShaderResourceProxy* Proxy = ResourceHandle.GetResourceProxy();
 	const FVector2f StartUV = Proxy->StartUV;
@@ -201,6 +206,40 @@ FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(UTexture2
 	NewBrush.SetResourceObject(Texture);
 
 	return RegisterOneFrameResource(&NewBrush);
+}
+
+FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource)
+{
+	FImGuiImageBindingParams Params = {};
+	
+	if (SlateShaderResource)
+	{
+		const uint32 ResourceHandleIndex = OneFrameResources.Add(FImGuiTextureResource(SlateShaderResource));
+
+		Params.Size = ImVec2(SlateShaderResource->GetWidth(), SlateShaderResource->GetHeight());
+		Params.UV0 = ImVec2(0.f, 0.f);
+		Params.UV1 = ImVec2(1.f, 1.f);
+		Params.Id = IndexToImGuiID(ResourceHandleIndex);
+	}
+
+	return Params;
+}
+
+FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
+{
+	if (UnderlyingResource.IsType<FSlateResourceHandle>())
+	{
+		const FSlateResourceHandle& ResourceHandle = UnderlyingResource.Get<FSlateResourceHandle>();
+		if (ResourceHandle.GetResourceProxy() && ResourceHandle.GetResourceProxy()->Resource)
+		{
+			return ResourceHandle.GetResourceProxy()->Resource;
+		}
+	}
+	else if (UnderlyingResource.IsType<FSlateShaderResource*>())
+	{
+		return (FSlateShaderResource*)UnderlyingResource.Get<FSlateShaderResource*>();
+	}
+	return nullptr;
 }
 
 IMPLEMENT_MODULE(FImGuiRuntimeModule, ImGuiRuntime)

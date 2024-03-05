@@ -10,9 +10,9 @@
     /*UserData*/ nullptr);
 
 // since the module is built as DLL, we need to set context before making ImGui calls.
-struct FImGuiTickScope
+struct FImGuiTickScope final
 {
-    FImGuiTickScope(ImGuiContext* Context)
+    explicit FImGuiTickScope(ImGuiContext* Context)
     {
         ImGui::SetCurrentContext(Context);
     }
@@ -36,3 +36,17 @@ struct FImGuiImageBindingParams
     ImVec2 UV1 = ImVec2(1.f, 1.f);
     ImTextureID Id = 0;
 };
+
+#define ImDrawCallback_SetRenderState (ImDrawCallback)(-2)
+using FImGuiRenderState = void*;
+
+enum class EImGuiRenderState : uint32_t
+{
+    DisableAlphaBlending = 1 << 0,  // disable alpha writes from shader (outputs Color.a=1)
+};
+ENUM_CLASS_FLAGS(EImGuiRenderState);
+
+FORCEINLINE FImGuiRenderState MakeImGuiRenderState(EImGuiRenderState RenderState)
+{
+    return (FImGuiRenderState)RenderState;
+}
