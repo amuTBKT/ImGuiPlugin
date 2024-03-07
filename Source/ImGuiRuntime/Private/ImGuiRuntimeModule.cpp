@@ -55,8 +55,8 @@ void FImGuiRuntimeModule::StartupModule()
 	m_MissingImageSlateBrush.SetResourceObject(MissingImageTexture);
 	
 	//[TODO] there are cases when NewFrame/Render can be called before we initialize these *required* resources, so register in advance.
-	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
+	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
 
 	// console command makes sense for Game worlds, for editor we should use ImGuiTab
 	FWorldDelegates::OnPreWorldInitialization.AddLambda(
@@ -160,8 +160,8 @@ void FImGuiRuntimeModule::OnBeginFrame()
 	OneFrameResources.Reset();
 	CreatedSlateBrushes.Reset();
 	
-	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
+	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
 
 	CaptureNextGpuFrames = FMath::Max(0, CaptureNextGpuFrames - 1);
 }
@@ -175,6 +175,11 @@ FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSl
 {
 	// TODO: Better way to handle headless client/cooker
 	if (!FApp::CanEverRender())
+	{
+		return {};
+	}
+
+	if (!SlateBrush)
 	{
 		return {};
 	}
@@ -197,11 +202,21 @@ FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSl
 
 FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
 {
+	if (!SlateBrush)
+	{
+		return {};
+	}
+
 	return RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f);
 }
 
 FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(UTexture2D* Texture)
 {
+	if (!Texture)
+	{
+		return {};
+	}
+
 	FSlateBrush& NewBrush = CreatedSlateBrushes.AddDefaulted_GetRef();
 	NewBrush.SetResourceObject(Texture);
 
@@ -210,17 +225,18 @@ FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(UTexture2
 
 FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource)
 {
-	FImGuiImageBindingParams Params = {};
-	
-	if (SlateShaderResource)
+	if (!SlateShaderResource)
 	{
-		const uint32 ResourceHandleIndex = OneFrameResources.Add(FImGuiTextureResource(SlateShaderResource));
-
-		Params.Size = ImVec2(SlateShaderResource->GetWidth(), SlateShaderResource->GetHeight());
-		Params.UV0 = ImVec2(0.f, 0.f);
-		Params.UV1 = ImVec2(1.f, 1.f);
-		Params.Id = IndexToImGuiID(ResourceHandleIndex);
+		return {};
 	}
+
+	const uint32 ResourceHandleIndex = OneFrameResources.Add(FImGuiTextureResource(SlateShaderResource));
+
+	FImGuiImageBindingParams Params = {};
+	Params.Size = ImVec2(SlateShaderResource->GetWidth(), SlateShaderResource->GetHeight());
+	Params.UV0 = ImVec2(0.f, 0.f);
+	Params.UV1 = ImVec2(1.f, 1.f);
+	Params.Id = IndexToImGuiID(ResourceHandleIndex);
 
 	return Params;
 }
