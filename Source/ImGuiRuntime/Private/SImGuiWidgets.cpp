@@ -21,7 +21,9 @@ DECLARE_CYCLE_STAT(TEXT("ImGui Render"), STAT_RenderWidget, STATGROUP_ImGui);
 
 void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 {
-	m_ImGuiContext = ImGui::CreateContext();
+	FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+
+	m_ImGuiContext = ImGui::CreateContext(ImGuiRuntimeModule.GetDefaultImGuiFontAtlas());
 
 	ImGuiIO& io = GetImGuiIO();
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -30,12 +32,6 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 
 	//[TODO] setting?
 	ImGui::StyleColorsDark();
-
-	//[TODO] not using Imgui font, we use texture asset instead
-	io.Fonts->Build();
-
-	FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
-	io.Fonts->TexID = ImGuiRuntimeModule.GetDefaultFontTextureID();
 
 	// allocate rendering resources
 	m_ImGuiRT = NewObject<UTextureRenderTarget2D>();

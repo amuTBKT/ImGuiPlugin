@@ -11,6 +11,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Framework/Application/SlateApplication.h"
 
+#include "TextureResource.h"
 #include "Engine/Texture2D.h"
 #include "Widgets/SWindow.h"
 #include "SImGuiWidgets.h"
@@ -34,6 +35,11 @@ bool FImGuiRuntimeModule::IsPluginInitialized = false;
 
 void FImGuiRuntimeModule::StartupModule()
 {
+	if (!FApp::CanEverRender())
+	{
+		return;
+	}
+
 	IMGUI_CHECKVERSION();
 
 	SETUP_DEFAULT_IMGUI_ALLOCATOR();
@@ -46,17 +52,45 @@ void FImGuiRuntimeModule::StartupModule()
 		.SetGroup(WorkspaceMenu::GetMenuStructure().GetToolsCategory());
 #endif
 
-	UTexture2D* DefaultFontTexture = LoadObject<UTexture2D>(nullptr, TEXT("/ImGuiPlugin/T_DefaultFont.T_DefaultFont"));
-	checkf(DefaultFontTexture, TEXT("T_DefaultFont texture not found, did you mark it for cooking?"));
+	DefaultFontAtlas = MakeUnique<ImFontAtlas>();
+	DefaultFontAtlas->Build();
+
+	auto CreateTextureRGBA8 = [](FName DebugName, int32 Width, int32 Height, uint8* ImageData)
+	{
+		UTexture2D* Texture = UTexture2D::CreateTransient(Width, Height, PF_R8G8B8A8, DebugName);
+		// compression and mip settings
+		Texture->CompressionSettings = TextureCompressionSettings::TC_Default;
+		Texture->LODGroup = TEXTUREGROUP_UI;
+		Texture->MipGenSettings = TMGS_NoMipmaps;
+		Texture->SRGB = false;
+		Texture->AddressX = TextureAddress::TA_Clamp;
+		Texture->AddressY = TextureAddress::TA_Clamp;
+
+		uint8* MipData = static_cast<uint8*>(Texture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE));
+		FMemory::Memcpy(MipData, ImageData, Texture->GetPlatformData()->Mips[0].BulkData.GetBulkDataSize());
+		Texture->GetPlatformData()->Mips[0].BulkData.Unlock();
+		Texture->UpdateResource();
+
+		return Texture;
+	};
+
+	int32 FontAtlasWidth, FontAtlasHeight, BytesPerPixel;
+	unsigned char* FontAtlasData;
+	DefaultFontAtlas->GetTexDataAsRGBA32(&FontAtlasData, &FontAtlasWidth, &FontAtlasHeight, &BytesPerPixel);
+	check(BytesPerPixel == GPixelFormats[PF_R8G8B8A8].BlockBytes && FontAtlasData);
+
+	// 1x1 magenta texture
+	int32 MissingImageWidth = 1, MissingImageHeight = 1;
+	uint32 MissingPixelData = FColor::Magenta.DWColor();
+
+	DefaultFontTexture = CreateTextureRGBA8(FName(TEXT("ImGui_DefaultFontAtlas")), FontAtlasWidth, FontAtlasHeight, FontAtlasData);
+	DefaultFontTexture->AddToRoot();
+
+	MissingImageTexture = CreateTextureRGBA8(FName(TEXT("ImGui_MissingImage")), MissingImageWidth, MissingImageHeight, (uint8_t*)&MissingPixelData);
+	MissingImageTexture->AddToRoot();
+
 	m_DefaultFontSlateBrush.SetResourceObject(DefaultFontTexture);
-	
-	UTexture2D* MissingImageTexture = LoadObject<UTexture2D>(nullptr, TEXT("/ImGuiPlugin/T_MissingImage.T_MissingImage"));
-	checkf(MissingImageTexture, TEXT("T_MissingImage texture not found, did you mark it for cooking?"));
 	m_MissingImageSlateBrush.SetResourceObject(MissingImageTexture);
-	
-	//[TODO] there are cases when NewFrame/Render can be called before we initialize these *required* resources, so register in advance.
-	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
-	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
 
 	// console command makes sense for Game worlds, for editor we should use ImGuiTab
 	FWorldDelegates::OnPreWorldInitialization.AddLambda(
@@ -78,6 +112,9 @@ void FImGuiRuntimeModule::StartupModule()
 
 	IsPluginInitialized = true;
 	OnPluginInitialized.Broadcast(*this);
+
+	// first frame setup
+	OnBeginFrame();
 }
 
 void FImGuiRuntimeModule::ShutdownModule()
@@ -92,6 +129,16 @@ void FImGuiRuntimeModule::ShutdownModule()
 	m_OpenImGuiWindowCommand = nullptr;
 
 	m_ImGuiMainWindow = nullptr;
+
+	if (DefaultFontTexture)
+	{
+		DefaultFontTexture->RemoveFromRoot();
+	}
+
+	if (MissingImageTexture)
+	{
+		MissingImageTexture->RemoveFromRoot();
+	}
 }
 
 #if WITH_EDITOR
@@ -157,11 +204,18 @@ TSharedPtr<SWindow> FImGuiRuntimeModule::CreateWindow(const FString& WindowName,
 
 void FImGuiRuntimeModule::OnBeginFrame()
 {
+	if (!IsPluginInitialized)
+	{
+		return;
+	}
+
 	OneFrameResources.Reset();
 	CreatedSlateBrushes.Reset();
 	
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
 	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
+
+	DefaultFontAtlas->TexID = GetDefaultFontTextureID();
 
 	CaptureNextGpuFrames = FMath::Max(0, CaptureNextGpuFrames - 1);
 }
@@ -173,21 +227,22 @@ bool FImGuiRuntimeModule::CaptureGpuFrame() const
 
 FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
 {
-	// TODO: Better way to handle headless client/cooker
-	if (!FApp::CanEverRender())
-	{
-		return {};
-	}
-
+	check(IsPluginInitialized);
+	
 	if (!SlateBrush)
 	{
 		return {};
 	}
 
 	const FSlateResourceHandle& ResourceHandle = SlateBrush->GetRenderingResource(LocalSize, DrawScale);
+	const FSlateShaderResourceProxy* Proxy = ResourceHandle.GetResourceProxy();
+	if (!Proxy)
+	{
+		return {};
+	}
+	
 	const uint32 ResourceHandleIndex = OneFrameResources.Add(FImGuiTextureResource(ResourceHandle));
 
-	const FSlateShaderResourceProxy* Proxy = ResourceHandle.GetResourceProxy();
 	const FVector2f StartUV = Proxy->StartUV;
 	const FVector2f SizeUV = Proxy->SizeUV;
 
@@ -202,6 +257,8 @@ FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSl
 
 FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
 {
+	check(IsPluginInitialized);
+
 	if (!SlateBrush)
 	{
 		return {};
@@ -212,6 +269,8 @@ FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(const FSl
 
 FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(UTexture2D* Texture)
 {
+	check(IsPluginInitialized);
+
 	if (!Texture)
 	{
 		return {};
@@ -225,6 +284,8 @@ FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(UTexture2
 
 FImGuiImageBindingParams FImGuiRuntimeModule::RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource)
 {
+	check(IsPluginInitialized);
+
 	if (!SlateShaderResource)
 	{
 		return {};

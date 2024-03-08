@@ -65,6 +65,7 @@ public:
 	static ImTextureID IndexToImGuiID(uint32 Index) { return reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(Index));  }
 	static uint32 ImGuiIDToIndex(ImTextureID ID) { return static_cast<uint32>(reinterpret_cast<uintptr_t>(ID));  }
 
+	ImFontAtlas* GetDefaultImGuiFontAtlas()	const { return DefaultFontAtlas.Get(); }
 	ImTextureID GetDefaultFontTextureID()	const { return m_DefaultFontImageParams.Id; }
 	ImTextureID GetMissingImageTextureID()	const { return m_MissingImageParams.Id; }
 	uint32 GetDefaultFontTextureIndex()		const { return ImGuiIDToIndex(m_DefaultFontImageParams.Id); }
@@ -102,6 +103,10 @@ protected:
 private:
 	FOnTickImGuiMainWindowDelegate m_ImGuiMainWindowTickDelegate;
 	
+	UTexture2D* DefaultFontTexture = nullptr;
+	UTexture2D* MissingImageTexture = nullptr;
+	TUniquePtr<ImFontAtlas> DefaultFontAtlas = nullptr;
+
 	FSlateBrush m_DefaultFontSlateBrush = {};
 	FSlateBrush m_MissingImageSlateBrush = {};
 
