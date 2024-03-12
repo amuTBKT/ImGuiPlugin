@@ -13,6 +13,7 @@
 
 #include "Input/Events.h"
 #include "InputCoreTypes.h"
+#include "Application/ThrottleManager.h"
 
 #include "RenderCaptureInterface.h"
 
@@ -382,40 +383,93 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 #pragma region SLATE_INPUT
 static ImGuiKey FKeyToImGuiKey(FName Keyname)
 {
-#define LITERAL_TRANSLATION(Key) { EKeys::Key.GetFName(), ImGuiKey_##Key }
+#define CONVERSION_OP(Key) { EKeys::Key.GetFName(), ImGuiKey_##Key }
+#define CONVERSION_OP1(Key, ImGuiKeyId) { EKeys::Key.GetFName(), ImGuiKeyId }
 	// not an exhaustive mapping, some keys are missing :^|
 	static const TMap<FName, ImGuiKey> FKeyToImGuiKey =
 	{
-		LITERAL_TRANSLATION(A), LITERAL_TRANSLATION(B), LITERAL_TRANSLATION(C), LITERAL_TRANSLATION(D), LITERAL_TRANSLATION(E), LITERAL_TRANSLATION(F),
-		LITERAL_TRANSLATION(G), LITERAL_TRANSLATION(H), LITERAL_TRANSLATION(I), LITERAL_TRANSLATION(J), LITERAL_TRANSLATION(K), LITERAL_TRANSLATION(L),
-		LITERAL_TRANSLATION(M), LITERAL_TRANSLATION(N), LITERAL_TRANSLATION(O), LITERAL_TRANSLATION(P), LITERAL_TRANSLATION(Q), LITERAL_TRANSLATION(R),
-		LITERAL_TRANSLATION(S), LITERAL_TRANSLATION(T), LITERAL_TRANSLATION(U), LITERAL_TRANSLATION(V), LITERAL_TRANSLATION(W), LITERAL_TRANSLATION(X),
-		LITERAL_TRANSLATION(Y), LITERAL_TRANSLATION(Z),
-		LITERAL_TRANSLATION(F1), LITERAL_TRANSLATION(F2), LITERAL_TRANSLATION(F3), LITERAL_TRANSLATION(F4),
-		LITERAL_TRANSLATION(F5), LITERAL_TRANSLATION(F6), LITERAL_TRANSLATION(F7), LITERAL_TRANSLATION(F8),
-		LITERAL_TRANSLATION(F9), LITERAL_TRANSLATION(F10), LITERAL_TRANSLATION(F11), LITERAL_TRANSLATION(F12),
-		LITERAL_TRANSLATION(Enter), LITERAL_TRANSLATION(Insert), LITERAL_TRANSLATION(Delete), LITERAL_TRANSLATION(Escape), LITERAL_TRANSLATION(Tab),
-		LITERAL_TRANSLATION(PageUp), LITERAL_TRANSLATION(PageDown), LITERAL_TRANSLATION(Home), LITERAL_TRANSLATION(End),
-		LITERAL_TRANSLATION(NumLock), LITERAL_TRANSLATION(ScrollLock), LITERAL_TRANSLATION(CapsLock),
-		LITERAL_TRANSLATION(RightBracket), LITERAL_TRANSLATION(LeftBracket), LITERAL_TRANSLATION(Backslash), LITERAL_TRANSLATION(Slash),
-		LITERAL_TRANSLATION(Semicolon), LITERAL_TRANSLATION(Period), LITERAL_TRANSLATION(Comma), LITERAL_TRANSLATION(Apostrophe), LITERAL_TRANSLATION(Pause),
-		{ EKeys::Zero.GetFName(), ImGuiKey_0 }, { EKeys::One.GetFName(), ImGuiKey_1 }, { EKeys::Two.GetFName(), ImGuiKey_2 },
-		{ EKeys::Three.GetFName(), ImGuiKey_3 }, { EKeys::Four.GetFName(), ImGuiKey_4 }, { EKeys::Five.GetFName(), ImGuiKey_5 },
-		{ EKeys::Six.GetFName(), ImGuiKey_6 }, { EKeys::Seven.GetFName(), ImGuiKey_7 }, { EKeys::Eight.GetFName(), ImGuiKey_8 }, { EKeys::Nine.GetFName(), ImGuiKey_9 },
-		{ EKeys::NumPadZero.GetFName(), ImGuiKey_Keypad0 }, { EKeys::NumPadOne.GetFName(), ImGuiKey_Keypad1 }, { EKeys::NumPadTwo.GetFName(), ImGuiKey_Keypad2 },
-		{ EKeys::NumPadThree.GetFName(), ImGuiKey_Keypad3 }, { EKeys::NumPadFour.GetFName(), ImGuiKey_Keypad4 }, { EKeys::NumPadFive.GetFName(), ImGuiKey_Keypad5 },
-		{ EKeys::NumPadSix.GetFName(), ImGuiKey_Keypad6 }, { EKeys::NumPadSeven.GetFName(), ImGuiKey_Keypad7 }, { EKeys::NumPadEight.GetFName(), ImGuiKey_Keypad8 },
-		{ EKeys::NumPadNine.GetFName(), ImGuiKey_Keypad9 },
-		{ EKeys::LeftShift.GetFName(), ImGuiKey_LeftShift }, { EKeys::LeftControl.GetFName(), ImGuiKey_LeftCtrl }, { EKeys::LeftAlt.GetFName(), ImGuiKey_LeftAlt },
-		{ EKeys::RightShift.GetFName(), ImGuiKey_RightShift }, { EKeys::RightControl.GetFName(), ImGuiKey_RightCtrl }, { EKeys::RightAlt.GetFName(), ImGuiKey_RightAlt },
-		{ EKeys::SpaceBar.GetFName(), ImGuiKey_Space }, { EKeys::BackSpace.GetFName(), ImGuiKey_Backspace },
-		{ EKeys::Up.GetFName(), ImGuiKey_UpArrow }, { EKeys::Down.GetFName(), ImGuiKey_DownArrow },
-		{ EKeys::Left.GetFName(), ImGuiKey_LeftArrow }, { EKeys::Right.GetFName(), ImGuiKey_RightArrow },
-		{ EKeys::Subtract.GetFName(), ImGuiKey_KeypadSubtract }, { EKeys::Add.GetFName(), ImGuiKey_KeypadAdd },
-		{ EKeys::Multiply.GetFName(), ImGuiKey_KeypadMultiply }, { EKeys::Divide.GetFName(), ImGuiKey_KeypadDivide },
-		{ EKeys::Decimal.GetFName(), ImGuiKey_KeypadDecimal }, { EKeys::Equals.GetFName(), ImGuiKey_Equal },
+		CONVERSION_OP(A), CONVERSION_OP(B), CONVERSION_OP(C), CONVERSION_OP(D), CONVERSION_OP(E), CONVERSION_OP(F), CONVERSION_OP(G),
+		CONVERSION_OP(H), CONVERSION_OP(I), CONVERSION_OP(J), CONVERSION_OP(K), CONVERSION_OP(L), CONVERSION_OP(M), CONVERSION_OP(N), CONVERSION_OP(O), CONVERSION_OP(P),
+		CONVERSION_OP(Q), CONVERSION_OP(R), CONVERSION_OP(S), CONVERSION_OP(T), CONVERSION_OP(U), CONVERSION_OP(V),
+		CONVERSION_OP(W), CONVERSION_OP(X), CONVERSION_OP(Y), CONVERSION_OP(Z),
+		
+		CONVERSION_OP(F1),
+		CONVERSION_OP(F2),
+		CONVERSION_OP(F3),
+		CONVERSION_OP(F4),
+		CONVERSION_OP(F5),
+		CONVERSION_OP(F6),
+		CONVERSION_OP(F7),
+		CONVERSION_OP(F8),
+		CONVERSION_OP(F9),
+		CONVERSION_OP(F10),
+		CONVERSION_OP(F11),
+		CONVERSION_OP(F12),
+		CONVERSION_OP(Enter),
+		CONVERSION_OP(Insert),
+		CONVERSION_OP(Delete),
+		CONVERSION_OP(Escape),
+		CONVERSION_OP(Tab),
+		
+		CONVERSION_OP(PageUp),
+		CONVERSION_OP(PageDown),
+		CONVERSION_OP(Home),
+		CONVERSION_OP(End),
+		CONVERSION_OP(NumLock),
+		CONVERSION_OP(ScrollLock),
+		CONVERSION_OP(CapsLock),
+		CONVERSION_OP(RightBracket),
+		CONVERSION_OP(LeftBracket),
+		CONVERSION_OP(Backslash),
+		CONVERSION_OP(Slash),
+		CONVERSION_OP(Semicolon),
+		CONVERSION_OP(Period),
+		CONVERSION_OP(Comma),
+		CONVERSION_OP(Apostrophe),
+		CONVERSION_OP(Pause),
+		
+		CONVERSION_OP1(Zero, ImGuiKey_0),
+		CONVERSION_OP1(One, ImGuiKey_1),
+		CONVERSION_OP1(Two, ImGuiKey_2),
+		CONVERSION_OP1(Three, ImGuiKey_3),
+		CONVERSION_OP1(Four, ImGuiKey_4),
+		CONVERSION_OP1(Five, ImGuiKey_5),
+		CONVERSION_OP1(Six, ImGuiKey_6),
+		CONVERSION_OP1(Seven, ImGuiKey_7),
+		CONVERSION_OP1(Eight, ImGuiKey_8),
+		CONVERSION_OP1(Nine, ImGuiKey_9),
+		
+		CONVERSION_OP1(NumPadZero, ImGuiKey_Keypad0),
+		CONVERSION_OP1(NumPadOne, ImGuiKey_Keypad1),
+		CONVERSION_OP1(NumPadTwo, ImGuiKey_Keypad2),
+		CONVERSION_OP1(NumPadThree, ImGuiKey_Keypad3),
+		CONVERSION_OP1(NumPadFour, ImGuiKey_Keypad4),
+		CONVERSION_OP1(NumPadFive, ImGuiKey_Keypad5),
+		CONVERSION_OP1(NumPadSix, ImGuiKey_Keypad6),
+		CONVERSION_OP1(NumPadSeven, ImGuiKey_Keypad7),
+		CONVERSION_OP1(NumPadEight, ImGuiKey_Keypad8),
+		CONVERSION_OP1(NumPadNine, ImGuiKey_Keypad9),
+		CONVERSION_OP1(LeftShift, ImGuiKey_LeftShift),
+		CONVERSION_OP1(LeftControl, ImGuiKey_LeftCtrl),
+		CONVERSION_OP1(LeftAlt, ImGuiKey_LeftAlt),
+		CONVERSION_OP1(RightShift, ImGuiKey_RightShift),
+		CONVERSION_OP1(RightControl, ImGuiKey_RightCtrl),
+		CONVERSION_OP1(RightAlt, ImGuiKey_RightAlt),
+		CONVERSION_OP1(SpaceBar, ImGuiKey_Space),
+		CONVERSION_OP1(BackSpace, ImGuiKey_Backspace),
+		CONVERSION_OP1(Up, ImGuiKey_UpArrow),
+		CONVERSION_OP1(Down, ImGuiKey_DownArrow),
+		CONVERSION_OP1(Left, ImGuiKey_LeftArrow),
+		CONVERSION_OP1(Right, ImGuiKey_RightArrow),
+		CONVERSION_OP1(Subtract, ImGuiKey_KeypadSubtract),
+		CONVERSION_OP1(Add, ImGuiKey_KeypadAdd),
+		CONVERSION_OP1(Multiply, ImGuiKey_KeypadMultiply),
+		CONVERSION_OP1(Divide, ImGuiKey_KeypadDivide),
+		CONVERSION_OP1(Decimal, ImGuiKey_KeypadDecimal),
+		CONVERSION_OP1(Equals, ImGuiKey_Equal),
 	};
-#undef LITERAL_TRANSLATION
+#undef CONVERSION_OP1
+#undef CONVERSION_OP
 
 	/*
 	[TODO] These are not added....
@@ -451,16 +505,13 @@ static int32 FMouseKeyToImGuiKey(FKey MouseKey)
 	return MouseButton;
 }
 
-void SImGuiWidgetBase::AddMouseButtonEvent(FKey MouseKey, bool IsDown)
+void SImGuiWidgetBase::AddMouseButtonEvent(ImGuiIO& IO, FKey MouseKey, bool IsDown)
 {
-	ImGuiIO& IO = GetImGuiIO();
 	IO.AddMouseButtonEvent(FMouseKeyToImGuiKey(MouseKey), IsDown);
 }
 
-void SImGuiWidgetBase::AddKeyEvent(FKeyEvent KeyEvent, bool IsDown)
+void SImGuiWidgetBase::AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown)
 {
-	ImGuiIO& IO = GetImGuiIO();
-
 	const ImGuiKey ImGuiKey = FKeyToImGuiKey(KeyEvent.GetKey().GetFName());
 	if (ImGuiKey != ImGuiKey_None)
 	{
@@ -477,42 +528,79 @@ FReply SImGuiWidgetBase::OnKeyChar(const FGeometry& MyGeometry, const FCharacter
 	ImGuiIO& IO = GetImGuiIO();
 	IO.AddInputCharacterUTF16(CharacterEvent.GetCharacter());
 
-	return FReply::Handled();
+	if (IO.WantTextInput)
+	{
+		return FReply::Handled();
+	}
+	else
+	{
+		return FReply::Unhandled();
+	}
 }
 
 FReply SImGuiWidgetBase::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& KeyEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
-	AddKeyEvent(KeyEvent, true);
-
-	return FReply::Handled();
+	AddKeyEvent(IO, KeyEvent, true);
+	if (IO.WantCaptureKeyboard)
+	{
+		return FReply::Handled();
+	}
+	else
+	{
+		return FReply::Unhandled();
+	}
 }
 
 FReply SImGuiWidgetBase::OnKeyUp(const FGeometry& MyGeometry, const FKeyEvent& KeyEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
-	AddKeyEvent(KeyEvent, false);
-
-	return FReply::Handled();
+	AddKeyEvent(IO, KeyEvent, false);
+	if (IO.WantCaptureKeyboard)
+	{
+		return FReply::Handled();
+	}
+	else
+	{
+		return FReply::Unhandled();
+	}
 }
 
 FReply SImGuiWidgetBase::OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
-	AddMouseButtonEvent(MouseEvent.GetEffectingButton(), true);
-
-	return FReply::Handled().CaptureMouse(SharedThis(this));
+	ImGuiIO& IO = GetImGuiIO();
+	AddMouseButtonEvent(IO, MouseEvent.GetEffectingButton(), true);
+	if (IO.WantCaptureMouse)
+	{
+		FSlateThrottleManager::Get().DisableThrottle(true);
+		return FReply::Handled().CaptureMouse(SharedThis(this));
+	}
+	else
+	{
+		return FReply::Unhandled();
+	}
 }
 
 FReply SImGuiWidgetBase::OnMouseButtonUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
-	AddMouseButtonEvent(MouseEvent.GetEffectingButton(), false);
+	ImGuiIO& IO = GetImGuiIO();
+	AddMouseButtonEvent(IO, MouseEvent.GetEffectingButton(), false);
 
-	return FReply::Handled().ReleaseMouseCapture();
+	if (HasMouseCapture())
+	{
+		FSlateThrottleManager::Get().DisableThrottle(false);
+		return FReply::Handled().ReleaseMouseCapture();
+	}
+	else
+	{
+		return FReply::Unhandled();
+	}
 }
 
 FReply SImGuiWidgetBase::OnMouseButtonDoubleClick(const FGeometry& InMyGeometry, const FPointerEvent& MouseEvent)
 {
-	AddMouseButtonEvent(MouseEvent.GetEffectingButton(), true);
+	ImGuiIO& IO = GetImGuiIO();
+	AddMouseButtonEvent(IO, MouseEvent.GetEffectingButton(), true);
 
 	return FReply::Handled();
 }

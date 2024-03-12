@@ -54,8 +54,8 @@ public:
 private:
 	FORCEINLINE ImGuiIO& GetImGuiIO() const;
 	
-	FORCEINLINE void AddMouseButtonEvent(FKey MouseKey, bool IsDown);
-	FORCEINLINE void AddKeyEvent(FKeyEvent KeyEvent, bool IsDown);
+	FORCEINLINE void AddMouseButtonEvent(ImGuiIO& IO, FKey MouseKey, bool IsDown);
+	FORCEINLINE void AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown);
 
 	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) = 0;
 
