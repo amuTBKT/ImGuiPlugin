@@ -35,7 +35,7 @@ bool FImGuiRuntimeModule::IsPluginInitialized = false;
 
 void FImGuiRuntimeModule::StartupModule()
 {
-	if (!FApp::CanEverRender())
+	if (!FApp::CanEverRender() || IsRunningCommandlet())
 	{
 		return;
 	}
@@ -61,7 +61,6 @@ void FImGuiRuntimeModule::StartupModule()
 		// compression and mip settings
 		Texture->CompressionSettings = TextureCompressionSettings::TC_Default;
 		Texture->LODGroup = TEXTUREGROUP_UI;
-		Texture->MipGenSettings = TMGS_NoMipmaps;
 		Texture->SRGB = false;
 		Texture->AddressX = TextureAddress::TA_Clamp;
 		Texture->AddressY = TextureAddress::TA_Clamp;
@@ -204,11 +203,8 @@ TSharedPtr<SWindow> FImGuiRuntimeModule::CreateWindow(const FString& WindowName,
 
 void FImGuiRuntimeModule::OnBeginFrame()
 {
-	if (!IsPluginInitialized)
-	{
-		return;
-	}
-
+	check(IsPluginInitialized);
+	
 	OneFrameResources.Reset();
 	CreatedSlateBrushes.Reset();
 	
