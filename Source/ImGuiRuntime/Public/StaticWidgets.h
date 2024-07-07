@@ -1,7 +1,8 @@
+// Copyright 2024 Amit Kumar Mehar. All Rights Reserved.
+
 #pragma once
 
-#include "CoreMinimal.h"
-#include "ImGuiRuntimeModule.h"
+#include "ImGuiSubsystem.h"
 
 // Static widgets are registered at ModuleInit, so we cannot use logic that relies on initialization order.
 
@@ -10,21 +11,19 @@
     {																								\
         FAtModuleInit()																				\
         {																							\
-			if (FImGuiRuntimeModule::IsPluginInitialized)											\
+			if (UImGuiSubsystem* Subsystem = UImGuiSubsystem::Get())								\
 			{																						\
-				FImGuiRuntimeModule& ImGuiRuntimeModule =											\
-					FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");			\
 				InitFunction();																		\
-				ImGuiRuntimeModule.GetMainWindowTickDelegate().AddStatic(&TickFunction);			\
+				Subsystem->GetMainWindowTickDelegate().AddStatic(&TickFunction);					\
 			}																						\
             else																					\
 			{																						\
-				FImGuiRuntimeModule::OnPluginInitialized.AddLambda(									\
-					[](FImGuiRuntimeModule& ImGuiRuntimeModule)										\
-					{																				\
-						InitFunction();																\
-						ImGuiRuntimeModule.GetMainWindowTickDelegate().AddStatic(&TickFunction);	\
-					});																				\
+				UImGuiSubsystem::OnSubsystemInitialized().AddLambda(								\
+				[](UImGuiSubsystem* Subsystem)														\
+				{																					\
+					InitFunction();																	\
+					Subsystem->GetMainWindowTickDelegate().AddStatic(&TickFunction);				\
+				});																					\
             }																						\
         }																							\
     };																								\

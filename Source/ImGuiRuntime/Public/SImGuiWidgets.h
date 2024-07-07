@@ -1,3 +1,5 @@
+// Copyright 2024 Amit Kumar Mehar. All Rights Reserved.
+
 #pragma once
 
 #include "Widgets/DeclarativeSyntaxSupport.h"
@@ -6,6 +8,7 @@
 
 #include "ImGuiPluginDelegates.h"
 
+struct ImGuiIO;
 struct ImGuiContext;
 class UTextureRenderTarget2D;
 
@@ -63,7 +66,7 @@ protected:
 	FSlateBrush m_ImGuiSlateBrush;
 
 	ImGuiContext* m_ImGuiContext = nullptr;
-	UTextureRenderTarget2D* m_ImGuiRT = nullptr;
+	TObjectPtr<UTextureRenderTarget2D> m_ImGuiRT = nullptr;
 
 	// TODO: initial zoom support, can we do better than this?
 	float m_WindowScale = 1.f;

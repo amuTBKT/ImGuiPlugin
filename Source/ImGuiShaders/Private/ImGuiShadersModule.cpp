@@ -1,3 +1,5 @@
+// Copyright 2024 Amit Kumar Mehar. All Rights Reserved.
+
 #include "CoreMinimal.h"
 #include "Modules/ModuleInterface.h"
 #include "Modules/ModuleManager.h"

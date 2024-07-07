@@ -1,3 +1,5 @@
+// Copyright 2024 Amit Kumar Mehar. All Rights Reserved.
+
 using System.IO;
 using UnrealBuildTool;
 

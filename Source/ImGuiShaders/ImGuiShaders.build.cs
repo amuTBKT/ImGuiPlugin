@@ -1,3 +1,5 @@
+// Copyright 2024 Amit Kumar Mehar. All Rights Reserved.
+
 using System.IO;
 
 namespace UnrealBuildTool.Rules
@@ -6,7 +8,9 @@ namespace UnrealBuildTool.Rules
 	{
 		public ImGuiShaders(ReadOnlyTargetRules Target) : base(Target)
 		{
-			PublicDependencyModuleNames.AddRange(
+            //PCHUsage = PCHUsageMode.NoPCHs;
+
+            PublicDependencyModuleNames.AddRange(
 	            new string[]
 	            {
 	                "Core",

@@ -1,3 +1,5 @@
+// Copyright 2024 Amit Kumar Mehar. All Rights Reserved.
+
 using System.IO;
 using UnrealBuildTool;
 
@@ -5,6 +7,8 @@ public class ImGuiRuntime : ModuleRules
 {
 	public ImGuiRuntime(ReadOnlyTargetRules Target) : base(Target)
 	{
+		//PCHUsage = PCHUsageMode.NoPCHs;
+
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
@@ -14,8 +18,8 @@ public class ImGuiRuntime : ModuleRules
 				"InputCore",
 				"Slate",
 				"SlateCore",
-				"RenderCore",
 				"RHI",
+				"RenderCore",
 			}
 		);
 

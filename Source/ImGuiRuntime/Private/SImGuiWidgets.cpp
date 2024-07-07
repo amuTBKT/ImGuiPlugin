@@ -1,6 +1,8 @@
+// Copyright 2024 Amit Kumar Mehar. All Rights Reserved.
+
 #include "SImGuiWidgets.h"
 #include "ImGuiShaders.h"
-#include "ImGuiRuntimeModule.h"
+#include "ImGuiSubsystem.h"
 
 #include "RHI.h"
 #include "RHIStaticStates.h"
@@ -22,9 +24,9 @@ DECLARE_CYCLE_STAT(TEXT("ImGui Render"), STAT_RenderWidget, STATGROUP_ImGui);
 
 void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 {
-	FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 
-	m_ImGuiContext = ImGui::CreateContext(ImGuiRuntimeModule.GetDefaultImGuiFontAtlas());
+	m_ImGuiContext = ImGui::CreateContext(ImGuiSubsystem->GetDefaultImGuiFontAtlas());
 
 	ImGuiIO& io = GetImGuiIO();
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -120,9 +122,9 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 	{
 		if (DrawData->TotalVtxCount > 0 && DrawData->TotalIdxCount > 0)
 		{
-			FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+			UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 			
-			RenderCaptureInterface::FScopedCapture RenderCapture(ImGuiRuntimeModule.CaptureGpuFrame(), TEXT("ImGuiWidget"));
+			RenderCaptureInterface::FScopedCapture RenderCapture(ImGuiSubsystem->CaptureGpuFrame(), TEXT("ImGuiWidget"));
 
 			struct FRenderData
 			{
@@ -164,9 +166,9 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 				RenderData->DrawLists[ListIndex] = FRenderData::FDrawListPtr(DrawData->CmdLists[ListIndex]->CloneOutput());
 			}
 
-			RenderData->MissingTextureIndex = ImGuiRuntimeModule.GetMissingImageTextureIndex();
-			RenderData->BoundTextures.Reserve(ImGuiRuntimeModule.GetOneFrameResources().Num());
-			for (const FImGuiTextureResource& TextureResource : ImGuiRuntimeModule.GetOneFrameResources())
+			RenderData->MissingTextureIndex = ImGuiSubsystem->GetMissingImageTextureIndex();
+			RenderData->BoundTextures.Reserve(ImGuiSubsystem->GetOneFrameResources().Num());
+			for (const FImGuiTextureResource& TextureResource : ImGuiSubsystem->GetOneFrameResources())
 			{
 				auto& TextureInfo = RenderData->BoundTextures.AddDefaulted_GetRef();
 
@@ -187,7 +189,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 					}
 					else if (ResourceType == ESlateShaderResource::Type::NativeTexture)
 					{
-						if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTexture2DRHIRef>*)ShaderResource)->GetTypedResource())
+						if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTextureRHIRef>*)ShaderResource)->GetTypedResource())
 						{
 							TextureInfo.TextureRHI = NativeTextureRHI;
 							TextureInfo.IsSRGB = EnumHasAnyFlags(NativeTextureRHI->GetFlags(), ETextureCreateFlags::SRGB);
@@ -309,7 +311,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 										DrawCmd.ClipRect.z - ClipRectOffset.x,
 										DrawCmd.ClipRect.w - ClipRectOffset.y);
 									
-									uint32 TextureIndex = FImGuiRuntimeModule::ImGuiIDToIndex(DrawCmd.TextureId);
+									uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.TextureId);
 									if (!(RenderData->BoundTextures.IsValidIndex(TextureIndex)/* && RenderData->BoundTextures[Index].IsValid()*/))
 									{
 										TextureIndex = RenderData->MissingTextureIndex;
@@ -656,11 +658,11 @@ FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& MyGeometry, const 
 
 void SImGuiMainWindowWidget::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
-	FImGuiRuntimeModule& ImGuiRuntimeModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
-	if (ImGuiRuntimeModule.GetMainWindowTickDelegate().IsBound())
+	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
+	if (ImGuiSubsystem->GetMainWindowTickDelegate().IsBound())
 	{
 		ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-		ImGuiRuntimeModule.GetMainWindowTickDelegate().Broadcast(m_ImGuiContext);
+		ImGuiSubsystem->GetMainWindowTickDelegate().Broadcast(m_ImGuiContext);
 	}
 	else
 	{
