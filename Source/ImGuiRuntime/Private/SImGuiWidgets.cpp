@@ -661,12 +661,12 @@ void SImGuiMainWindowWidget::TickInternal(const FGeometry& AllottedGeometry, con
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 	if (ImGuiSubsystem->GetMainWindowTickDelegate().IsBound())
 	{
-		ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 		ImGuiSubsystem->GetMainWindowTickDelegate().Broadcast(m_ImGuiContext);
 	}
 	else
 	{
-		const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+		const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
 		ImGui::SetNextWindowDockID(MainDockSpaceID);
 		if (ImGui::Begin("Empty", nullptr))
@@ -687,7 +687,7 @@ void SImGuiWidget::Construct(const FArguments& InArgs)
 
 void SImGuiWidget::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
-	const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
+	const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 	if (!m_AllowUndocking)
 	{
 		ImGui::SetNextWindowDockID(MainDockSpaceID);

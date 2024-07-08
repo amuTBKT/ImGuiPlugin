@@ -30,6 +30,19 @@ struct FImGuiTickScope final
     FImGuiTickScope& operator=(FImGuiTickScope&&) = delete;
 };
 
+// scope to resolve widget label/name collisions
+struct FImGuiNamedWidgetScope final
+{
+    explicit FImGuiNamedWidgetScope(const char* ScopeName)
+    {
+        ImGui::PushID(ScopeName);
+    }
+    ~FImGuiNamedWidgetScope()
+    {
+        ImGui::PopID();
+    }
+};
+
 // params used to create Image widget, works for slate icons too (they are atlased)
 struct FImGuiImageBindingParams
 {
@@ -44,6 +57,7 @@ using FImGuiRenderState = void*;
 
 enum class EImGuiRenderState : uint32_t
 {
+    Default              = 0,
     DisableAlphaBlending = 1 << 0,  // disable alpha writes from shader (outputs Color.a=1)
 };
 ENUM_CLASS_FLAGS(EImGuiRenderState);
