@@ -520,9 +520,9 @@ void SImGuiWidgetBase::AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown)
 		IO.AddKeyEvent(ImGuiKey, IsDown);
 	}
 
-	IO.AddKeyEvent(ImGuiKey_ModShift, KeyEvent.GetModifierKeys().IsShiftDown());
-	IO.AddKeyEvent(ImGuiKey_ModCtrl, KeyEvent.GetModifierKeys().IsControlDown());
-	IO.AddKeyEvent(ImGuiKey_ModAlt, KeyEvent.GetModifierKeys().IsAltDown());
+	IO.AddKeyEvent(ImGuiMod_Shift, KeyEvent.GetModifierKeys().IsShiftDown());
+	IO.AddKeyEvent(ImGuiMod_Ctrl, KeyEvent.GetModifierKeys().IsControlDown());
+	IO.AddKeyEvent(ImGuiMod_Alt, KeyEvent.GetModifierKeys().IsAltDown());
 }
 
 FReply SImGuiWidgetBase::OnKeyChar(const FGeometry& MyGeometry, const FCharacterEvent& CharacterEvent)

@@ -19,6 +19,8 @@ set(SOURCE_FILES
     implot/implot.cpp
     implot/implot_items.cpp)
 
+add_definitions(-DIMGUI_DISABLE_OBSOLETE_FUNCTIONS=1)
+
 add_library(ImGui STATIC ${HEADER_FILES} ${SOURCE_FILES})
 
 set_target_properties(ImGui

@@ -10,6 +10,7 @@ public class ImGui : ModuleRules
 		Type = ModuleType.External;
 
 		PublicDefinitions.Add("WITH_IMGUI");
+		PublicDefinitions.Add("IMGUI_DISABLE_OBSOLETE_FUNCTIONS=1");
 
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/imgui"));
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/implot"));
