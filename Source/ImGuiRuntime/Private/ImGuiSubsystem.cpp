@@ -160,7 +160,11 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 		return {};
 	}
 	
-	const uint32 ResourceHandleIndex = OneFrameResources.Add(FImGuiTextureResource(ResourceHandle));
+	uint32 ResourceHandleIndex = OneFrameResources.IndexOfByPredicate([Proxy](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == Proxy->Resource; });
+	if (ResourceHandleIndex == INDEX_NONE)
+	{
+		ResourceHandleIndex = OneFrameResources.Add(FImGuiTextureResource(ResourceHandle));
+	}
 
 	const FVector2f StartUV = Proxy->StartUV;
 	const FVector2f SizeUV = Proxy->SizeUV;
@@ -220,10 +224,8 @@ FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
 	if (UnderlyingResource.IsType<FSlateResourceHandle>())
 	{
 		const FSlateResourceHandle& ResourceHandle = UnderlyingResource.Get<FSlateResourceHandle>();
-		if (ResourceHandle.GetResourceProxy() && ResourceHandle.GetResourceProxy()->Resource)
-		{
-			return ResourceHandle.GetResourceProxy()->Resource;
-		}
+		const FSlateShaderResourceProxy* ResourcProxy = ResourceHandle.GetResourceProxy();		
+		return ResourcProxy ? ResourcProxy->Resource : nullptr;
 	}
 	else if (UnderlyingResource.IsType<FSlateShaderResource*>())
 	{
