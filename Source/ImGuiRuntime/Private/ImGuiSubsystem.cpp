@@ -179,6 +179,11 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 	return Params;
 }
 
+FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FName& SlateBrushName, FVector2D LocalSize, float DrawScale)
+{
+	return RegisterOneFrameResource(FAppStyle::GetBrush(SlateBrushName), LocalSize, DrawScale);
+}
+
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
 {
 	if (!SlateBrush)
@@ -187,6 +192,11 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 	}
 
 	return RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f);
+}
+
+FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FName& SlateBrushName)
+{
+	return RegisterOneFrameResource(FAppStyle::GetBrush(SlateBrushName));
 }
 
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(UTexture2D* Texture)
@@ -218,11 +228,6 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 	Params.Id = IndexToImGuiID(ResourceHandleIndex);
 
 	return Params;
-}
-
-FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FName& SlateBrushName, FVector2D LocalSize, float DrawScale)
-{
-	return RegisterOneFrameResource(FAppStyle::GetBrush(SlateBrushName), LocalSize, DrawScale);
 }
 
 FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
