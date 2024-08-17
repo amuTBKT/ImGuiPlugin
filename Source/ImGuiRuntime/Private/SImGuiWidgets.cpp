@@ -33,7 +33,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
-	//[TODO] setting?
+	// TODO: setting?
 	ImGui::StyleColorsDark();
 
 	// allocate rendering resources
@@ -66,7 +66,6 @@ ImGuiIO& SImGuiWidgetBase::GetImGuiIO() const
 	return ImGui::GetIO();
 }
 
-//~ GCObject Interface
 void SImGuiWidgetBase::AddReferencedObjects(FReferenceCollector& Collector)
 {
 	Collector.AddReferencedObject(m_ImGuiRT);
@@ -76,7 +75,6 @@ FString SImGuiWidgetBase::GetReferencerName() const
 {
 	return TEXT("SImGuiWidgetBase");
 }
-//~ GCObject Interface
 
 void SImGuiWidgetBase::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
@@ -162,7 +160,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 			RenderData->DrawLists.SetNum(DrawData->CmdListsCount);
 			for (int32 ListIndex = 0; ListIndex < DrawData->CmdListsCount; ++ListIndex)
 			{
-				//[TODO] Clone allocates from heap, might be worth keeping some static buffer around and manually copying...
+				// TODO: Clone allocates from heap, might be worth keeping some static buffer around and manually copying...
 				RenderData->DrawLists[ListIndex] = FRenderData::FDrawListPtr(DrawData->CmdLists[ListIndex]->CloneOutput());
 			}
 
@@ -360,14 +358,14 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 			const float UVMaxX = (float)(DrawRect.Right - DrawRect.Left) / (float)m_ImGuiRT->SizeX;
 			const float UVMaxY = (float)(DrawRect.Bottom - DrawRect.Top) / (float)m_ImGuiRT->SizeY;
 
-			const TArray<FSlateVertex> Vertices =
+			TArray<FSlateVertex> Vertices =
 			{
 				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V0, FVector2f{ UVMinX, UVMinY }, FColor::White),
 				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V1, FVector2f{ UVMaxX, UVMinY }, FColor::White),
 				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V2, FVector2f{ UVMaxX, UVMaxY }, FColor::White),
 				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V3, FVector2f{ UVMinX, UVMaxY }, FColor::White)
 			};
-			const TArray<uint32> Indices =
+			TArray<uint32> Indices =
 			{
 				0, 1, 2,
 				0, 2, 3,
@@ -383,7 +381,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 }
 
 #pragma region SLATE_INPUT
-static ImGuiKey FKeyToImGuiKey(FName Keyname)
+FORCEINLINE static ImGuiKey GetImGuiKeyFromFKey(FName Keyname)
 {
 #define CONVERSION_OP(Key) { EKeys::Key.GetFName(), ImGuiKey_##Key }
 #define CONVERSION_OP1(Key, ImGuiKeyId) { EKeys::Key.GetFName(), ImGuiKeyId }
@@ -474,7 +472,7 @@ static ImGuiKey FKeyToImGuiKey(FName Keyname)
 #undef CONVERSION_OP
 
 	/*
-	[TODO] These are not added....
+	TODO: These are not added....
 	switch (KeyCode)
 	{
 	case VK_OEM_3: return ImGuiKey_GraveAccent;
@@ -489,32 +487,24 @@ static ImGuiKey FKeyToImGuiKey(FName Keyname)
 	return Key ? *Key : ImGuiKey_None;
 }
 
-static int32 FMouseKeyToImGuiKey(FKey MouseKey)
+void SImGuiWidgetBase::AddMouseButtonEvent(ImGuiIO& IO, FKey MouseKey, bool IsDown)
 {
-	int32 MouseButton = 0;
-	if (MouseKey == EKeys::LeftMouseButton)
+	int32 MouseButton = ImGuiMouseButton_Left; //MouseKey == EKeys::LeftMouseButton
+	if (MouseKey == EKeys::RightMouseButton)
 	{
-		MouseButton = 0;
-	}
-	else if (MouseKey == EKeys::RightMouseButton)
-	{
-		MouseButton = 1;
+		MouseButton = ImGuiMouseButton_Right;
 	}
 	else if (MouseKey == EKeys::MiddleMouseButton)
 	{
-		MouseButton = 2;
+		MouseButton = ImGuiMouseButton_Middle;
 	}
-	return MouseButton;
-}
 
-void SImGuiWidgetBase::AddMouseButtonEvent(ImGuiIO& IO, FKey MouseKey, bool IsDown)
-{
-	IO.AddMouseButtonEvent(FMouseKeyToImGuiKey(MouseKey), IsDown);
+	IO.AddMouseButtonEvent(MouseButton, IsDown);
 }
 
 void SImGuiWidgetBase::AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown)
 {
-	const ImGuiKey ImGuiKey = FKeyToImGuiKey(KeyEvent.GetKey().GetFName());
+	const ImGuiKey ImGuiKey = GetImGuiKeyFromFKey(KeyEvent.GetKey().GetFName());
 	if (ImGuiKey != ImGuiKey_None)
 	{
 		IO.AddKeyEvent(ImGuiKey, IsDown);
@@ -529,43 +519,21 @@ FReply SImGuiWidgetBase::OnKeyChar(const FGeometry& MyGeometry, const FCharacter
 {
 	ImGuiIO& IO = GetImGuiIO();
 	IO.AddInputCharacterUTF16(CharacterEvent.GetCharacter());
-
-	if (IO.WantTextInput)
-	{
-		return FReply::Handled();
-	}
-	else
-	{
-		return FReply::Unhandled();
-	}
+	return IO.WantTextInput ? FReply::Handled() : FReply::Unhandled();
 }
 
 FReply SImGuiWidgetBase::OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& KeyEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
 	AddKeyEvent(IO, KeyEvent, true);
-	if (IO.WantCaptureKeyboard)
-	{
-		return FReply::Handled();
-	}
-	else
-	{
-		return FReply::Unhandled();
-	}
+	return IO.WantCaptureKeyboard ? FReply::Handled() : FReply::Unhandled();
 }
 
 FReply SImGuiWidgetBase::OnKeyUp(const FGeometry& MyGeometry, const FKeyEvent& KeyEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
 	AddKeyEvent(IO, KeyEvent, false);
-	if (IO.WantCaptureKeyboard)
-	{
-		return FReply::Handled();
-	}
-	else
-	{
-		return FReply::Unhandled();
-	}
+	return IO.WantCaptureKeyboard ? FReply::Handled() : FReply::Unhandled();
 }
 
 FReply SImGuiWidgetBase::OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
@@ -635,7 +603,7 @@ FReply SImGuiWidgetBase::OnMouseMove(const FGeometry& MyGeometry, const FPointer
 
 FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& MyGeometry, const FPointerEvent& CursorEvent) const
 {
-	const static EMouseCursor::Type ImGuiToUMGCursor[] =
+	static constexpr EMouseCursor::Type ImGuiToUMGCursor[ImGuiMouseCursor_COUNT] =
 	{
 		EMouseCursor::Default,
 		EMouseCursor::TextEditBeam,
@@ -651,9 +619,8 @@ FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& MyGeometry, const 
 	ImGuiIO& IO = GetImGuiIO();
 
 	const ImGuiMouseCursor MouseCursor = ImGui::GetMouseCursor();
-	return MouseCursor == ImGuiMouseCursor_None ? FCursorReply::Unhandled() : FCursorReply::Cursor(ImGuiToUMGCursor[MouseCursor]);
+	return (MouseCursor == ImGuiMouseCursor_None) ? FCursorReply::Unhandled() : FCursorReply::Cursor(ImGuiToUMGCursor[MouseCursor]);
 }
-
 #pragma endregion SLATE_INPUT
 
 void SImGuiMainWindowWidget::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)

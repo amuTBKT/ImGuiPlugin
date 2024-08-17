@@ -24,10 +24,10 @@ public:
 	void Construct(const FArguments& InArgs);
 	virtual ~SImGuiWidgetBase();
 
-	//~ GCObject Interface
+	//GCObject interface 
 	virtual void AddReferencedObjects(FReferenceCollector& Collector) override;
 	virtual FString GetReferencerName() const override;
-	//~ GCObject Interface
+	//GCObject interface END
 
 	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
