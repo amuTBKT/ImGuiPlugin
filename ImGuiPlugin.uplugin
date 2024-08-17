@@ -10,7 +10,7 @@
 	"DocsURL" : "",
 	"MarketplaceURL" : "",
 	"SupportURL" : "https://github.com/amuTBKT/ImGuiPlugin/issues",
-	"EnabledByDefault" : false,
+	"EnabledByDefault" : true,
 	"CanContainContent" : false,
 	"IsBetaVersion" : false,
 	"Installed" : false,
@@ -18,12 +18,16 @@
 		{
 			"Name": "ImGuiShaders",
 			"Type": "Runtime",
-			"LoadingPhase": "PostConfigInit"
+			"LoadingPhase": "PostConfigInit",
+			"TargetDenyList": [ "Server", "Program" ],
+			"TargetConfigurationDenyList": [ "Shipping" ]
 		},
 		{
 			"Name": "ImGuiRuntime",
 			"Type": "Runtime",
-			"LoadingPhase": "PreDefault"
+			"LoadingPhase": "PreDefault",
+			"TargetDenyList": [ "Server", "Program" ],
+			"TargetConfigurationDenyList": [ "Shipping" ]
 		}
 	]
 }

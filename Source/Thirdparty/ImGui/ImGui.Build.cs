@@ -9,19 +9,30 @@ public class ImGui : ModuleRules
 	{
 		Type = ModuleType.External;
 
-		PublicDefinitions.Add("WITH_IMGUI");
+		// disabled on Shipping and Server configs
+		bool bIsConfigurationSupported = (Target.Configuration != UnrealTargetConfiguration.Shipping);
+		bool bIsTargetTypeSupported = ((Target.Type != TargetType.Server) && (Target.Type != TargetType.Program));
+        if (bIsConfigurationSupported && bIsTargetTypeSupported)
+        {
+            PublicDefinitions.Add("WITH_IMGUI=1");
+		}
+		else
+		{
+			PublicDefinitions.Add("WITH_IMGUI=0");
+        }
+
 		PublicDefinitions.Add("IMGUI_DISABLE_OBSOLETE_FUNCTIONS=1");
 
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/imgui"));
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/implot"));
 
-		if (Target.Configuration == UnrealTargetConfiguration.Shipping || Target.Configuration == UnrealTargetConfiguration.Test)
+		if (Target.Configuration == UnrealTargetConfiguration.Debug)
 		{
-			PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Release/ImGui.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Debug/ImGui.lib"));
 		}
 		else
         {
-			PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Debug/ImGui.lib"));
+			PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Release/ImGui.lib"));
 		}
 	}
 }

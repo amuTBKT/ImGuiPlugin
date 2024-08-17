@@ -12,7 +12,7 @@
     /*UserData*/ nullptr);
 
 // since the module is built as DLL, we need to set context before making ImGui calls.
-struct FImGuiTickScope final
+struct FImGuiTickScope final : FNoncopyable
 {
     explicit FImGuiTickScope(ImGuiContext* Context)
     {
@@ -22,16 +22,10 @@ struct FImGuiTickScope final
     {
         ImGui::SetCurrentContext(nullptr);
     }
-
-    FImGuiTickScope(const FImGuiTickScope&) = delete;
-    FImGuiTickScope(FImGuiTickScope&&) = delete;
-    
-    FImGuiTickScope& operator=(const FImGuiTickScope&) = delete;
-    FImGuiTickScope& operator=(FImGuiTickScope&&) = delete;
 };
 
 // scope to resolve widget label/name collisions
-struct FImGuiNamedWidgetScope final
+struct FImGuiNamedWidgetScope final : FNoncopyable
 {
     explicit FImGuiNamedWidgetScope(const char* ScopeName)
     {
