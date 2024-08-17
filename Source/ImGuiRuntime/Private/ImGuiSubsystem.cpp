@@ -8,6 +8,7 @@
 #include "TextureResource.h"
 #include "Widgets/SWindow.h"
 #include "Engine/Texture2D.h"
+#include "Styling/AppStyle.h"
 #include "Framework/Application/SlateApplication.h"
 
 static int32 CaptureNextGpuFrames = 0;
@@ -217,6 +218,11 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 	Params.Id = IndexToImGuiID(ResourceHandleIndex);
 
 	return Params;
+}
+
+FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FName& SlateBrushName, FVector2D LocalSize, float DrawScale)
+{
+	return RegisterOneFrameResource(FAppStyle::GetBrush(SlateBrushName), LocalSize, DrawScale);
 }
 
 FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
