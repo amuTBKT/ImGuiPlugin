@@ -11,6 +11,8 @@
     /*Free*/     [](void* Pointer, void* UserData = nullptr) { FMemory::Free(Pointer); },       \
     /*UserData*/ nullptr);
 
+#define IMGUI_FNAME(Name) [](){ static FName StaticFName(Name); return StaticFName;}()
+
 // since the module is built as DLL, we need to set context before making ImGui calls.
 struct FImGuiTickScope final : FNoncopyable
 {
