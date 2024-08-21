@@ -22,6 +22,7 @@ public class ImGui : ModuleRules
         }
 
 		PublicDefinitions.Add("IMGUI_DISABLE_OBSOLETE_FUNCTIONS=1");
+		PublicDefinitions.Add("IMGUI_DEFINE_MATH_OPERATORS=1");
 
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/imgui"));
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/implot"));
