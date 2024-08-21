@@ -21,7 +21,7 @@ public:
 	}
 	SLATE_END_ARGS()
 
-	void Construct(const FArguments& InArgs);
+	void Construct(const FArguments& InArgs, bool UseTranslucentBackground);
 	virtual ~SImGuiWidgetBase();
 
 	//GCObject interface 
@@ -70,12 +70,18 @@ protected:
 
 	// TODO: initial zoom support, can we do better than this?
 	float m_WindowScale = 1.f;
+
+	// minor optimization to avoid texture clears when using opaque window.
+	bool m_ClearRenderTargetEveryFrame = false;
 };
 
 /* Main window widget, only one instance active at a time */
 class SImGuiMainWindowWidget : public SImGuiWidgetBase
 {
 	using Super = SImGuiWidgetBase;
+public:
+	void Construct(const FArguments& InArgs);
+
 private:
 	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 };
@@ -90,7 +96,8 @@ public:
 		, _AllowUndocking(true)
 		{}
 		SLATE_EVENT(FOnTickImGuiWidgetDelegate, OnTickDelegate);	
-		SLATE_ATTRIBUTE(bool, AllowUndocking);	
+		SLATE_ATTRIBUTE(bool, AllowUndocking);
+		//SLATE_ATTRIBUTE(bool, UseTranslucentBackground); TODO:
 	SLATE_END_ARGS()
 	
 	void Construct(const FArguments& InArgs);

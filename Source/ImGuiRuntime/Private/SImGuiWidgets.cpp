@@ -22,7 +22,7 @@
 DECLARE_CYCLE_STAT(TEXT("ImGui Tick"), STAT_TickWidget, STATGROUP_ImGui);
 DECLARE_CYCLE_STAT(TEXT("ImGui Render"), STAT_RenderWidget, STATGROUP_ImGui);
 
-void SImGuiWidgetBase::Construct(const FArguments& InArgs)
+void SImGuiWidgetBase::Construct(const FArguments& InArgs, bool UseTranslucentBackground)
 {
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 
@@ -47,6 +47,9 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	m_ImGuiRT->UpdateResourceImmediate(true);
 
 	m_ImGuiSlateBrush.SetResourceObject(m_ImGuiRT);
+
+	// only need to clear the RT when using translucent window, otherwise ImGui fullscreen widget pass should clear the RT.
+	m_ClearRenderTargetEveryFrame = UseTranslucentBackground;
 }
 
 SImGuiWidgetBase::~SImGuiWidgetBase()
@@ -86,7 +89,8 @@ void SImGuiWidgetBase::Tick(const FGeometry& AllottedGeometry, const double InCu
 	
 	// new frame setup
 	{
-		IO.DisplaySize = { (float)AllottedGeometry.GetAbsoluteSize().X, (float)AllottedGeometry.GetAbsoluteSize().Y };
+		IO.DisplaySize.x = FMath::CeilToInt(AllottedGeometry.GetAbsoluteSize().X);
+		IO.DisplaySize.y = FMath::CeilToInt(AllottedGeometry.GetAbsoluteSize().Y);
 		IO.DeltaTime = InDeltaTime;
 
 		ImGui::NewFrame();
@@ -124,7 +128,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 			
 			RenderCaptureInterface::FScopedCapture RenderCapture(ImGuiSubsystem->CaptureGpuFrame(), TEXT("ImGuiWidget"));
 
-			struct FRenderData
+			struct FRenderData : FNoncopyable
 			{
 				struct FDrawListDeleter
 				{
@@ -144,13 +148,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 				int32 TotalVtxCount = 0;
 				int32 TotalIdxCount = 0;
 				int32 MissingTextureIndex = INDEX_NONE;
-
-				FRenderData() = default;
-				FRenderData(const FRenderData&) = delete;
-				FRenderData(FRenderData&&) = delete;
-				FRenderData& operator=(const FRenderData&) = delete;
-				FRenderData& operator=(FRenderData&&) = delete;					
-				~FRenderData() = default;
+				bool bClearRenderTarget = false;
 			};
 			FRenderData* RenderData = new FRenderData();
 			RenderData->DisplayPos = DrawData->DisplayPos;
@@ -205,6 +203,8 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 				}
 			}
 
+			RenderData->bClearRenderTarget = m_ClearRenderTargetEveryFrame;
+
 			ENQUEUE_RENDER_COMMAND(RenderImGui)(
 				[RenderData, RT_Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
 				{
@@ -233,7 +233,8 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						RHICmdList.UnlockBuffer(IndexBuffer);
 					}
 
-					FRHIRenderPassInfo RPInfo(RT_Resource->TextureRHI, MakeRenderTargetActions(ERenderTargetLoadAction::EClear, ERenderTargetStoreAction::EStore));
+					const ERenderTargetLoadAction LoadAction = RenderData->bClearRenderTarget ? ERenderTargetLoadAction::EClear : ERenderTargetLoadAction::ENoAction;
+					FRHIRenderPassInfo RPInfo(RT_Resource->TextureRHI, MakeRenderTargetActions(LoadAction, ERenderTargetStoreAction::EStore));
 					RHICmdList.Transition(FRHITransitionInfo(RT_Resource->TextureRHI, ERHIAccess::Unknown, ERHIAccess::RTV));
 					RHICmdList.BeginRenderPass(RPInfo, TEXT("RenderImGui"));
 					{
@@ -355,8 +356,8 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 			// adjust UVs based on RT vs Viewport scaling
 			const float UVMinX = 0.f;
 			const float UVMinY = 0.f;
-			const float UVMaxX = (float)(DrawRect.Right - DrawRect.Left) / (float)m_ImGuiRT->SizeX;
-			const float UVMaxY = (float)(DrawRect.Bottom - DrawRect.Top) / (float)m_ImGuiRT->SizeY;
+			const float UVMaxX = (DrawRect.Right - DrawRect.Left) / (float)m_ImGuiRT->SizeX;
+			const float UVMaxY = (DrawRect.Bottom - DrawRect.Top) / (float)m_ImGuiRT->SizeY;
 
 			TArray<FSlateVertex> Vertices =
 			{
@@ -623,17 +624,29 @@ FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& MyGeometry, const 
 }
 #pragma endregion SLATE_INPUT
 
+void SImGuiMainWindowWidget::Construct(const FArguments& InArgs)
+{
+	Super::Construct(InArgs, /*UseTranslucentBackground=*/false);
+}
+
 void SImGuiMainWindowWidget::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 	if (ImGuiSubsystem->GetMainWindowTickDelegate().IsBound())
 	{
+		const ImU32 BackgroundColor = m_ClearRenderTargetEveryFrame ? ImGui::GetColorU32(ImGuiCol_WindowBg) : (ImGui::GetColorU32(ImGuiCol_WindowBg) | 0xFF000000);
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, BackgroundColor);
 		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+		ImGui::PopStyleColor(1);
+
 		ImGuiSubsystem->GetMainWindowTickDelegate().Broadcast(m_ImGuiContext);
 	}
 	else
 	{
+		const ImU32 BackgroundColor = m_ClearRenderTargetEveryFrame ? ImGui::GetColorU32(ImGuiCol_WindowBg) : (ImGui::GetColorU32(ImGuiCol_WindowBg) | 0xFF000000);
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, BackgroundColor);
 		const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+		ImGui::PopStyleColor(1);
 
 		ImGui::SetNextWindowDockID(MainDockSpaceID);
 		if (ImGui::Begin("Empty", nullptr))
@@ -646,7 +659,7 @@ void SImGuiMainWindowWidget::TickInternal(const FGeometry& AllottedGeometry, con
 
 void SImGuiWidget::Construct(const FArguments& InArgs)
 {
-	Super::Construct(Super::FArguments());
+	Super::Construct(Super::FArguments(), /*UseTranslucentBackground=*/true);
 
 	m_OnTickDelegate = InArgs._OnTickDelegate;
 	m_AllowUndocking = InArgs._AllowUndocking.Get();
