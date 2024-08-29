@@ -22,6 +22,38 @@
 DECLARE_CYCLE_STAT(TEXT("ImGui Tick"), STAT_TickWidget, STATGROUP_ImGui);
 DECLARE_CYCLE_STAT(TEXT("ImGui Render"), STAT_RenderWidget, STATGROUP_ImGui);
 
+class FImGuiVertexDeclaration : public FRenderResource
+{
+public:
+	FVertexDeclarationRHIRef VertexDeclarationRHI;
+
+	virtual ~FImGuiVertexDeclaration() {}
+
+	virtual void InitRHI(FRHICommandListBase& RHICmdList) override
+	{
+		struct FImGuiVertex
+		{
+			FVector2f	Position;
+			FVector2f	UV;
+			FColor		Color;
+		};
+		constexpr size_t VertexFormatStride = sizeof(FImGuiVertex);
+		static_assert(VertexFormatStride == sizeof(ImDrawVert));
+
+		FVertexDeclarationElementList Elements;
+		Elements.Add(FVertexElement(0, STRUCT_OFFSET(FImGuiVertex, Position),	VET_Float2, 0, VertexFormatStride));
+		Elements.Add(FVertexElement(0, STRUCT_OFFSET(FImGuiVertex, UV),			VET_Float2, 1, VertexFormatStride));
+		Elements.Add(FVertexElement(0, STRUCT_OFFSET(FImGuiVertex, Color),		VET_Color,	2, VertexFormatStride));
+		VertexDeclarationRHI = PipelineStateCache::GetOrCreateVertexDeclaration(Elements);
+	}
+
+	virtual void ReleaseRHI() override
+	{
+		VertexDeclarationRHI.SafeRelease();
+	}
+};
+static TGlobalResource<FImGuiVertexDeclaration, FRenderResource::EInitPhase::Pre> GImGuiVertexDeclaration;
+
 void SImGuiWidgetBase::Construct(const FArguments& InArgs, bool UseTranslucentBackground)
 {
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
@@ -219,7 +251,6 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						}
 						RHICmdList.UnlockBuffer(VertexBuffer);
 					}
-					FShaderResourceViewRHIRef VertexBufferSRV = RHICmdList.CreateShaderResourceView(VertexBuffer, sizeof(uint32), PF_R32_UINT);
 
 					FRHIResourceCreateInfo IndexCreateInfo(TEXT("ImGui_IndexBuffer"));
 					FBufferRHIRef IndexBuffer = RHICmdList.CreateIndexBuffer(sizeof(ImDrawIdx), RenderData->TotalIdxCount * sizeof(ImDrawIdx), BUF_Volatile, IndexCreateInfo);
@@ -248,13 +279,15 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						GraphicsPSOInit.DepthStencilState = TStaticDepthStencilState<false, CF_Always>::GetRHI();
 						GraphicsPSOInit.RasterizerState = TStaticRasterizerState<FM_Solid, CM_None>::GetRHI();
 						GraphicsPSOInit.BlendState = TStaticBlendState<CW_RGBA, BO_Add, BF_SourceAlpha, BF_InverseSourceAlpha, BO_Add, BF_One, BF_One>::GetRHI();
-						GraphicsPSOInit.BoundShaderState.VertexDeclarationRHI = GEmptyVertexDeclaration.VertexDeclarationRHI;
+						GraphicsPSOInit.BoundShaderState.VertexDeclarationRHI = GImGuiVertexDeclaration.VertexDeclarationRHI;
 						GraphicsPSOInit.BoundShaderState.VertexShaderRHI = VertexShader.GetVertexShader();
 						GraphicsPSOInit.BoundShaderState.PixelShaderRHI = PixelShader.GetPixelShader();
 						GraphicsPSOInit.PrimitiveType = PT_TriangleList;
 						SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
 
-						auto CalculateProjectionMatrix = [&]() -> FMatrix44f
+						RHICmdList.SetStreamSource(0, VertexBuffer, 0);
+
+						auto UpdateVertexShaderParameters = [&]() -> void
 						{
 							const float L = RenderData->DisplayPos.x;
 							const float R = RenderData->DisplayPos.x + RenderData->DisplaySize.x;
@@ -267,17 +300,20 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 								{ 0.0f				, 0.0f			   , 0.5f, 0.0f },
 								{ (R + L) / (L - R)	, (T + B) / (B - T), 0.5f, 1.0f },
 							};
-							return ProjectionMatrix;
+
+							SetShaderParametersLegacyVS(
+								RHICmdList,
+								VertexShader,
+								ProjectionMatrix);
 						};
 
-						RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
-
-						FMatrix44f ProjectionMatrix = CalculateProjectionMatrix();
-						uint32_t RenderStateOverrides = 0;
-
-						// since we merged the vertex and index buffers, we need to track global offset
 						uint32 GlobalVertexOffset = 0;
 						uint32 GlobalIndexOffset = 0;
+						uint32_t RenderStateOverrides = 0;
+
+						RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
+						UpdateVertexShaderParameters();
+
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
 						{
 							for (const ImDrawCmd& DrawCmd : CmdList->CmdBuffer)
@@ -287,13 +323,15 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 									if (DrawCmd.UserCallback == ImDrawCallback_ResetRenderState)
 									{
 										RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
-
-										ProjectionMatrix = CalculateProjectionMatrix();
 										RenderStateOverrides = 0;
+
+										UpdateVertexShaderParameters();
 									}
 									else if (DrawCmd.UserCallback == ImDrawCallback_SetRenderState)
 									{
 										RenderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
+
+										//UpdateVertexShaderParameters(); No VS state exposed atm.
 									}
 									else
 									{
@@ -305,10 +343,10 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 									const ImVec2& ClipRectOffset = RenderData->DisplayPos;
 									RHICmdList.SetScissorRect(
 										true,
-										DrawCmd.ClipRect.x - ClipRectOffset.x,
-										DrawCmd.ClipRect.y - ClipRectOffset.y,
-										DrawCmd.ClipRect.z - ClipRectOffset.x,
-										DrawCmd.ClipRect.w - ClipRectOffset.y);
+										FMath::Max(0.f, DrawCmd.ClipRect.x - ClipRectOffset.x),							// >=Viewport.MinX
+										FMath::Max(0.f, DrawCmd.ClipRect.y - ClipRectOffset.y),							// >=Viewport.MinY
+										FMath::Min(RenderData->DisplaySize.x, DrawCmd.ClipRect.z - ClipRectOffset.x),	// <=Viewport.MaxX
+										FMath::Min(RenderData->DisplaySize.y, DrawCmd.ClipRect.w - ClipRectOffset.y));	// <=Viewport.MaxY
 									
 									uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.TextureId);
 									if (!(RenderData->BoundTextures.IsValidIndex(TextureIndex)/* && RenderData->BoundTextures[Index].IsValid()*/))
@@ -323,13 +361,6 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 										RenderData->BoundTextures[TextureIndex].SamplerRHI,
 										RenderData->BoundTextures[TextureIndex].IsSRGB,
 										RenderStateOverrides);
-
-									SetShaderParametersLegacyVS(
-										RHICmdList,
-										VertexShader,
-										VertexBufferSRV,
-										ProjectionMatrix,
-										DrawCmd.VtxOffset + GlobalVertexOffset);
 
 									RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);
 								}

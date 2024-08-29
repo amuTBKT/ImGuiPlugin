@@ -17,9 +17,7 @@ public:
 	FImGuiVS(const ShaderMetaType::CompiledShaderInitializerType& Initializer)
 		: FGlobalShader(Initializer)
 	{
-		VertexBufferParam.Bind(Initializer.ParameterMap, TEXT("VertexBuffer"));
 		ProjectionMatrixParam.Bind(Initializer.ParameterMap, TEXT("ProjectionMatrix"));
-		GlobalVertexOffsetParam.Bind(Initializer.ParameterMap, TEXT("GlobalVertexOffset"));
 	}
 	FImGuiVS() {}
 
@@ -30,19 +28,13 @@ public:
 
 	void SetParameters(
 		FRHIBatchedShaderParameters& BatchedParameters,
-		FRHIShaderResourceView* VertexBufferSRV,
-		const FMatrix44f& ProjectionMatrix,
-		uint32 VertexOffset)
+		const FMatrix44f& ProjectionMatrix)
 	{
-		SetSRVParameter(BatchedParameters, VertexBufferParam, VertexBufferSRV);
 		SetShaderValue(BatchedParameters, ProjectionMatrixParam, ProjectionMatrix);
-		SetShaderValue(BatchedParameters, GlobalVertexOffsetParam, VertexOffset);
 	}
 
 private:
-	LAYOUT_FIELD(FShaderResourceParameter, VertexBufferParam);
 	LAYOUT_FIELD(FShaderParameter, ProjectionMatrixParam);
-	LAYOUT_FIELD(FShaderParameter, GlobalVertexOffsetParam);
 };
 
 class IMGUISHADERS_API FImGuiPS : public FGlobalShader

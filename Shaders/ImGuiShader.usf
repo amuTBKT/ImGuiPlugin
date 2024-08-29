@@ -3,55 +3,19 @@
 #include "/Engine/Private/Common.ush"
 #include "/Engine/Private/GammaCorrectionCommon.ush"
 
-ByteAddressBuffer VertexBuffer;
 float4x4 ProjectionMatrix;
-uint GlobalVertexOffset;
-
-struct VertexFormat
-{
-	float2 Position;
-	float2 TexCoord;
-	float4 Color;
-};
-
-float4 DecodeColor(uint PackedColor)
-{
-	float4 color;
-
-	color.x = ((PackedColor) & 0xff) / 255.f;
-	color.y = ((PackedColor >> 8) & 0xff) / 255.f;
-	color.z = ((PackedColor >> 16) & 0xff) / 255.f;
-	color.w = ((PackedColor >> 24) & 0xff) / 255.f;
-
-	return color;
-}
-
-#define ImDrawVertSize         20
-#define ImDrawVert_PosStride   0
-#define ImDrawVert_UVStride    8
-#define ImDrawVert_ColorStride 16
-VertexFormat FetchVertex(uint vertexId)
-{
-	uint vertexOffset = vertexId * ImDrawVertSize;
-	VertexFormat vertex;
-	vertex.Position = asfloat(VertexBuffer.Load2(vertexOffset + ImDrawVert_PosStride));
-	vertex.TexCoord = asfloat(VertexBuffer.Load2(vertexOffset + ImDrawVert_UVStride));
-	vertex.Color = DecodeColor(asuint(VertexBuffer.Load(vertexOffset + ImDrawVert_ColorStride)));
-
-	return vertex;
-}
 
 void MainVS(
-	in uint VertexId : SV_VERTEXID,
+	in float2 InPosition : ATTRIBUTE0,
+	in float2 InUV : ATTRIBUTE1,
+	in float4 InColor : ATTRIBUTE2,
 	out float4 ClipPosition : SV_POSITION,
 	out float2 OutUV : TEXCOORD0,
 	out float4 OutColor : COLOR0)
 {
-	VertexFormat Vertex = FetchVertex(GlobalVertexOffset + VertexId);
-
-	ClipPosition = mul(float4(Vertex.Position.xy, 0.f, 1.f), ProjectionMatrix);
-	OutUV = Vertex.TexCoord;
-	OutColor = Vertex.Color;
+	ClipPosition = mul(float4(InPosition.xy, 0.f, 1.f), ProjectionMatrix);
+	OutUV = InUV;
+	OutColor = InColor.bgra;
 }
 
 Texture2D Texture;
