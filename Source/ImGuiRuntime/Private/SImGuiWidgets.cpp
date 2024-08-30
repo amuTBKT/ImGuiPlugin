@@ -241,7 +241,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 				[RenderData, RT_Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
 				{
 					FRHIResourceCreateInfo VertexCreateInfo(TEXT("ImGui_VertexBuffer"));
-					FBufferRHIRef VertexBuffer = RHICmdList.CreateVertexBuffer(RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Volatile | BUF_ByteAddressBuffer | BUF_ShaderResource, VertexCreateInfo);
+					FBufferRHIRef VertexBuffer = RHICmdList.CreateVertexBuffer(RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Volatile, VertexCreateInfo);
 					if (ImDrawVert* VertexDst = (ImDrawVert*)RHICmdList.LockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
 					{
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
@@ -266,7 +266,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 
 					const ERenderTargetLoadAction LoadAction = RenderData->bClearRenderTarget ? ERenderTargetLoadAction::EClear : ERenderTargetLoadAction::ENoAction;
 					FRHIRenderPassInfo RPInfo(RT_Resource->TextureRHI, MakeRenderTargetActions(LoadAction, ERenderTargetStoreAction::EStore));
-					RHICmdList.Transition(FRHITransitionInfo(RT_Resource->TextureRHI, ERHIAccess::Unknown, ERHIAccess::RTV));
+					RHICmdList.Transition(FRHITransitionInfo(RT_Resource->TextureRHI, ERHIAccess::SRVGraphicsPixel, ERHIAccess::RTV));
 					RHICmdList.BeginRenderPass(RPInfo, TEXT("RenderImGui"));
 					{
 						SCOPED_DRAW_EVENT(RHICmdList, RenderImGui);
@@ -372,7 +372,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						delete RenderData;
 					}
 					RHICmdList.EndRenderPass();
-					RHICmdList.Transition(FRHITransitionInfo(RT_Resource->TextureRHI, ERHIAccess::RTV, ERHIAccess::SRVMask));
+					RHICmdList.Transition(FRHITransitionInfo(RT_Resource->TextureRHI, ERHIAccess::RTV, ERHIAccess::SRVGraphicsPixel));
 				}
 			);
 
