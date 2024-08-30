@@ -33,8 +33,8 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	DefaultFontAtlas = MakeUnique<ImFontAtlas>();
-	DefaultFontAtlas->Build();
+	m_DefaultFontAtlas = MakeUnique<ImFontAtlas>();
+	m_DefaultFontAtlas->Build();
 
 	auto CreateTextureRGBA8 = [](FName DebugName, int32 Width, int32 Height, uint8* ImageData)
 	{
@@ -56,21 +56,21 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	int32 FontAtlasWidth, FontAtlasHeight, BytesPerPixel;
 	unsigned char* FontAtlasData;
-	DefaultFontAtlas->GetTexDataAsRGBA32(&FontAtlasData, &FontAtlasWidth, &FontAtlasHeight, &BytesPerPixel);
+	m_DefaultFontAtlas->GetTexDataAsRGBA32(&FontAtlasData, &FontAtlasWidth, &FontAtlasHeight, &BytesPerPixel);
 	check(BytesPerPixel == GPixelFormats[PF_R8G8B8A8].BlockBytes && FontAtlasData);
 
 	// 1x1 magenta texture
 	int32 MissingImageWidth = 1, MissingImageHeight = 1;
 	uint32 MissingPixelData = FColor::Magenta.DWColor();
 
-	DefaultFontTexture = CreateTextureRGBA8(FName(TEXT("ImGui_DefaultFontAtlas")), FontAtlasWidth, FontAtlasHeight, FontAtlasData);
-	DefaultFontTexture->AddToRoot();
+	m_DefaultFontTexture = CreateTextureRGBA8(FName(TEXT("ImGui_DefaultFontAtlas")), FontAtlasWidth, FontAtlasHeight, FontAtlasData);
+	m_DefaultFontTexture->AddToRoot();
 
-	MissingImageTexture = CreateTextureRGBA8(FName(TEXT("ImGui_MissingImage")), MissingImageWidth, MissingImageHeight, (uint8_t*)&MissingPixelData);
-	MissingImageTexture->AddToRoot();
+	m_MissingImageTexture = CreateTextureRGBA8(FName(TEXT("ImGui_MissingImage")), MissingImageWidth, MissingImageHeight, (uint8_t*)&MissingPixelData);
+	m_MissingImageTexture->AddToRoot();
 
-	m_DefaultFontSlateBrush.SetResourceObject(DefaultFontTexture);
-	m_MissingImageSlateBrush.SetResourceObject(MissingImageTexture);
+	m_DefaultFontSlateBrush.SetResourceObject(m_DefaultFontTexture);
+	m_MissingImageSlateBrush.SetResourceObject(m_MissingImageTexture);
 
 	FCoreDelegates::OnBeginFrame.AddUObject(this, &UImGuiSubsystem::OnBeginFrame);
 
@@ -82,14 +82,14 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UImGuiSubsystem::Deinitialize()
 {
-	if (DefaultFontTexture)
+	if (m_DefaultFontTexture)
 	{
-		DefaultFontTexture->RemoveFromRoot();
+		m_DefaultFontTexture->RemoveFromRoot();
 	}
 
-	if (MissingImageTexture)
+	if (m_MissingImageTexture)
 	{
-		MissingImageTexture->RemoveFromRoot();
+		m_MissingImageTexture->RemoveFromRoot();
 	}
 }
 
@@ -131,13 +131,13 @@ TSharedPtr<SWindow> UImGuiSubsystem::CreateWindow(const FString& WindowName, con
 
 void UImGuiSubsystem::OnBeginFrame()
 {
-	OneFrameResources.Reset();
-	CreatedSlateBrushes.Reset();
+	m_OneFrameResources.Reset();
+	m_CreatedSlateBrushes.Reset();
 	
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
 	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
 
-	DefaultFontAtlas->TexID = GetDefaultFontTextureID();
+	m_DefaultFontAtlas->TexID = GetDefaultFontTextureID();
 
 	CaptureNextGpuFrames = FMath::Max(0, CaptureNextGpuFrames - 1);
 }
@@ -161,10 +161,10 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 		return {};
 	}
 	
-	uint32 ResourceHandleIndex = OneFrameResources.IndexOfByPredicate([Proxy](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == Proxy->Resource; });
+	uint32 ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([Proxy](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == Proxy->Resource; });
 	if (ResourceHandleIndex == INDEX_NONE)
 	{
-		ResourceHandleIndex = OneFrameResources.Add(FImGuiTextureResource(ResourceHandle));
+		ResourceHandleIndex = m_OneFrameResources.Add(FImGuiTextureResource(ResourceHandle));
 	}
 
 	const FVector2f StartUV = Proxy->StartUV;
@@ -206,7 +206,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(UTexture2D* T
 		return {};
 	}
 
-	FSlateBrush& NewBrush = CreatedSlateBrushes.AddDefaulted_GetRef();
+	FSlateBrush& NewBrush = m_CreatedSlateBrushes.AddDefaulted_GetRef();
 	NewBrush.SetResourceObject(Texture);
 
 	return RegisterOneFrameResource(&NewBrush);
@@ -219,7 +219,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 		return {};
 	}
 
-	const uint32 ResourceHandleIndex = OneFrameResources.Add(FImGuiTextureResource(SlateShaderResource));
+	const uint32 ResourceHandleIndex = m_OneFrameResources.Add(FImGuiTextureResource(SlateShaderResource));
 
 	FImGuiImageBindingParams Params = {};
 	Params.Size = ImVec2(SlateShaderResource->GetWidth(), SlateShaderResource->GetHeight());

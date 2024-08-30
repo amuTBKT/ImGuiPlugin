@@ -54,11 +54,11 @@ class UImGuiSubsystem : public UEngineSubsystem
 	GENERATED_BODY()
 
 public:
-	//USubsystem interface 
+	// USubsystem interface 
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
-	//USubsystem interface END
+	// USubsystem interface END
 
 	// initialization
 	IMGUIRUNTIME_API static bool ShouldEnableImGui();
@@ -81,10 +81,7 @@ public:
 	IMGUIRUNTIME_API FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() { return m_ImGuiMainWindowTickDelegate; }
 	IMGUIRUNTIME_API const FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() const { return m_ImGuiMainWindowTickDelegate; }
 
-	static ImTextureID  IndexToImGuiID(uint32 Index)	{ return reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(Index));  }
-	static uint32		ImGuiIDToIndex(ImTextureID ID)  { return static_cast<uint32>(reinterpret_cast<uintptr_t>(ID));  }
-
-	FORCEINLINE ImFontAtlas* GetDefaultImGuiFontAtlas()		const { return DefaultFontAtlas.Get(); }
+	FORCEINLINE ImFontAtlas* GetDefaultImGuiFontAtlas()		const { return m_DefaultFontAtlas.Get(); }
 	FORCEINLINE ImTextureID  GetDefaultFontTextureID()		const { return m_DefaultFontImageParams.Id; }
 	FORCEINLINE ImTextureID  GetMissingImageTextureID()		const { return m_MissingImageParams.Id; }
 	FORCEINLINE uint32		 GetDefaultFontTextureIndex()	const { return ImGuiIDToIndex(m_DefaultFontImageParams.Id); }
@@ -92,16 +89,19 @@ public:
 	
 	FORCEINLINE const FImGuiTextureResource& GetResource(uint32 Index) const
 	{
-		if (!OneFrameResources.IsValidIndex(Index))
+		if (!m_OneFrameResources.IsValidIndex(Index))
 		{
 			Index = ImGuiIDToIndex(m_MissingImageParams.Id);
 		}
 
-		check(OneFrameResources.IsValidIndex(Index));
-		return OneFrameResources[Index];
+		check(m_OneFrameResources.IsValidIndex(Index));
+		return m_OneFrameResources[Index];
 	}
 	FORCEINLINE const FImGuiTextureResource& GetResource(ImTextureID ID) const { return GetResource(ImGuiIDToIndex(ID)); }
-	FORCEINLINE const TArray<FImGuiTextureResource>& GetOneFrameResources() const { return OneFrameResources; }
+	FORCEINLINE const TArray<FImGuiTextureResource>& GetOneFrameResources() const { return m_OneFrameResources; }
+
+	static ImTextureID  IndexToImGuiID(uint32 Index)	{ return reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(Index)); }
+	static uint32		ImGuiIDToIndex(ImTextureID ID)  { return static_cast<uint32>(reinterpret_cast<uintptr_t>(ID)); }
 
 	bool CaptureGpuFrame() const;
 
@@ -114,9 +114,9 @@ private:
 
 	FOnTickImGuiMainWindowDelegate m_ImGuiMainWindowTickDelegate;
 	
-	UTexture2D* DefaultFontTexture = nullptr;
-	UTexture2D* MissingImageTexture = nullptr;
-	TUniquePtr<ImFontAtlas> DefaultFontAtlas = nullptr;
+	UTexture2D* m_DefaultFontTexture = nullptr;
+	UTexture2D* m_MissingImageTexture = nullptr;
+	TUniquePtr<ImFontAtlas> m_DefaultFontAtlas = nullptr;
 
 	FSlateBrush m_DefaultFontSlateBrush = {};
 	FSlateBrush m_MissingImageSlateBrush = {};
@@ -124,6 +124,6 @@ private:
 	FImGuiImageBindingParams m_DefaultFontImageParams = {};
 	FImGuiImageBindingParams m_MissingImageParams = {};
 
-	TArray<FSlateBrush> CreatedSlateBrushes;
-	TArray<FImGuiTextureResource> OneFrameResources;
+	TArray<FSlateBrush> m_CreatedSlateBrushes;
+	TArray<FImGuiTextureResource> m_OneFrameResources;
 };
