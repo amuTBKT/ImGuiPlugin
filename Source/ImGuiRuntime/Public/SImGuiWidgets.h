@@ -24,15 +24,15 @@ public:
 	void Construct(const FArguments& InArgs, bool UseTranslucentBackground);
 	virtual ~SImGuiWidgetBase();
 
-	//GCObject interface 
+	// GCObject interface 
 	virtual void AddReferencedObjects(FReferenceCollector& Collector) override;
 	virtual FString GetReferencerName() const override;
-	//GCObject interface END
+	// GCObject interface END
 
-	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
+	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override final;
 
 	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyClippingRect,
-		FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const override;
+		FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const override final;
 
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 

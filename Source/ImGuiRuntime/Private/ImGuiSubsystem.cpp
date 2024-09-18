@@ -11,10 +11,10 @@
 #include "Styling/AppStyle.h"
 #include "Framework/Application/SlateApplication.h"
 
-static int32 CaptureNextGpuFrames = 0;
+static int32 GCaptureNextGpuFrames = 0;
 static FAutoConsoleVariableRef CVarRenderCaptureNextImGuiFrame(
 	TEXT("imgui.CaptureGpuFrames"),
-	CaptureNextGpuFrames,
+	GCaptureNextGpuFrames,
 	TEXT("Enable capturing of ImGui rendering for the next N draws"));
 
 UImGuiSubsystem::FOnSubsystemInitialized UImGuiSubsystem::OnSubsystemInitializedDelegate = {};
@@ -36,13 +36,13 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	m_DefaultFontAtlas = MakeUnique<ImFontAtlas>();
 	m_DefaultFontAtlas->Build();
 
-	auto CreateTextureRGBA8 = [](FName DebugName, int32 Width, int32 Height, uint8* ImageData)
+	auto CreateTextureRGBA8 = [](FName DebugName, int32 Width, int32 Height, const uint8* ImageData) -> UTexture2D*
 	{
 		UTexture2D* Texture = UTexture2D::CreateTransient(Width, Height, PF_R8G8B8A8, DebugName);
-		// compression and mip settings
 		Texture->CompressionSettings = TextureCompressionSettings::TC_Default;
-		Texture->LODGroup = TEXTUREGROUP_UI;
 		Texture->SRGB = false;
+		Texture->LODGroup = TEXTUREGROUP_UI;
+		Texture->Filter = TextureFilter::TF_Bilinear;
 		Texture->AddressX = TextureAddress::TA_Clamp;
 		Texture->AddressY = TextureAddress::TA_Clamp;
 
@@ -59,14 +59,13 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	m_DefaultFontAtlas->GetTexDataAsRGBA32(&FontAtlasData, &FontAtlasWidth, &FontAtlasHeight, &BytesPerPixel);
 	check(BytesPerPixel == GPixelFormats[PF_R8G8B8A8].BlockBytes && FontAtlasData);
 
-	// 1x1 magenta texture
-	int32 MissingImageWidth = 1, MissingImageHeight = 1;
-	uint32 MissingPixelData = FColor::Magenta.DWColor();
-
-	m_DefaultFontTexture = CreateTextureRGBA8(FName(TEXT("ImGui_DefaultFontAtlas")), FontAtlasWidth, FontAtlasHeight, FontAtlasData);
+	m_DefaultFontTexture = CreateTextureRGBA8(IMGUI_FNAME("ImGui_DefaultFontAtlas"), FontAtlasWidth, FontAtlasHeight, (uint8_t*)FontAtlasData);
 	m_DefaultFontTexture->AddToRoot();
 
-	m_MissingImageTexture = CreateTextureRGBA8(FName(TEXT("ImGui_MissingImage")), MissingImageWidth, MissingImageHeight, (uint8_t*)&MissingPixelData);
+	// 1x1 magenta texture
+	const int32 MissingImageSize = 1;
+	const uint32 MissingPixelData = FColor::Magenta.DWColor();
+	m_MissingImageTexture = CreateTextureRGBA8(IMGUI_FNAME("ImGui_MissingImage"), MissingImageSize, MissingImageSize, (uint8_t*)&MissingPixelData);
 	m_MissingImageTexture->AddToRoot();
 
 	m_DefaultFontSlateBrush.SetResourceObject(m_DefaultFontTexture);
@@ -139,12 +138,12 @@ void UImGuiSubsystem::OnBeginFrame()
 
 	m_DefaultFontAtlas->TexID = GetDefaultFontTextureID();
 
-	CaptureNextGpuFrames = FMath::Max(0, CaptureNextGpuFrames - 1);
+	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);
 }
 
 bool UImGuiSubsystem::CaptureGpuFrame() const
 {
-	return CaptureNextGpuFrames > 0;
+	return GCaptureNextGpuFrames > 0;
 }
 
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
@@ -242,5 +241,6 @@ FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
 	{
 		return (FSlateShaderResource*)UnderlyingResource.Get<FSlateShaderResource*>();
 	}
+	ensureAlwaysMsgf(false, TEXT("Resource type not handled!"));
 	return nullptr;
 }

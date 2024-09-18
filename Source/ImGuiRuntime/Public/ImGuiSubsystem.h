@@ -87,17 +87,6 @@ public:
 	FORCEINLINE uint32		 GetDefaultFontTextureIndex()	const { return ImGuiIDToIndex(m_DefaultFontImageParams.Id); }
 	FORCEINLINE uint32		 GetMissingImageTextureIndex()	const { return ImGuiIDToIndex(m_MissingImageParams.Id); }
 	
-	FORCEINLINE const FImGuiTextureResource& GetResource(uint32 Index) const
-	{
-		if (!m_OneFrameResources.IsValidIndex(Index))
-		{
-			Index = ImGuiIDToIndex(m_MissingImageParams.Id);
-		}
-
-		check(m_OneFrameResources.IsValidIndex(Index));
-		return m_OneFrameResources[Index];
-	}
-	FORCEINLINE const FImGuiTextureResource& GetResource(ImTextureID ID) const { return GetResource(ImGuiIDToIndex(ID)); }
 	FORCEINLINE const TArray<FImGuiTextureResource>& GetOneFrameResources() const { return m_OneFrameResources; }
 
 	static ImTextureID  IndexToImGuiID(uint32 Index)	{ return reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(Index)); }
