@@ -89,8 +89,8 @@ public:
 	
 	FORCEINLINE const TArray<FImGuiTextureResource>& GetOneFrameResources() const { return m_OneFrameResources; }
 
-	static ImTextureID  IndexToImGuiID(uint32 Index)	{ return reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(Index)); }
-	static uint32		ImGuiIDToIndex(ImTextureID ID)  { return static_cast<uint32>(reinterpret_cast<uintptr_t>(ID)); }
+	static ImTextureID  IndexToImGuiID(uint32 Index)	{ return static_cast<ImTextureID>(Index); }
+	static uint32		ImGuiIDToIndex(ImTextureID ID)  { return static_cast<uint32>(ID); }
 
 	bool CaptureGpuFrame() const;
 

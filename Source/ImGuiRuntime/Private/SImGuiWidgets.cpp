@@ -65,6 +65,8 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs, bool UseTranslucentBa
 	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
+	io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+
 	// TODO: setting?
 	ImGui::StyleColorsDark();
 
