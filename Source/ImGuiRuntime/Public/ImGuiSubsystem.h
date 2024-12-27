@@ -68,6 +68,9 @@ public:
 		return OnSubsystemInitializedDelegate;
 	}
 
+	IMGUIRUNTIME_API const char* GetIniDirectoryPath()	const { return *m_IniDirectoryPath; }
+	IMGUIRUNTIME_API const char* GetIniFilePath()		const { return *m_IniFilePath; }
+
 	// resources
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale);
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FName& SlateBrushName, FVector2D LocalSize, float DrawScale);
@@ -81,7 +84,7 @@ public:
 	IMGUIRUNTIME_API FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() { return m_ImGuiMainWindowTickDelegate; }
 	IMGUIRUNTIME_API const FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() const { return m_ImGuiMainWindowTickDelegate; }
 
-	FORCEINLINE ImFontAtlas* GetDefaultImGuiFontAtlas()		const { return m_DefaultFontAtlas.Get(); }
+	FORCEINLINE ImFontAtlas* GetDefaultImGuiFontAtlas()			  { return &m_DefaultFontAtlas; }
 	FORCEINLINE ImTextureID  GetDefaultFontTextureID()		const { return m_DefaultFontImageParams.Id; }
 	FORCEINLINE ImTextureID  GetMissingImageTextureID()		const { return m_MissingImageParams.Id; }
 	FORCEINLINE uint32		 GetDefaultFontTextureIndex()	const { return ImGuiIDToIndex(m_DefaultFontImageParams.Id); }
@@ -103,9 +106,16 @@ private:
 
 	FOnTickImGuiMainWindowDelegate m_ImGuiMainWindowTickDelegate;
 	
+	FAnsiString m_IniDirectoryPath;
+	FAnsiString m_IniFilePath;
+
+	UPROPERTY()
 	UTexture2D* m_DefaultFontTexture = nullptr;
+	
+	UPROPERTY()
 	UTexture2D* m_MissingImageTexture = nullptr;
-	TUniquePtr<ImFontAtlas> m_DefaultFontAtlas = nullptr;
+
+	ImFontAtlas m_DefaultFontAtlas = {};
 
 	FSlateBrush m_DefaultFontSlateBrush = {};
 	FSlateBrush m_MissingImageSlateBrush = {};

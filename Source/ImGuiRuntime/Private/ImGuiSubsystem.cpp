@@ -5,6 +5,7 @@
 #include "Engine.h"
 #include "Misc/App.h"
 #include "SImGuiWidgets.h"
+#include "HAL/FileManager.h"
 #include "TextureResource.h"
 #include "Widgets/SWindow.h"
 #include "Engine/Texture2D.h"
@@ -33,8 +34,15 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 
-	m_DefaultFontAtlas = MakeUnique<ImFontAtlas>();
-	m_DefaultFontAtlas->Build();
+	// setup ini file path and directory
+	{
+		m_IniDirectoryPath = FAnsiString(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Imgui")));
+		m_IniFilePath = FAnsiString(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Imgui"), TEXT("imgui.ini")));
+
+		IFileManager::Get().MakeDirectory(ANSI_TO_TCHAR(*m_IniDirectoryPath), true);
+	}
+
+	m_DefaultFontAtlas.Build();
 
 	auto CreateTextureRGBA8 = [](FName DebugName, int32 Width, int32 Height, const uint8* ImageData) -> UTexture2D*
 	{
@@ -56,17 +64,15 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	int32 FontAtlasWidth, FontAtlasHeight, BytesPerPixel;
 	unsigned char* FontAtlasData;
-	m_DefaultFontAtlas->GetTexDataAsRGBA32(&FontAtlasData, &FontAtlasWidth, &FontAtlasHeight, &BytesPerPixel);
+	m_DefaultFontAtlas.GetTexDataAsRGBA32(&FontAtlasData, &FontAtlasWidth, &FontAtlasHeight, &BytesPerPixel);
 	check(BytesPerPixel == GPixelFormats[PF_R8G8B8A8].BlockBytes && FontAtlasData);
 
 	m_DefaultFontTexture = CreateTextureRGBA8(IMGUI_FNAME("ImGui_DefaultFontAtlas"), FontAtlasWidth, FontAtlasHeight, (uint8_t*)FontAtlasData);
-	m_DefaultFontTexture->AddToRoot();
 
 	// 1x1 magenta texture
 	const int32 MissingImageSize = 1;
 	const uint32 MissingPixelData = FColor::Magenta.DWColor();
 	m_MissingImageTexture = CreateTextureRGBA8(IMGUI_FNAME("ImGui_MissingImage"), MissingImageSize, MissingImageSize, (uint8_t*)&MissingPixelData);
-	m_MissingImageTexture->AddToRoot();
 
 	m_DefaultFontSlateBrush.SetResourceObject(m_DefaultFontTexture);
 	m_MissingImageSlateBrush.SetResourceObject(m_MissingImageTexture);
@@ -81,15 +87,7 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UImGuiSubsystem::Deinitialize()
 {
-	if (m_DefaultFontTexture)
-	{
-		m_DefaultFontTexture->RemoveFromRoot();
-	}
-
-	if (m_MissingImageTexture)
-	{
-		m_MissingImageTexture->RemoveFromRoot();
-	}
+	Super::Deinitialize();
 }
 
 bool UImGuiSubsystem::ShouldEnableImGui()
@@ -136,7 +134,7 @@ void UImGuiSubsystem::OnBeginFrame()
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
 	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
 
-	m_DefaultFontAtlas->TexID = GetDefaultFontTextureID();
+	m_DefaultFontAtlas.TexID = GetDefaultFontTextureID();
 
 	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);
 }

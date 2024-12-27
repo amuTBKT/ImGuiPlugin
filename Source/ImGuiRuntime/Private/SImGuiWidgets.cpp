@@ -60,12 +60,14 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs, bool UseTranslucentBa
 
 	m_ImGuiContext = ImGui::CreateContext(ImGuiSubsystem->GetDefaultImGuiFontAtlas());
 
-	ImGuiIO& io = GetImGuiIO();
-	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-	//io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+	ImGuiIO& IO = GetImGuiIO();
+	IO.IniFilename = ImGuiSubsystem->GetIniFilePath();
 
-	io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 
 	// TODO: setting?
 	ImGui::StyleColorsDark();
