@@ -168,7 +168,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 			{
 				struct FDrawListDeleter
 				{
-					void operator()(ImDrawList* Ptr) { IM_FREE(Ptr); }
+					void operator()(ImDrawList* Ptr) { IM_DELETE(Ptr); }
 				};
 				using FDrawListPtr = TUniquePtr<ImDrawList, FDrawListDeleter>;
 				struct FTextureInfo
