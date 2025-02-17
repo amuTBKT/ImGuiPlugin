@@ -244,8 +244,12 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 			ENQUEUE_RENDER_COMMAND(RenderImGui)(
 				[RenderData, RT_Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
 				{
-					FRHIResourceCreateInfo VertexCreateInfo(TEXT("ImGui_VertexBuffer"));
-					FBufferRHIRef VertexBuffer = RHICmdList.CreateVertexBuffer(RenderData->TotalVtxCount * sizeof(ImDrawVert), BUF_Volatile, VertexCreateInfo);
+					const FRHIBufferCreateDesc VertexBufferDesc =
+						FRHIBufferCreateDesc::CreateVertex<ImDrawVert>(TEXT("ImGui_VertexBuffer"), RenderData->TotalVtxCount)
+						.AddUsage(EBufferUsageFlags::Volatile)
+						.SetInitialState(ERHIAccess::VertexOrIndexBuffer)
+						.SetInitActionNone();
+					FBufferRHIRef VertexBuffer = RHICmdList.CreateBuffer(VertexBufferDesc);
 					if (ImDrawVert* VertexDst = (ImDrawVert*)RHICmdList.LockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
 					{
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
@@ -256,8 +260,12 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						RHICmdList.UnlockBuffer(VertexBuffer);
 					}
 
-					FRHIResourceCreateInfo IndexCreateInfo(TEXT("ImGui_IndexBuffer"));
-					FBufferRHIRef IndexBuffer = RHICmdList.CreateIndexBuffer(sizeof(ImDrawIdx), RenderData->TotalIdxCount * sizeof(ImDrawIdx), BUF_Volatile, IndexCreateInfo);
+					const FRHIBufferCreateDesc IndexBufferDesc =
+						FRHIBufferCreateDesc::CreateIndex<ImDrawIdx>(TEXT("ImGui_IndexBuffer"), RenderData->TotalIdxCount)
+						.AddUsage(EBufferUsageFlags::Volatile)
+						.SetInitialState(ERHIAccess::VertexOrIndexBuffer)
+						.SetInitActionNone();
+					FBufferRHIRef IndexBuffer = RHICmdList.CreateBuffer(IndexBufferDesc);
 					if (ImDrawIdx* IndexDst = (ImDrawIdx*)RHICmdList.LockBuffer(IndexBuffer, 0, RenderData->TotalIdxCount * sizeof(ImDrawIdx), RLM_WriteOnly))
 					{
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
