@@ -26,6 +26,7 @@ public class ImGui : ModuleRules
 
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/imgui"));
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/implot"));
+		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/remoteimgui"));
 
 		if (Target.Configuration == UnrealTargetConfiguration.Debug)
 		{

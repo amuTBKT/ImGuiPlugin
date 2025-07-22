@@ -6,6 +6,7 @@
 #include "ImGuiPluginTypes.h"
 #include "Styling/SlateBrush.h"
 #include "ImGuiPluginDelegates.h"
+#include "Containers/AnsiString.h"
 #include "Subsystems/EngineSubsystem.h"
 #include "Textures/SlateShaderResource.h"
 #include "ImGuiSubsystem.generated.h"
@@ -17,8 +18,10 @@ class FSpawnTabArgs;
 
 class SWindow;
 class UTexture2D;
+class SImGuiWidgetBase;
 class FAutoConsoleCommand;
 class FSlateShaderResource;
+class FImGuiRemoteConnection;
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
 
@@ -97,11 +100,19 @@ public:
 
 	bool CaptureGpuFrame() const;
 
-private:
-	void OnBeginFrame();
+	bool IsRemoteConnectionActive() const;
+	void RegisterWidgetForRemoteClient(TSharedPtr<SImGuiWidgetBase> Widget);
 
 private:
-	DECLARE_MULTICAST_DELEGATE_OneParam(FOnSubsystemInitialized, UImGuiSubsystem* /* Subsystem */)
+	void OnBeginFrame();
+	void OnEndFrame();
+
+	void OnRemoteConnectionEstablished();
+	void OnRemoteConnectionClosed();
+	void TickRemoteConnection();
+
+private:
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnSubsystemInitialized, UImGuiSubsystem* /*Subsystem*/)
 	static FOnSubsystemInitialized OnSubsystemInitializedDelegate;
 
 	FOnTickImGuiMainWindowDelegate m_ImGuiMainWindowTickDelegate;
@@ -125,4 +136,7 @@ private:
 
 	TArray<FSlateBrush> m_CreatedSlateBrushes;
 	TArray<FImGuiTextureResource> m_OneFrameResources;
+
+	TArray<TWeakPtr<SImGuiWidgetBase>> RegisteredImGuiWidgets;
+	FImGuiRemoteConnection* RemoteConnection = nullptr;
 };

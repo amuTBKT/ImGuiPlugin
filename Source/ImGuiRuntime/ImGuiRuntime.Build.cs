@@ -20,8 +20,9 @@ public class ImGuiRuntime : ModuleRules
 				"InputCore",
 				"RenderCore",
 				"CoreUObject",
-				"ImGuiShaders"
-			}
+				"ImGuiShaders",
+                "WebSocketNetworking",
+            }
 		);
 
 		PublicDependencyModuleNames.AddRange( new string[] { "ImGui" });

@@ -3,6 +3,7 @@
 #include "SImGuiWidgets.h"
 #include "ImGuiShaders.h"
 #include "ImGuiSubsystem.h"
+#include "ImGuiRemoteConnection.h"
 
 #include "RHI.h"
 #include "RHIStaticStates.h"
@@ -18,9 +19,6 @@
 #include "Application/ThrottleManager.h"
 
 #include "RenderCaptureInterface.h"
-
-DECLARE_CYCLE_STAT(TEXT("ImGui Tick"), STAT_TickWidget, STATGROUP_ImGui);
-DECLARE_CYCLE_STAT(TEXT("ImGui Render"), STAT_RenderWidget, STATGROUP_ImGui);
 
 class FImGuiVertexDeclaration : public FRenderResource
 {
@@ -86,6 +84,8 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs, bool UseTranslucentBa
 
 	// only need to clear the RT when using translucent window, otherwise ImGui fullscreen widget pass should clear the RT.
 	m_ClearRenderTargetEveryFrame = UseTranslucentBackground;
+
+	ImGuiSubsystem->RegisterWidgetForRemoteClient(SharedThis(this));
 }
 
 SImGuiWidgetBase::~SImGuiWidgetBase()
@@ -117,10 +117,17 @@ FString SImGuiWidgetBase::GetReferencerName() const
 
 void SImGuiWidgetBase::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
-	SCOPE_CYCLE_COUNTER(STAT_TickWidget);
+	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("ImGui Tick Widget"), STAT_TickWidget, STATGROUP_ImGui);
 
 	Super::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 	
+	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
+
+	if (ImGuiSubsystem->IsRemoteConnectionActive())
+	{
+		return Super::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+	}
+
 	ImGuiIO& IO = GetImGuiIO();
 	
 	// new frame setup
@@ -143,13 +150,20 @@ void SImGuiWidgetBase::Tick(const FGeometry& AllottedGeometry, const double InCu
 		}
 	}
 
-	TickInternal(AllottedGeometry, InCurrentTime, InDeltaTime);
+	TickInternal(InDeltaTime);
 }
 
 int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyClippingRect,
 	FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const
 {
-	SCOPE_CYCLE_COUNTER(STAT_RenderWidget);
+	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("ImGui Render Widget"), STAT_RenderWidget, STATGROUP_ImGui);
+
+	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
+
+	if (ImGuiSubsystem->IsRemoteConnectionActive())
+	{
+		return Super::OnPaint(Args, AllottedGeometry, MyClippingRect, OutDrawElements, LayerId, WidgetStyle, bParentEnabled);
+	}
 
 	ImGuiIO& IO = GetImGuiIO();
 
@@ -160,8 +174,6 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 	{
 		if (DrawData->TotalVtxCount > 0 && DrawData->TotalIdxCount > 0)
 		{
-			UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
-			
 			RenderCaptureInterface::FScopedCapture RenderCapture(ImGuiSubsystem->CaptureGpuFrame(), TEXT("ImGuiWidget"));
 
 			struct FRenderData : FNoncopyable
@@ -244,12 +256,19 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 			ENQUEUE_RENDER_COMMAND(RenderImGui)(
 				[RenderData, RT_Resource = m_ImGuiRT->GetResource()](FRHICommandListImmediate& RHICmdList)
 				{
-					const FRHIBufferCreateDesc VertexBufferDesc =
+#if ((ENGINE_MAJOR_VERSION * 100u + ENGINE_MINOR_VERSION) > 505) //(Version > 5.5)
+					FRHIBufferCreateDesc VertexBufferDesc =
 						FRHIBufferCreateDesc::CreateVertex<ImDrawVert>(TEXT("ImGui_VertexBuffer"), RenderData->TotalVtxCount)
-						.AddUsage(EBufferUsageFlags::Volatile)
+						.AddUsage(EBufferUsageFlags::Volatile | EBufferUsageFlags::VertexBuffer)
 						.SetInitialState(ERHIAccess::VertexOrIndexBuffer)
 						.SetInitActionNone();
 					FBufferRHIRef VertexBuffer = RHICmdList.CreateBuffer(VertexBufferDesc);
+#else
+					FRHIResourceCreateInfo VertexBufferCreateInfo(TEXT("ImGui_VertexBuffer"));
+					FBufferRHIRef VertexBuffer = RHICmdList.CreateBuffer(
+						RenderData->TotalVtxCount * sizeof(ImDrawVert), EBufferUsageFlags::Volatile | EBufferUsageFlags::VertexBuffer,
+						sizeof(ImDrawVert), ERHIAccess::VertexOrIndexBuffer, VertexBufferCreateInfo);
+#endif
 					if (ImDrawVert* VertexDst = (ImDrawVert*)RHICmdList.LockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
 					{
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
@@ -260,12 +279,19 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						RHICmdList.UnlockBuffer(VertexBuffer);
 					}
 
-					const FRHIBufferCreateDesc IndexBufferDesc =
+#if ((ENGINE_MAJOR_VERSION * 100u + ENGINE_MINOR_VERSION) > 505) //(Version > 5.5)
+					FRHIBufferCreateDesc IndexBufferDesc =
 						FRHIBufferCreateDesc::CreateIndex<ImDrawIdx>(TEXT("ImGui_IndexBuffer"), RenderData->TotalIdxCount)
-						.AddUsage(EBufferUsageFlags::Volatile)
+						.AddUsage(EBufferUsageFlags::Volatile | EBufferUsageFlags::IndexBuffer)
 						.SetInitialState(ERHIAccess::VertexOrIndexBuffer)
 						.SetInitActionNone();
 					FBufferRHIRef IndexBuffer = RHICmdList.CreateBuffer(IndexBufferDesc);
+#else
+					FRHIResourceCreateInfo IndexBufferCreateInfo(TEXT("ImGui_IndexBuffer"));
+					FBufferRHIRef IndexBuffer = RHICmdList.CreateBuffer(
+						RenderData->TotalIdxCount * sizeof(ImDrawIdx), EBufferUsageFlags::Volatile | EBufferUsageFlags::IndexBuffer,
+						sizeof(ImDrawIdx), ERHIAccess::VertexOrIndexBuffer, IndexBufferCreateInfo);
+#endif
 					if (ImDrawIdx* IndexDst = (ImDrawIdx*)RHICmdList.LockBuffer(IndexBuffer, 0, RenderData->TotalIdxCount * sizeof(ImDrawIdx), RLM_WriteOnly))
 					{
 						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
@@ -385,8 +411,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 					}
 					RHICmdList.EndRenderPass();
 					RHICmdList.Transition(FRHITransitionInfo(RT_Resource->TextureRHI, ERHIAccess::RTV, ERHIAccess::SRVGraphicsPixel));
-				}
-			);
+				});
 
 			const FSlateRenderTransform WidgetOffsetTransform = FTransform2f(1.f, { 0.f, 0.f });
 			const FSlateRect DrawRect = AllottedGeometry.GetRenderBoundingRect();
@@ -422,6 +447,35 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 	}
 
 	return Super::OnPaint(Args, AllottedGeometry, MyClippingRect, OutDrawElements, LayerId, WidgetStyle, bParentEnabled);
+}
+
+ImDrawData* SImGuiWidgetBase::TickForRemoteClient(const FImGuiRemoteConnection& RemoteConnection, float InDeltaTime)
+{
+	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("ImGui Remote Tick Widget"), STAT_TickWidget_Remote, STATGROUP_ImGui);
+
+	check(RemoteConnection.IsConnected());
+
+	// new frame setup
+	{
+		ImGuiIO& IO = GetImGuiIO();
+		RemoteConnection.CopyClientState(IO);
+		IO.DeltaTime = InDeltaTime;
+
+		ImGui::NewFrame();
+	}
+
+	// tick widgets
+	TickInternal(InDeltaTime);
+
+	// render
+	{
+		//NOTE: TickInternal can unset the current imgui context
+		ImGuiIO& IO = GetImGuiIO();
+
+		ImGui::Render();
+	}
+
+	return ImGui::GetDrawData();
 }
 
 #pragma region SLATE_INPUT
@@ -645,6 +699,12 @@ FReply SImGuiWidgetBase::OnMouseMove(const FGeometry& MyGeometry, const FPointer
 	return FReply::Handled();
 }
 
+int32 SImGuiWidgetBase::GetMouseCursor() const
+{
+	ImGuiIO& IO = GetImGuiIO();
+	return static_cast<int32>(ImGui::GetMouseCursor());
+}
+
 FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& MyGeometry, const FPointerEvent& CursorEvent) const
 {
 	static constexpr EMouseCursor::Type ImGuiToUMGCursor[ImGuiMouseCursor_COUNT] =
@@ -672,7 +732,7 @@ void SImGuiMainWindowWidget::Construct(const FArguments& InArgs)
 	Super::Construct(InArgs, /*UseTranslucentBackground=*/false);
 }
 
-void SImGuiMainWindowWidget::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+void SImGuiMainWindowWidget::TickInternal(float InDeltaTime)
 {
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 	if (ImGuiSubsystem->GetMainWindowTickDelegate().IsBound())
@@ -708,7 +768,7 @@ void SImGuiWidget::Construct(const FArguments& InArgs)
 	m_AllowUndocking = InArgs._AllowUndocking.Get();
 }
 
-void SImGuiWidget::TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+void SImGuiWidget::TickInternal(float InDeltaTime)
 {
 	const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
 	if (!m_AllowUndocking)

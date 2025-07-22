@@ -9,7 +9,9 @@
 #include "ImGuiPluginDelegates.h"
 
 struct ImGuiIO;
+struct ImDrawData;
 struct ImGuiContext;
+class FImGuiRemoteConnection;
 class UTextureRenderTarget2D;
 
 class IMGUIRUNTIME_API SImGuiWidgetBase : public SCompoundWidget, public FGCObject
@@ -33,6 +35,9 @@ public:
 
 	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyClippingRect,
 		FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const override final;
+
+	int32 GetMouseCursor() const;
+	ImDrawData* TickForRemoteClient(const FImGuiRemoteConnection& RemoteConnection, float InDeltaTime);
 
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 
@@ -60,7 +65,7 @@ private:
 	FORCEINLINE void AddMouseButtonEvent(ImGuiIO& IO, FKey MouseKey, bool IsDown);
 	FORCEINLINE void AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown);
 
-	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) = 0;
+	virtual void TickInternal(float InDeltaTime) = 0;
 
 protected:
 	FSlateBrush m_ImGuiSlateBrush;
@@ -83,7 +88,7 @@ public:
 	void Construct(const FArguments& InArgs);
 
 private:
-	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
+	virtual void TickInternal(float InDeltaTime) override;
 };
 
 /* Dynamic widgets (ColorPicker etc..) */
@@ -103,7 +108,7 @@ public:
 	void Construct(const FArguments& InArgs);
 
 private:
-	virtual void TickInternal(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
+	virtual void TickInternal(float InDeltaTime) override;
 
 private:
 	FOnTickImGuiWidgetDelegate m_OnTickDelegate = {};
