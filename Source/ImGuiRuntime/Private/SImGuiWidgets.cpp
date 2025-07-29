@@ -12,13 +12,13 @@
 #include "GlobalRenderResources.h"
 #include "CommonRenderResources.h"
 #include "SlateUTextureResource.h"
+#include "RenderCaptureInterface.h"
 #include "Engine/TextureRenderTarget2D.h"
 
 #include "Input/Events.h"
 #include "InputCoreTypes.h"
 #include "Application/ThrottleManager.h"
-
-#include "RenderCaptureInterface.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 class FImGuiVertexDeclaration : public FRenderResource
 {
