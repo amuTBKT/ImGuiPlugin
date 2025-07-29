@@ -11,7 +11,7 @@
 	"MarketplaceURL" : "",
 	"SupportURL" : "https://github.com/amuTBKT/ImGuiPlugin/issues",
 	"EnabledByDefault" : true,
-	"CanContainContent" : false,
+	"CanContainContent" : true,
 	"IsBetaVersion" : false,
 	"Installed" : false,
 	"Modules": [

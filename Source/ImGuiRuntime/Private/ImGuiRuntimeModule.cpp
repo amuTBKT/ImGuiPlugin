@@ -7,6 +7,7 @@
 #include "SImGuiWidgets.h"
 #include "ImGuiSubsystem.h"
 #include "HAL/IConsoleManager.h"
+#include "Interfaces/IPluginManager.h"
 #include "Framework/Application/SlateApplication.h"
 
 #if WITH_EDITOR
@@ -17,7 +18,40 @@
 #include "Editor/WorkspaceMenuStructure/Public/WorkspaceMenuStructureModule.h"
 #endif
 
+#include "Styling/AppStyle.h"
+#include "Styling/SlateStyle.h"
+#include "Styling/SlateStyleMacros.h"
+#include "Styling/SlateStyleRegistry.h"
+
 #define LOCTEXT_NAMESPACE "ImGuiPlugin"
+
+class FImGuiStyleSet final : public FSlateStyleSet
+{
+public:
+	FImGuiStyleSet()
+		: FSlateStyleSet("ImGuiStyle")
+	{
+		SetParentStyleName(FAppStyle::GetAppStyleSetName());
+
+		const FString IconDirectory = FPaths::Combine(IPluginManager::Get().FindPlugin(TEXT("ImGuiPlugin"))->GetBaseDir(), TEXT("Content/Editor/Slate"));
+		SetContentRoot(IconDirectory);
+		SetCoreContentRoot(FPaths::EngineContentDir() / TEXT("Slate"));
+
+		const FVector2D Icon16x16 = FVector2D(16.0, 16.0);
+
+		Set("Icon.EngineFolder", new IMAGE_BRUSH_SVG("Icons/icon_engine_content", Icon16x16));
+		Set("Icon.ProjectFolder", new IMAGE_BRUSH_SVG("Icons/icon_project_content", Icon16x16));
+		Set("Icon.PluginFolder", new IMAGE_BRUSH_SVG("Icons/icon_plugin_content", Icon16x16));
+		Set("Icon.DeveloperFolder", new IMAGE_BRUSH_SVG("Icons/icon_developer_content", Icon16x16));
+
+		FSlateStyleRegistry::RegisterSlateStyle(*this);
+	}
+
+	~FImGuiStyleSet()
+	{
+		FSlateStyleRegistry::UnRegisterSlateStyle(*this);
+	}
+};
 
 class FImGuiRuntimeModule : public IModuleInterface
 {
@@ -53,8 +87,9 @@ private:
 						TEXT("Opens ImGui window."),
 						FConsoleCommandDelegate::CreateRaw(this, &FImGuiRuntimeModule::OpenImGuiMainWindow));
 				}
-			}
-		);
+			});
+
+		ImGuiStyleSet = MakeUnique<FImGuiStyleSet>();
 	}
 
 	virtual void ShutdownModule() override
@@ -66,8 +101,9 @@ private:
 		}
 #endif
 
-		m_OpenImGuiWindowCommand = nullptr;
-		m_ImGuiMainWindow = nullptr;
+		m_OpenImGuiWindowCommand.Reset();
+		m_ImGuiMainWindow.Reset();
+		ImGuiStyleSet.Reset();
 	}
 
 #if WITH_EDITOR
@@ -120,6 +156,8 @@ private:
 
 	TUniquePtr<FAutoConsoleCommand> m_OpenImGuiWindowCommand = nullptr;
 	TSharedPtr<SWindow> m_ImGuiMainWindow = nullptr;
+
+	TUniquePtr<FImGuiStyleSet> ImGuiStyleSet = nullptr;
 };
 
 #if WITH_EDITOR
