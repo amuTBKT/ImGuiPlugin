@@ -88,12 +88,12 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	m_DefaultFontAtlas.GetTexDataAsRGBA32(&FontAtlasData, &FontAtlasWidth, &FontAtlasHeight, &BytesPerPixel);
 	check(BytesPerPixel == GPixelFormats[PF_R8G8B8A8].BlockBytes && FontAtlasData);
 
-	m_DefaultFontTexture = CreateTextureRGBA8(IMGUI_FNAME("ImGui_DefaultFontAtlas"), FontAtlasWidth, FontAtlasHeight, (uint8_t*)FontAtlasData);
+	m_DefaultFontTexture = CreateTextureRGBA8(FName("ImGui_DefaultFontAtlas"), FontAtlasWidth, FontAtlasHeight, (uint8_t*)FontAtlasData);
 
 	// 1x1 magenta texture
 	const int32 MissingImageSize = 1;
 	const uint32 MissingPixelData = FColor::Magenta.DWColor();
-	m_MissingImageTexture = CreateTextureRGBA8(IMGUI_FNAME("ImGui_MissingImage"), MissingImageSize, MissingImageSize, (uint8_t*)&MissingPixelData);
+	m_MissingImageTexture = CreateTextureRGBA8(FName("ImGui_MissingImage"), MissingImageSize, MissingImageSize, (uint8_t*)&MissingPixelData);
 
 	m_DefaultFontSlateBrush.SetResourceObject(m_DefaultFontTexture);
 	m_MissingImageSlateBrush.SetResourceObject(m_MissingImageTexture);
@@ -216,11 +216,6 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 	return Params;
 }
 
-FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FName& SlateBrushName, FVector2D LocalSize, float DrawScale)
-{
-	return RegisterOneFrameResource(FAppStyle::GetBrush(SlateBrushName), LocalSize, DrawScale);
-}
-
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
 {
 	if (!SlateBrush)
@@ -229,11 +224,6 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 	}
 
 	return RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f);
-}
-
-FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FName& SlateBrushName)
-{
-	return RegisterOneFrameResource(FAppStyle::GetBrush(SlateBrushName));
 }
 
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(UTexture2D* Texture)

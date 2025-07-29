@@ -13,6 +13,12 @@
 
 #define IMGUI_FNAME(Name) [](){ static FName StaticFName(Name); return StaticFName; }()
 
+// returns FSlateBrush for specified icon and style name
+#define IMGUI_ICON(StyleName, IconName) [](){ static const FSlateBrush* Brush = FSlateIcon(FName(StyleName), FName(IconName)).GetIcon(); return Brush; }()
+
+// commonly used function to get icon for the default app style
+#define IMGUI_EDITOR_ICON(IconName) IMGUI_ICON("EditorStyle", IconName)
+
 // since the module is built as DLL, we need to set context before making ImGui calls.
 struct FImGuiTickScope final : FNoncopyable
 {
