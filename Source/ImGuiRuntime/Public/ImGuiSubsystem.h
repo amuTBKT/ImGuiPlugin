@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "ImGuiPluginTypes.h"
 #include "Styling/SlateBrush.h"
+#include "Textures/SlateIcon.h"
 #include "ImGuiPluginDelegates.h"
 #include "Containers/AnsiString.h"
 #include "Subsystems/EngineSubsystem.h"
