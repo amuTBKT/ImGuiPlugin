@@ -14,7 +14,7 @@
 	"CanContainContent" : false,
 	"IsBetaVersion" : false,
 	"Installed" : false,
-	"Modules":[
+	"Modules": [
 		{
 			"Name": "ImGuiShaders",
 			"Type": "Runtime",
@@ -28,6 +28,12 @@
 			"LoadingPhase": "PreDefault",
 			"TargetDenyList": [ "Server", "Program" ],
 			"TargetConfigurationDenyList": [ "Shipping" ]
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "WebSocketNetworking",
+			"Enabled": true
 		}
 	]
 }
