@@ -44,6 +44,9 @@ public:
 		Set("Icon.PluginFolder", new IMAGE_BRUSH_SVG("Icons/icon_plugin_content", Icon16x16));
 		Set("Icon.DeveloperFolder", new IMAGE_BRUSH_SVG("Icons/icon_developer_content", Icon16x16));
 		Set("Icon.DropDownArrow", new IMAGE_BRUSH_SVG("Icons/icon_dropdown_arrow", Icon16x16));
+		Set("Icon.UseSelectedAsset", new IMAGE_BRUSH_SVG("Icons/icon_use_selected_asset", Icon16x16));
+		Set("Icon.ResetToDefault", new IMAGE_BRUSH_SVG("Icons/icon_reset_to_default", Icon16x16));
+		Set("Icon.BrowseToAsset", new IMAGE_BRUSH_SVG("Icons/icon_browse_to_asset", Icon16x16));
 
 		FSlateStyleRegistry::RegisterSlateStyle(*this);
 	}
