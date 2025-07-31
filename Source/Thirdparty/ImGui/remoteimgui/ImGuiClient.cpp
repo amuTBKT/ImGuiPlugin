@@ -1,5 +1,5 @@
 #ifndef __EMSCRIPTEN__
-#error "__EMSCRIPTEN__ not defined!"
+#error __EMSCRIPTEN__ not defined!
 #endif
 
 #include <string>

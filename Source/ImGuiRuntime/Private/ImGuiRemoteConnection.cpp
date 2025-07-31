@@ -3,6 +3,7 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "ImGuiSubsystem.h"
+#include "Misc/Compression.h"
 #include "INetworkingWebSocket.h"
 #include "Modules/ModuleManager.h"
 #include "IWebSocketNetworkingModule.h"
