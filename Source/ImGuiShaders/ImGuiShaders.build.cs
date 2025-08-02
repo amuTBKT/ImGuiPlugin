@@ -8,7 +8,7 @@ namespace UnrealBuildTool.Rules
 	{
 		public ImGuiShaders(ReadOnlyTargetRules Target) : base(Target)
 		{
-            //PCHUsage = PCHUsageMode.NoPCHs;
+            PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
             PublicDependencyModuleNames.AddRange(
 	            new string[]

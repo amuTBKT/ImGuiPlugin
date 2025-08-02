@@ -7,9 +7,9 @@ public class ImGuiRuntime : ModuleRules
 {
 	public ImGuiRuntime(ReadOnlyTargetRules Target) : base(Target)
 	{
-		//PCHUsage = PCHUsageMode.NoPCHs;
+        PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PrivateDependencyModuleNames.AddRange(
+        PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
 				"RHI",
