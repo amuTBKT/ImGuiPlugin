@@ -117,7 +117,7 @@ FString SImGuiWidgetBase::GetReferencerName() const
 
 void SImGuiWidgetBase::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
 {
-	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("ImGui Tick Widget"), STAT_TickWidget, STATGROUP_ImGui);
+	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Tick Widget"), STAT_ImGui_TickWidget, STATGROUP_ImGui);
 
 	Super::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
 	
@@ -156,7 +156,7 @@ void SImGuiWidgetBase::Tick(const FGeometry& AllottedGeometry, const double InCu
 int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyClippingRect,
 	FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const
 {
-	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("ImGui Render Widget"), STAT_RenderWidget, STATGROUP_ImGui);
+	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget"), STAT_ImGui_RenderWidget, STATGROUP_ImGui);
 
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 
@@ -451,7 +451,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 
 ImDrawData* SImGuiWidgetBase::TickForRemoteClient(const FImGuiRemoteConnection& RemoteConnection, float InDeltaTime)
 {
-	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("ImGui Remote Tick Widget"), STAT_TickWidget_Remote, STATGROUP_ImGui);
+	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Remote - Tick Widget"), STAT_ImGuiRemote_TickWidget, STATGROUP_ImGui);
 
 	check(RemoteConnection.IsConnected());
 

@@ -310,7 +310,7 @@ void UImGuiSubsystem::OnRemoteConnectionClosed()
 
 void UImGuiSubsystem::TickRemoteConnection()
 {
-	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("ImGui Remote Tick"), STAT_TickWidgets_Remote, STATGROUP_ImGui);
+	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Remote - Tick Connection"), STAT_ImGuiRemote_TickConnection, STATGROUP_ImGui);
 
 	if (!RemoteConnection)
 	{
@@ -339,7 +339,7 @@ void UImGuiSubsystem::TickRemoteConnection()
 			const ImDrawData* DrawData = WidgetPtr->TickForRemoteClient(*RemoteConnection, DeltaTime);
 
 			{
-				DECLARE_SCOPE_CYCLE_COUNTER(TEXT("ImGui Remote Send Draw Data"), STAT_SendDrawData_Remote, STATGROUP_ImGui);
+				DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Remote - Send Draw Data"), STAT_ImGuiRemote_SendDrawData, STATGROUP_ImGui);
 
 				RemoteConnection->SendDrawData(DrawData, WidgetPtr->GetMouseCursor());
 			}
