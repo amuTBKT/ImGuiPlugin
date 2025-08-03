@@ -10,8 +10,7 @@ A simple plugin for integrating [Dear ImGui](https://github.com/ocornut/imgui) i
 * Clone the repo in GameProject/Plugins folder along with submodule dependency<br>
   `git clone --recurse-submodules git@github.com:amuTBKT/ImGuiPlugin.git`
 * ImGui and Implot binaries need to be compiled separately. The way unreal build setup works makes it difficult to include third party libraries, so they have to be compiled separately.<br>
-  `Source/Thirdparty/ImGui/Build.bat`, might require some modifications to patch cmake reference and setting compiler options (visual studio version etc) <br>
-  Running the batch script should generate required libs under "/ImGuiPlugin/Source/Thirdparty/ImGui/Binaries" and "/ImGuiPlugin/Source/Thirdparty/ImGui/Intermediate" directories.
+  Calling `Source/Thirdparty/ImGui/Build.bat` from MSVC command prompt should generate the required libs under "/ImGuiPlugin/Source/Thirdparty/ImGui/Binaries" directory.
 * Include the plugin in your own modules.
 
 ## :construction_worker:Usage

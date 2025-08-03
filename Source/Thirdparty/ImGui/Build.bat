@@ -1,6 +1,28 @@
-REM Copyright 2024 Amit Kumar Mehar. All Rights Reserved.
+@echo off
+cd /D "%~dp0"
 
-cmake . -B Intermediate
+set INCLUDE_PATH="imgui/"
+set SOURCE_FILE="ImGuiLib.cpp"
+set DEFINES=/DIMGUI_DISABLE_OBSOLETE_FUNCTIONS=1
 
-cmake --build Intermediate --config Debug
-cmake --build Intermediate --config Release
+set CL_OUTPUT_FILE="Intermediate\ImGuiLib.obj"
+set CL_CLEANUP_INTERMEDIATES=if exist %CL_OUTPUT_FILE% del %CL_OUTPUT_FILE%
+set CL_COMMON=/nologo /c /Fo%CL_OUTPUT_FILE% %SOURCE_FILE% /I%INCLUDE_PATH% %DEFINES%
+set CL_DEBUG=call cl /Od /Ob1 /Zi /Fd"Binaries/Debug/ImGui.pdb" %CL_COMMON%
+set CL_RELEASE=call cl /O2 %CL_COMMON%
+set CL_LINK_DEBUG=lib /nologo /out:"Binaries/Debug/ImGui.lib" %CL_OUTPUT_FILE%
+set CL_LINK_RELEASE=lib /nologo /out:"Binaries/Release/ImGui.lib" %CL_OUTPUT_FILE%
+
+if not exist Intermediate mkdir Intermediate
+if not exist Binaries\Debug mkdir Binaries\Debug
+if not exist Binaries\Release mkdir Binaries\Release
+
+echo Compiling Debug Config...
+%CL_CLEANUP_INTERMEDIATES%
+%CL_DEBUG%
+%CL_LINK_DEBUG%
+
+echo Compiling Release Config...
+%CL_CLEANUP_INTERMEDIATES%
+%CL_RELEASE%
+%CL_LINK_RELEASE%
