@@ -43,11 +43,13 @@ public:
 		Set("Icon.ProjectFolder", new IMAGE_BRUSH_SVG("Icons/icon_project_content", Icon16x16));
 		Set("Icon.PluginFolder", new IMAGE_BRUSH_SVG("Icons/icon_plugin_content", Icon16x16));
 		Set("Icon.DeveloperFolder", new IMAGE_BRUSH_SVG("Icons/icon_developer_content", Icon16x16));
+		Set("Icon.AssetCollection", new IMAGE_BRUSH_SVG("Icons/icon_collection_content", Icon16x16));
 		Set("Icon.LocalizedFolder", new IMAGE_BRUSH_SVG("Icons/icon_localized_content", Icon16x16));
 		Set("Icon.DropDownArrow", new IMAGE_BRUSH_SVG("Icons/icon_dropdown_arrow", Icon16x16));
 		Set("Icon.UseSelectedAsset", new IMAGE_BRUSH_SVG("Icons/icon_use_selected_asset", Icon16x16));
 		Set("Icon.ResetToDefault", new IMAGE_BRUSH_SVG("Icons/icon_reset_to_default", Icon16x16));
 		Set("Icon.BrowseToAsset", new IMAGE_BRUSH_SVG("Icons/icon_browse_to_asset", Icon16x16));
+		Set("Icon.FallbackAssetIcon", new IMAGE_BRUSH_SVG("Icons/icon_fallback_asset_icon", Icon16x16));
 
 		FSlateStyleRegistry::RegisterSlateStyle(*this);
 	}
