@@ -74,11 +74,15 @@ private:
 		SETUP_DEFAULT_IMGUI_ALLOCATOR();
 
 #if WITH_EDITOR
-		FTabSpawnerEntry& SpawnerEntry = FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateStatic(&FImGuiRuntimeModule::SpawnImGuiTab))
-			.SetDisplayName(LOCTEXT("ImGuiTabTitle", "ImGui"))
-			.SetTooltipText(LOCTEXT("ImGuiTabToolTip", "ImGui UI"))
-			.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"))
-			.SetGroup(WorkspaceMenu::GetMenuStructure().GetToolsCategory());
+		ImGuiTabGroup = WorkspaceMenu::GetMenuStructure().GetToolsCategory()->AddGroup(
+			LOCTEXT("ImGuiGroupName", "ImGui"),
+			FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
+
+		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateStatic(&FImGuiRuntimeModule::SpawnImGuiTab))
+			.SetGroup(ImGuiTabGroup.ToSharedRef())
+			.SetDisplayName(LOCTEXT("ImGuiMainTabTitle", "ImGui"))
+			.SetTooltipText(LOCTEXT("ImGuiMainTabTooltip", "Window hosting static ImGui widgets"))
+			.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
 #endif
 
 		// console command makes sense for Game worlds, for editor we should use ImGuiTab
@@ -156,9 +160,12 @@ private:
 		}
 	}
 
-private:
+public:
 #if WITH_EDITOR
 	static const FName ImGuiTabName;
+
+	// tab group for adding static widgets
+	TSharedPtr<FWorkspaceItem> ImGuiTabGroup;
 #endif
 
 	TUniquePtr<FAutoConsoleCommand> m_OpenImGuiWindowCommand = nullptr;
@@ -169,6 +176,12 @@ private:
 
 #if WITH_EDITOR
 const FName FImGuiRuntimeModule::ImGuiTabName = TEXT("ImGuiTab");
+
+TSharedRef<FWorkspaceItem> GetImGuiTabGroup()
+{
+	FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+	return ImGuiModule.ImGuiTabGroup.ToSharedRef();
+}
 #endif
 
 IMPLEMENT_MODULE(FImGuiRuntimeModule, ImGuiRuntime)
