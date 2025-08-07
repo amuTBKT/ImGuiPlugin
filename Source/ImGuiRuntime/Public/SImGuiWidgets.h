@@ -98,11 +98,8 @@ class IMGUIRUNTIME_API SImGuiWidget : public SImGuiWidgetBase
 public:
 	SLATE_BEGIN_ARGS(SImGuiWidget)
 		: _OnTickDelegate()
-		, _AllowUndocking(true)
 		{}
-		SLATE_EVENT(FOnTickImGuiWidgetDelegate, OnTickDelegate);	
-		SLATE_ATTRIBUTE(bool, AllowUndocking);
-		//SLATE_ATTRIBUTE(bool, UseTranslucentBackground); TODO:
+		SLATE_EVENT(FOnTickImGuiWidgetDelegate, OnTickDelegate);
 	SLATE_END_ARGS()
 	
 	void Construct(const FArguments& InArgs);
@@ -112,5 +109,4 @@ private:
 
 private:
 	FOnTickImGuiWidgetDelegate m_OnTickDelegate = {};
-	bool m_AllowUndocking = false;
 };

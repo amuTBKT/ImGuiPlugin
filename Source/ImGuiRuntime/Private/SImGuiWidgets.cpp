@@ -765,16 +765,9 @@ void SImGuiWidget::Construct(const FArguments& InArgs)
 	Super::Construct(Super::FArguments(), /*UseTranslucentBackground=*/true);
 
 	m_OnTickDelegate = InArgs._OnTickDelegate;
-	m_AllowUndocking = InArgs._AllowUndocking.Get();
 }
 
 void SImGuiWidget::TickInternal(float InDeltaTime)
 {
-	const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode);
-	if (!m_AllowUndocking)
-	{
-		ImGui::SetNextWindowDockID(MainDockSpaceID);
-	}
-
 	m_OnTickDelegate.ExecuteIfBound(m_ImGuiContext);
 }
