@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "CoreMinimal.h"
+
 // Static widgets are registered at ModuleInit, so we cannot use logic that relies on initialization order.
 
 struct FSlateIcon;

@@ -2,7 +2,9 @@
 
 #pragma once
 
-#include "imgui.h"
+// Not ideal but we include internal header here as some files do need access to it and we would like all includes to be directed through "ImGuiPluginTypes.h"
+// This is to ensure macros are consistent b/w static ImGui.lib and runtime code
+#include "imgui_internal.h"
 
 // since the module is built as DLL, we need to register allocators for each module that makes ImGui calls, usually at module startup
 #define SETUP_DEFAULT_IMGUI_ALLOCATOR()                                                         \
