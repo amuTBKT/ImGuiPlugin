@@ -14,20 +14,25 @@
 #include "Editor/WorkspaceMenuStructure/Public/WorkspaceMenuStructureModule.h"
 #endif
 
-FAutoRegisterMainWindowWidget::FAutoRegisterMainWindowWidget(void(*InitFunction)(void), void(*TickFunction)(ImGuiContext* Context))
+FAutoRegisterMainWindowWidget::FAutoRegisterMainWindowWidget(FStaticWidgetRegisterParams RegisterParams)
 {
+	if (!ensureAlways(RegisterParams.IsValid()))
+	{
+		return;
+	}
+
 	if (UImGuiSubsystem* Subsystem = UImGuiSubsystem::Get())
 	{
-		InitFunction();
-		Subsystem->GetMainWindowTickDelegate().AddStatic(TickFunction);
+		RegisterParams.InitFunction();
+		Subsystem->GetMainWindowTickDelegate().AddStatic(RegisterParams.TickFunction);
 	}
 	else
 	{
 		UImGuiSubsystem::OnSubsystemInitialized().AddLambda(
-			[InitFunction, TickFunction](UImGuiSubsystem* Subsystem)
+			[RegisterParams](UImGuiSubsystem* Subsystem)
 			{
-				InitFunction();
-				Subsystem->GetMainWindowTickDelegate().AddStatic(TickFunction);
+				RegisterParams.InitFunction();
+				Subsystem->GetMainWindowTickDelegate().AddStatic(RegisterParams.TickFunction);
 			});
 	}
 }
@@ -37,7 +42,7 @@ FAutoRegisterMainWindowWidget::FAutoRegisterMainWindowWidget(void(*InitFunction)
 // defined in ImGuiRuntimeModule.cpp
 extern TSharedRef<FWorkspaceItem> GetImGuiTabGroup();
 
-static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FAutoRegisterStandaloneWidget::FParams RegisterParams)
+static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FStaticWidgetRegisterParams RegisterParams)
 {
 	FOnTickImGuiWidgetDelegate TickDelegate;
 	TickDelegate.BindStatic(RegisterParams.TickFunction);
@@ -49,15 +54,15 @@ static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FA
 	const TSharedRef<SDockTab> ImguiTab =
 		SNew(SDockTab)
 		.TabRole(ETabRole::NomadTab);
-	ImguiTab->SetTabIcon(RegisterParams.TabIcon.GetIcon());
+	ImguiTab->SetTabIcon(RegisterParams.WidgetIcon.GetIcon());
 	ImguiTab->SetContent(ImGuiWindow.ToSharedRef());
 
 	return ImguiTab;
 }
 
-FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FAutoRegisterStandaloneWidget::FParams RegisterParams)
+FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FStaticWidgetRegisterParams RegisterParams)
 {
-	if (!ensure(RegisterParams.IsValid()))
+	if (!ensureAlways(RegisterParams.IsValid()))
 	{
 		return;
 	}
@@ -65,11 +70,11 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FAutoRegisterStanda
 	if (UImGuiSubsystem* Subsystem = UImGuiSubsystem::Get())
 	{
 		RegisterParams.InitFunction();		
-		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.TabName), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
+		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.WidgetName), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
 			.SetGroup(GetImGuiTabGroup())
-			.SetDisplayName(FText::FromString(ANSI_TO_TCHAR(RegisterParams.TabName)))
-			.SetTooltipText(FText::FromString(ANSI_TO_TCHAR(RegisterParams.TabTooltip)))
-			.SetIcon(RegisterParams.TabIcon);
+			.SetDisplayName(FText::FromString(ANSI_TO_TCHAR(RegisterParams.WidgetName)))
+			.SetTooltipText(FText::FromString(ANSI_TO_TCHAR(RegisterParams.WidgetDescription)))
+			.SetIcon(RegisterParams.WidgetIcon);
 	}
 	else
 	{
@@ -77,11 +82,11 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FAutoRegisterStanda
 			[RegisterParams](UImGuiSubsystem* Subsystem)
 			{
 				RegisterParams.InitFunction();
-				FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.TabName), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
+				FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.WidgetName), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
 					.SetGroup(GetImGuiTabGroup())
-					.SetDisplayName(FText::FromString(ANSI_TO_TCHAR(RegisterParams.TabName)))
-					.SetTooltipText(FText::FromString(ANSI_TO_TCHAR(RegisterParams.TabTooltip)))
-					.SetIcon(RegisterParams.TabIcon);
+					.SetDisplayName(FText::FromString(ANSI_TO_TCHAR(RegisterParams.WidgetName)))
+					.SetTooltipText(FText::FromString(ANSI_TO_TCHAR(RegisterParams.WidgetDescription)))
+					.SetIcon(RegisterParams.WidgetIcon);
 			});
 	}
 }

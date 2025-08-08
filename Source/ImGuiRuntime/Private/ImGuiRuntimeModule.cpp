@@ -74,33 +74,27 @@ private:
 		SETUP_DEFAULT_IMGUI_ALLOCATOR();
 
 #if WITH_EDITOR
-		ImGuiTabGroup = WorkspaceMenu::GetMenuStructure().GetToolsCategory()->AddGroup(
+		m_ImGuiTabGroup = WorkspaceMenu::GetMenuStructure().GetToolsCategory()->AddGroup(
 			LOCTEXT("ImGuiGroupName", "ImGui"),
 			FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
 
 		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateStatic(&FImGuiRuntimeModule::SpawnImGuiTab))
-			.SetGroup(ImGuiTabGroup.ToSharedRef())
+			.SetGroup(m_ImGuiTabGroup.ToSharedRef())
 			.SetDisplayName(LOCTEXT("ImGuiMainTabTitle", "ImGui"))
 			.SetTooltipText(LOCTEXT("ImGuiMainTabTooltip", "Window hosting static ImGui widgets"))
 			.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
 #endif
 
-		// console command makes sense for Game worlds, for editor we should use ImGuiTab
-		FWorldDelegates::OnPreWorldInitialization.AddLambda(
-			[this](UWorld* World, const UWorld::InitializationValues IVS)
-			{
-				m_OpenImGuiWindowCommand.Reset();
+		if (!GIsEditor)
+		{
+			// game world uses console command instead of tabs
+			m_OpenImGuiWindowCommand = MakeUnique<FAutoConsoleCommand>(
+				TEXT("imgui.OpenWindow"),
+				TEXT("Opens ImGui window."),
+				FConsoleCommandDelegate::CreateRaw(this, &FImGuiRuntimeModule::OpenImGuiMainWindow));
+		}
 
-				if (World->WorldType == EWorldType::Game)
-				{
-					m_OpenImGuiWindowCommand = MakeUnique<FAutoConsoleCommand>(
-						TEXT("imgui.OpenWindow"),
-						TEXT("Opens ImGui window."),
-						FConsoleCommandDelegate::CreateRaw(this, &FImGuiRuntimeModule::OpenImGuiMainWindow));
-				}
-			});
-
-		ImGuiStyleSet = MakeUnique<FImGuiStyleSet>();
+		m_ImGuiStyleSet = MakeUnique<FImGuiStyleSet>();
 	}
 
 	virtual void ShutdownModule() override
@@ -112,9 +106,9 @@ private:
 		}
 #endif
 
-		m_OpenImGuiWindowCommand.Reset();
+		m_ImGuiStyleSet.Reset();
 		m_ImGuiMainWindow.Reset();
-		ImGuiStyleSet.Reset();
+		m_OpenImGuiWindowCommand.Reset();
 	}
 
 #if WITH_EDITOR
@@ -165,13 +159,12 @@ public:
 	static const FName ImGuiTabName;
 
 	// tab group for adding static widgets
-	TSharedPtr<FWorkspaceItem> ImGuiTabGroup;
+	TSharedPtr<FWorkspaceItem> m_ImGuiTabGroup;
 #endif
 
-	TUniquePtr<FAutoConsoleCommand> m_OpenImGuiWindowCommand = nullptr;
 	TSharedPtr<SWindow> m_ImGuiMainWindow = nullptr;
-
-	TUniquePtr<FImGuiStyleSet> ImGuiStyleSet = nullptr;
+	TUniquePtr<FImGuiStyleSet> m_ImGuiStyleSet = nullptr;
+	TUniquePtr<FAutoConsoleCommand> m_OpenImGuiWindowCommand = nullptr;
 };
 
 #if WITH_EDITOR
@@ -180,7 +173,7 @@ const FName FImGuiRuntimeModule::ImGuiTabName = TEXT("ImGuiTab");
 TSharedRef<FWorkspaceItem> GetImGuiTabGroup()
 {
 	FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
-	return ImGuiModule.ImGuiTabGroup.ToSharedRef();
+	return ImGuiModule.m_ImGuiTabGroup.ToSharedRef();
 }
 #endif
 
