@@ -106,7 +106,7 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	// first frame setup
 	OnBeginFrame();
 
-#if 0 //TODO: enable this at some point
+#if 0 // TODO: enable this at some point
 	RemoteConnection = new FImGuiRemoteConnection();
 	RemoteConnection->OnConnected = FSimpleDelegate::CreateUObject(this, &UImGuiSubsystem::OnRemoteConnectionEstablished);
 	RemoteConnection->OnDisconnected = FSimpleDelegate::CreateUObject(this, &UImGuiSubsystem::OnRemoteConnectionClosed);
@@ -184,7 +184,7 @@ bool UImGuiSubsystem::CaptureGpuFrame() const
 	return GCaptureNextGpuFrames > 0;
 }
 
-FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale)
+FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale/*=1.f*/)
 {
 	if (!SlateBrush)
 	{

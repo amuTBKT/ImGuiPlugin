@@ -469,7 +469,7 @@ ImDrawData* SImGuiWidgetBase::TickForRemoteClient(const FImGuiRemoteConnection& 
 
 	// render
 	{
-		//NOTE: TickInternal can unset the current imgui context
+		// NOTE: TickInternal can unset the current imgui context
 		ImGuiIO& IO = GetImGuiIO();
 
 		ImGui::Render();
