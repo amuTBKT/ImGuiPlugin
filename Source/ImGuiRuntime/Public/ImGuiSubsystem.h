@@ -87,10 +87,10 @@ public:
 	IMGUIRUNTIME_API FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() { return m_ImGuiMainWindowTickDelegate; }
 	IMGUIRUNTIME_API const FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() const { return m_ImGuiMainWindowTickDelegate; }
 
-	FORCEINLINE ImFontAtlas* GetDefaultImGuiFontAtlas()			  { return &m_DefaultFontAtlas; }
-	FORCEINLINE ImTextureID  GetDefaultFontTextureID()		const { return m_DefaultFontImageParams.Id; }
+	FORCEINLINE ImFontAtlas* GetSharedFontAtlas()				  { return &m_SharedFontAtlas; }
+	FORCEINLINE ImTextureID  GetSharedFontTextureID()		const { return m_SharedFontImageParams.Id; }
 	FORCEINLINE ImTextureID  GetMissingImageTextureID()		const { return m_MissingImageParams.Id; }
-	FORCEINLINE uint32		 GetDefaultFontTextureIndex()	const { return ImGuiIDToIndex(m_DefaultFontImageParams.Id); }
+	FORCEINLINE uint32		 GetSharedFontTextureIndex()	const { return ImGuiIDToIndex(m_SharedFontImageParams.Id); }
 	FORCEINLINE uint32		 GetMissingImageTextureIndex()	const { return ImGuiIDToIndex(m_MissingImageParams.Id); }
 	
 	FORCEINLINE const TArray<FImGuiTextureResource>& GetOneFrameResources() const { return m_OneFrameResources; }
@@ -123,18 +123,18 @@ private:
 	FAnsiString m_IniFilePath;
 
 	UPROPERTY()
-	UTextureRenderTarget2D* m_DefaultFontTexture = nullptr;
+	UTextureRenderTarget2D* m_SharedFontTexture = nullptr;
 	
 	UPROPERTY()
 	UTexture2D* m_MissingImageTexture = nullptr;
 
 	int32 FontAtlasBuilderFrameCount = 0;
-	ImFontAtlas m_DefaultFontAtlas = {};
-	FSlateBrush m_DefaultFontSlateBrush = {};
+	ImFontAtlas m_SharedFontAtlas = {};
+	FSlateBrush m_SharedFontSlateBrush = {};
 	FSlateBrush m_MissingImageSlateBrush = {};
-	FImGuiImageBindingParams m_DefaultFontImageParams = {};
+	FImGuiImageBindingParams m_SharedFontImageParams = {};
 	FImGuiImageBindingParams m_MissingImageParams = {};
-	static inline const ImTextureID DefaultFontTexID = IndexToImGuiID(1u);
+	static inline const ImTextureID SharedFontTexID = IndexToImGuiID(1u);
 
 	TArray<FSlateBrush> m_CreatedSlateBrushes;
 	TArray<FImGuiTextureResource> m_OneFrameResources;

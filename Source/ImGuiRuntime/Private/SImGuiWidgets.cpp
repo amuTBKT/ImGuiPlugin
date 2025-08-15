@@ -56,7 +56,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs, bool UseTranslucentBa
 {
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 
-	m_ImGuiContext = ImGui::CreateContext(ImGuiSubsystem->GetDefaultImGuiFontAtlas());
+	m_ImGuiContext = ImGui::CreateContext(ImGuiSubsystem->GetSharedFontAtlas());
 
 	ImGuiIO& IO = GetImGuiIO();
 	IO.IniFilename = ImGuiSubsystem->GetIniFilePath();

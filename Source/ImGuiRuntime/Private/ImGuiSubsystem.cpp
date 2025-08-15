@@ -63,15 +63,17 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		IFileManager::Get().MakeDirectory(ANSI_TO_TCHAR(*m_IniDirectoryPath), true);
 	}
 
+	m_SharedFontAtlas.AddFontDefault();
+
 	// shared default font texture
-	m_DefaultFontTexture = NewObject<UTextureRenderTarget2D>(this, FName("ImGui_DefaultFontTexture"));
-	m_DefaultFontTexture->bCanCreateUAV = false;
-	m_DefaultFontTexture->bAutoGenerateMips = false;
-	m_DefaultFontTexture->Filter = TextureFilter::TF_Bilinear;
-	m_DefaultFontTexture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
-	m_DefaultFontTexture->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
-	m_DefaultFontTexture->InitAutoFormat(1, 1);
-	m_DefaultFontTexture->UpdateResourceImmediate(true);
+	m_SharedFontTexture = NewObject<UTextureRenderTarget2D>(this, FName("ImGui_DefaultFontTexture"));
+	m_SharedFontTexture->bCanCreateUAV = false;
+	m_SharedFontTexture->bAutoGenerateMips = false;
+	m_SharedFontTexture->Filter = TextureFilter::TF_Bilinear;
+	m_SharedFontTexture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
+	m_SharedFontTexture->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
+	m_SharedFontTexture->InitAutoFormat(1, 1);
+	m_SharedFontTexture->UpdateResourceImmediate(true);
 
 	// 1x1 magenta texture
 	const uint32 MissingPixelData = FColor::Magenta.DWColor();
@@ -89,7 +91,7 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 	m_MissingImageTexture->UpdateResource();
 	
-	m_DefaultFontSlateBrush.SetResourceObject(m_DefaultFontTexture);
+	m_SharedFontSlateBrush.SetResourceObject(m_SharedFontTexture);
 	m_MissingImageSlateBrush.SetResourceObject(m_MissingImageTexture);
 
 	FCoreDelegates::OnBeginFrame.AddUObject(this, &UImGuiSubsystem::OnBeginFrame);
@@ -161,11 +163,11 @@ void UImGuiSubsystem::OnBeginFrame()
 	m_CreatedSlateBrushes.Reset();
 	
 	// queue font updates
-	ImFontAtlasUpdateNewFrame(&m_DefaultFontAtlas, FontAtlasBuilderFrameCount++, true);
+	ImFontAtlasUpdateNewFrame(&m_SharedFontAtlas, FontAtlasBuilderFrameCount++, true);
 
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
-	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
-	check(DefaultFontTexID == m_DefaultFontImageParams.Id);
+	m_SharedFontImageParams = RegisterOneFrameResource(&m_SharedFontSlateBrush);
+	check(SharedFontTexID == m_SharedFontImageParams.Id);
 
 	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);
 }
@@ -177,18 +179,18 @@ void UImGuiSubsystem::OnEndFrame()
 
 void UImGuiSubsystem::UpdateTextureData(ImTextureData* TexData) const
 {
-	// TODO: this function really only cares about the default font texture atm
+	// TODO: this function really only cares about the shared font texture atm
 	if (TexData->Status == ImTextureStatus_WantDestroy && TexData->UnusedFrames > 2)
 	{
-		// latest default font texture data should never be destroyed!
-		check(TexData != m_DefaultFontAtlas.TexData);
+		// latest shared font texture data should never be destroyed!
+		check(TexData != m_SharedFontAtlas.TexData);
 
 		TexData->SetStatus(ImTextureStatus_Destroyed);
 		TexData->SetTexID(ImTextureID_Invalid);
 	}
-	else if (TexData == m_DefaultFontAtlas.TexData)
+	else if (TexData == m_SharedFontAtlas.TexData)
 	{
-		check(IsValid(m_DefaultFontTexture));
+		check(IsValid(m_SharedFontTexture));
 
 		const int32 FontAtlasWidth = TexData->Width;
 		const int32 FontAtlasHeight = TexData->Height;
@@ -197,9 +199,9 @@ void UImGuiSubsystem::UpdateTextureData(ImTextureData* TexData) const
 
 		if (TexData->Status == ImTextureStatus_WantCreate || TexData->Status == ImTextureStatus_WantUpdates)
 		{
-			if (m_DefaultFontTexture->SizeX != FontAtlasWidth || m_DefaultFontTexture->SizeY != FontAtlasHeight)
+			if (m_SharedFontTexture->SizeX != FontAtlasWidth || m_SharedFontTexture->SizeY != FontAtlasHeight)
 			{
-				m_DefaultFontTexture->ResizeTarget(FontAtlasWidth, FontAtlasHeight);
+				m_SharedFontTexture->ResizeTarget(FontAtlasWidth, FontAtlasHeight);
 			}
 
 			ENQUEUE_RENDER_COMMAND(UpdateFontTexture)(
@@ -207,13 +209,13 @@ void UImGuiSubsystem::UpdateTextureData(ImTextureData* TexData) const
 				SrcData=(uint8*)TexData->GetPixels(),
 				SrcStride=BytesPerPixel * FontAtlasWidth,
 				UpdateRegion=FUpdateTextureRegion2D(0, 0, 0, 0, FontAtlasWidth, FontAtlasHeight),
-				TexResource=m_DefaultFontTexture->GameThread_GetRenderTargetResource()](FRHICommandListImmediate& RHICmdList)
+				TexResource=m_SharedFontTexture->GameThread_GetRenderTargetResource()](FRHICommandListImmediate& RHICmdList)
 				{
 					RHICmdList.UpdateTexture2D(TexResource->GetTexture2DRHI(), 0, UpdateRegion, SrcStride, SrcData);
 				});
 
 			TexData->SetStatus(ImTextureStatus_OK);
-			TexData->SetTexID(DefaultFontTexID);
+			TexData->SetTexID(SharedFontTexID);
 		}
 		else
 		{
@@ -315,10 +317,10 @@ void UImGuiSubsystem::OnRemoteConnectionEstablished()
 		RemoteConnection->SendTextureData(MissingImageSize, MissingImageSize, sizeof(uint32), (uint8*)&MissingPixelData);
 	}
 	{
-		const int32 FontAtlasWidth = GetDefaultImGuiFontAtlas()->TexData->Width;
-		const int32 FontAtlasHeight = GetDefaultImGuiFontAtlas()->TexData->Height;
-		const int32 BytesPerPixel = GetDefaultImGuiFontAtlas()->TexData->BytesPerPixel;
-		unsigned char* FontAtlasData = GetDefaultImGuiFontAtlas()->TexData->Pixels;
+		const int32 FontAtlasWidth = m_SharedFontAtlas.TexData->Width;
+		const int32 FontAtlasHeight = m_SharedFontAtlas.TexData->Height;
+		const int32 BytesPerPixel = m_SharedFontAtlas.TexData->BytesPerPixel;
+		unsigned char* FontAtlasData = m_SharedFontAtlas.TexData->Pixels;
 		RemoteConnection->SendTextureData(FontAtlasWidth, FontAtlasHeight, BytesPerPixel, (uint8*)FontAtlasData);
 	}
 
