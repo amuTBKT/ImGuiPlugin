@@ -63,38 +63,32 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		IFileManager::Get().MakeDirectory(ANSI_TO_TCHAR(*m_IniDirectoryPath), true);
 	}
 
-	m_DefaultFontAtlas.Build();
-
-	auto CreateTextureRGBA8 = [](FName DebugName, int32 Width, int32 Height, const uint8* ImageData) -> UTexture2D*
-	{
-		UTexture2D* Texture = UTexture2D::CreateTransient(Width, Height, PF_R8G8B8A8, DebugName);
-		Texture->CompressionSettings = TextureCompressionSettings::TC_Default;
-		Texture->SRGB = false;
-		Texture->LODGroup = TEXTUREGROUP_UI;
-		Texture->Filter = TextureFilter::TF_Bilinear;
-		Texture->AddressX = TextureAddress::TA_Clamp;
-		Texture->AddressY = TextureAddress::TA_Clamp;
-
-		uint8* MipData = static_cast<uint8*>(Texture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE));
-		FMemory::Memcpy(MipData, ImageData, Texture->GetPlatformData()->Mips[0].BulkData.GetBulkDataSize());
-		Texture->GetPlatformData()->Mips[0].BulkData.Unlock();
-		Texture->UpdateResource();
-
-		return Texture;
-	};
-
-	int32 FontAtlasWidth, FontAtlasHeight, BytesPerPixel;
-	unsigned char* FontAtlasData;
-	m_DefaultFontAtlas.GetTexDataAsRGBA32(&FontAtlasData, &FontAtlasWidth, &FontAtlasHeight, &BytesPerPixel);
-	check(BytesPerPixel == GPixelFormats[PF_R8G8B8A8].BlockBytes && FontAtlasData);
-
-	m_DefaultFontTexture = CreateTextureRGBA8(FName("ImGui_DefaultFontAtlas"), FontAtlasWidth, FontAtlasHeight, (uint8_t*)FontAtlasData);
+	// shared default font texture
+	m_DefaultFontTexture = NewObject<UTextureRenderTarget2D>(this, FName("ImGui_DefaultFontTexture"));
+	m_DefaultFontTexture->bCanCreateUAV = false;
+	m_DefaultFontTexture->bAutoGenerateMips = false;
+	m_DefaultFontTexture->Filter = TextureFilter::TF_Bilinear;
+	m_DefaultFontTexture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
+	m_DefaultFontTexture->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
+	m_DefaultFontTexture->InitAutoFormat(1, 1);
+	m_DefaultFontTexture->UpdateResourceImmediate(true);
 
 	// 1x1 magenta texture
-	const int32 MissingImageSize = 1;
 	const uint32 MissingPixelData = FColor::Magenta.DWColor();
-	m_MissingImageTexture = CreateTextureRGBA8(FName("ImGui_MissingImage"), MissingImageSize, MissingImageSize, (uint8_t*)&MissingPixelData);
-
+	m_MissingImageTexture = UTexture2D::CreateTransient(1, 1, PF_R8G8B8A8, FName("ImGui_MissingImage"));
+	m_MissingImageTexture->CompressionSettings = TextureCompressionSettings::TC_Default;
+	m_MissingImageTexture->SRGB = false;
+	m_MissingImageTexture->LODGroup = TEXTUREGROUP_UI;
+	m_MissingImageTexture->Filter = TextureFilter::TF_Bilinear;
+	m_MissingImageTexture->AddressX = TextureAddress::TA_Clamp;
+	m_MissingImageTexture->AddressY = TextureAddress::TA_Clamp;
+	if (uint8* MipData = static_cast<uint8*>(m_MissingImageTexture->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE)))
+	{
+		FMemory::Memcpy(MipData, (uint8*)&MissingPixelData, sizeof(uint32));
+		m_MissingImageTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
+	}
+	m_MissingImageTexture->UpdateResource();
+	
 	m_DefaultFontSlateBrush.SetResourceObject(m_DefaultFontTexture);
 	m_MissingImageSlateBrush.SetResourceObject(m_MissingImageTexture);
 
@@ -166,10 +160,12 @@ void UImGuiSubsystem::OnBeginFrame()
 	m_OneFrameResources.Reset();
 	m_CreatedSlateBrushes.Reset();
 	
+	// queue font updates
+	ImFontAtlasUpdateNewFrame(&m_DefaultFontAtlas, FontAtlasBuilderFrameCount++, true);
+
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
 	m_DefaultFontImageParams = RegisterOneFrameResource(&m_DefaultFontSlateBrush);
-
-	m_DefaultFontAtlas.TexID = GetDefaultFontTextureID();
+	check(DefaultFontTexID == m_DefaultFontImageParams.Id);
 
 	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);
 }
@@ -177,6 +173,53 @@ void UImGuiSubsystem::OnBeginFrame()
 void UImGuiSubsystem::OnEndFrame()
 {
 	TickRemoteConnection();
+}
+
+void UImGuiSubsystem::UpdateTextureData(ImTextureData* TexData) const
+{
+	// TODO: this function really only cares about the default font texture atm
+	if (TexData->Status == ImTextureStatus_WantDestroy && TexData->UnusedFrames > 2)
+	{
+		// latest default font texture data should never be destroyed!
+		check(TexData != m_DefaultFontAtlas.TexData);
+
+		TexData->SetStatus(ImTextureStatus_Destroyed);
+		TexData->SetTexID(ImTextureID_Invalid);
+	}
+	else if (TexData == m_DefaultFontAtlas.TexData)
+	{
+		check(IsValid(m_DefaultFontTexture));
+
+		const int32 FontAtlasWidth = TexData->Width;
+		const int32 FontAtlasHeight = TexData->Height;
+		const int32 BytesPerPixel = TexData->BytesPerPixel;
+		check(BytesPerPixel == GPixelFormats[PF_R8G8B8A8].BlockBytes);
+
+		if (TexData->Status == ImTextureStatus_WantCreate || TexData->Status == ImTextureStatus_WantUpdates)
+		{
+			if (m_DefaultFontTexture->SizeX != FontAtlasWidth || m_DefaultFontTexture->SizeY != FontAtlasHeight)
+			{
+				m_DefaultFontTexture->ResizeTarget(FontAtlasWidth, FontAtlasHeight);
+			}
+
+			ENQUEUE_RENDER_COMMAND(UpdateFontTexture)(
+				[this,
+				SrcData=(uint8*)TexData->GetPixels(),
+				SrcStride=BytesPerPixel * FontAtlasWidth,
+				UpdateRegion=FUpdateTextureRegion2D(0, 0, 0, 0, FontAtlasWidth, FontAtlasHeight),
+				TexResource=m_DefaultFontTexture->GameThread_GetRenderTargetResource()](FRHICommandListImmediate& RHICmdList)
+				{
+					RHICmdList.UpdateTexture2D(TexResource->GetTexture2DRHI(), 0, UpdateRegion, SrcStride, SrcData);
+				});
+
+			TexData->SetStatus(ImTextureStatus_OK);
+			TexData->SetTexID(DefaultFontTexID);
+		}
+		else
+		{
+			check(TexData->Status == ImTextureStatus_OK);
+		}
+	}
 }
 
 bool UImGuiSubsystem::CaptureGpuFrame() const
@@ -272,9 +315,10 @@ void UImGuiSubsystem::OnRemoteConnectionEstablished()
 		RemoteConnection->SendTextureData(MissingImageSize, MissingImageSize, sizeof(uint32), (uint8*)&MissingPixelData);
 	}
 	{
-		int32 FontAtlasWidth, FontAtlasHeight, BytesPerPixel;
-		unsigned char* FontAtlasData;
-		GetDefaultImGuiFontAtlas()->GetTexDataAsRGBA32(&FontAtlasData, &FontAtlasWidth, &FontAtlasHeight, &BytesPerPixel);
+		const int32 FontAtlasWidth = GetDefaultImGuiFontAtlas()->TexData->Width;
+		const int32 FontAtlasHeight = GetDefaultImGuiFontAtlas()->TexData->Height;
+		const int32 BytesPerPixel = GetDefaultImGuiFontAtlas()->TexData->BytesPerPixel;
+		unsigned char* FontAtlasData = GetDefaultImGuiFontAtlas()->TexData->Pixels;
 		RemoteConnection->SendTextureData(FontAtlasWidth, FontAtlasHeight, BytesPerPixel, (uint8*)FontAtlasData);
 	}
 

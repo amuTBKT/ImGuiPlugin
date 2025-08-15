@@ -66,6 +66,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs, bool UseTranslucentBa
 	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+	IO.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
 
 	// TODO: setting?
 	ImGui::StyleColorsDark();
@@ -170,6 +171,12 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 	ImGui::Render();
 
 	ImDrawData* DrawData = ImGui::GetDrawData();
+
+	for (ImTextureData* TexData : *DrawData->Textures)
+	{
+		ImGuiSubsystem->UpdateTextureData(TexData);
+	}
+
 	if (DrawData->DisplaySize.x > 0.0f && DrawData->DisplaySize.y > 0.0f)
 	{
 		if (DrawData->TotalVtxCount > 0 && DrawData->TotalIdxCount > 0)
@@ -386,7 +393,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 										FMath::Min(RenderData->DisplaySize.x, DrawCmd.ClipRect.z - ClipRectOffset.x),	// <=Viewport.MaxX
 										FMath::Min(RenderData->DisplaySize.y, DrawCmd.ClipRect.w - ClipRectOffset.y));	// <=Viewport.MaxY
 									
-									uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.TextureId);
+									uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
 									if (!(RenderData->BoundTextures.IsValidIndex(TextureIndex)/* && RenderData->BoundTextures[Index].IsValid()*/))
 									{
 										TextureIndex = RenderData->MissingTextureIndex;
@@ -683,7 +690,7 @@ FReply SImGuiWidgetBase::OnMouseWheel(const FGeometry& MyGeometry, const FPointe
 	{
 		m_WindowScale += MouseEvent.GetWheelDelta() * 0.25f;
 		m_WindowScale = FMath::Clamp(m_WindowScale, 1.f, 4.f);
-		IO.FontGlobalScale = m_WindowScale;
+		ImGui::GetStyle().FontScaleMain = m_WindowScale;
 	}
 
 	return FReply::Handled();

@@ -23,6 +23,7 @@ class SImGuiWidgetBase;
 class FAutoConsoleCommand;
 class FSlateShaderResource;
 class FImGuiRemoteConnection;
+class UTextureRenderTarget2D;
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
 
@@ -97,6 +98,8 @@ public:
 	static ImTextureID  IndexToImGuiID(uint32 Index)	{ return static_cast<ImTextureID>(Index); }
 	static uint32		ImGuiIDToIndex(ImTextureID ID)  { return static_cast<uint32>(ID); }
 
+	void UpdateTextureData(ImTextureData* TexData) const;
+
 	bool CaptureGpuFrame() const;
 
 	bool IsRemoteConnectionActive() const;
@@ -120,18 +123,18 @@ private:
 	FAnsiString m_IniFilePath;
 
 	UPROPERTY()
-	UTexture2D* m_DefaultFontTexture = nullptr;
+	UTextureRenderTarget2D* m_DefaultFontTexture = nullptr;
 	
 	UPROPERTY()
 	UTexture2D* m_MissingImageTexture = nullptr;
 
+	int32 FontAtlasBuilderFrameCount = 0;
 	ImFontAtlas m_DefaultFontAtlas = {};
-
 	FSlateBrush m_DefaultFontSlateBrush = {};
 	FSlateBrush m_MissingImageSlateBrush = {};
-
 	FImGuiImageBindingParams m_DefaultFontImageParams = {};
 	FImGuiImageBindingParams m_MissingImageParams = {};
+	static inline const ImTextureID DefaultFontTexID = IndexToImGuiID(1u);
 
 	TArray<FSlateBrush> m_CreatedSlateBrushes;
 	TArray<FImGuiTextureResource> m_OneFrameResources;

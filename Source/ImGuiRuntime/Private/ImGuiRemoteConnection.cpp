@@ -298,7 +298,7 @@ void FImGuiRemoteConnection::SendDrawData(const ImDrawData* DrawData, int32 Mous
 		{
 			Buffer.Append((uint8*)&DrawCmd.ClipRect, sizeof(DrawCmd.ClipRect));
 
-			const uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.TextureId);
+			const uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
 			Buffer.Append((uint8*)&TextureIndex, sizeof(TextureIndex));
 
 			const uint32 VertexOffset = DrawCmd.VtxOffset + GlobalVertexOffset;
