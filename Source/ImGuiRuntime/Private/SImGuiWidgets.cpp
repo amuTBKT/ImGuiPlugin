@@ -185,18 +185,15 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 
 			struct FRenderData : FNoncopyable
 			{
-				struct FDrawListDeleter
-				{
-					void operator()(ImDrawList* Ptr) { IM_DELETE(Ptr); }
-				};
-				using FDrawListPtr = TUniquePtr<ImDrawList, FDrawListDeleter>;
 				struct FTextureInfo
 				{
 					FTextureRHIRef TextureRHI = nullptr;
 					FSamplerStateRHIRef SamplerRHI = nullptr;
 					bool IsSRGB = false;
 				};
-				TArray<FDrawListPtr> DrawLists;
+				TArray<ImDrawVert> VertexData;
+				TArray<ImDrawIdx> IndexData;
+				TArray<ImDrawCmd> DrawCommands;
 				TArray<FTextureInfo> BoundTextures;
 				ImVec2 DisplayPos = {};
 				ImVec2 DisplaySize = {};
@@ -210,11 +207,25 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 			RenderData->DisplaySize = DrawData->DisplaySize;
 			RenderData->TotalVtxCount = DrawData->TotalVtxCount;
 			RenderData->TotalIdxCount = DrawData->TotalIdxCount;
-			RenderData->DrawLists.SetNum(DrawData->CmdListsCount);
-			for (int32 ListIndex = 0; ListIndex < DrawData->CmdListsCount; ++ListIndex)
+			RenderData->VertexData.Reserve(RenderData->TotalVtxCount);
+			RenderData->IndexData.Reserve(RenderData->TotalIdxCount);
+			RenderData->DrawCommands.Reserve(DrawData->CmdListsCount * 4);
+			
+			uint32 GlobalVertexOffset = 0;
+			uint32 GlobalIndexOffset = 0;
+			for (const ImDrawList* CmdList : DrawData->CmdLists)
 			{
-				// TODO: Clone allocates from heap, might be worth keeping some static buffer around and manually copying...
-				RenderData->DrawLists[ListIndex] = FRenderData::FDrawListPtr(DrawData->CmdLists[ListIndex]->CloneOutput());
+				RenderData->IndexData.Append(CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size);
+				RenderData->VertexData.Append(CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size);
+				
+				for (const ImDrawCmd& DrawCmd : CmdList->CmdBuffer)
+				{
+					auto& Cmd = RenderData->DrawCommands.Add_GetRef(DrawCmd);
+					Cmd.VtxOffset += GlobalVertexOffset;
+					Cmd.IdxOffset += GlobalIndexOffset;
+				}
+				GlobalIndexOffset += CmdList->IdxBuffer.Size;
+				GlobalVertexOffset += CmdList->VtxBuffer.Size;
 			}
 
 			RenderData->MissingTextureIndex = ImGuiSubsystem->GetMissingImageTextureIndex();
@@ -276,13 +287,9 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						RenderData->TotalVtxCount * sizeof(ImDrawVert), EBufferUsageFlags::Volatile | EBufferUsageFlags::VertexBuffer,
 						sizeof(ImDrawVert), ERHIAccess::VertexOrIndexBuffer, VertexBufferCreateInfo);
 #endif
-					if (ImDrawVert* VertexDst = (ImDrawVert*)RHICmdList.LockBuffer(VertexBuffer, 0, RenderData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly))
+					if (ImDrawVert* VertexDst = (ImDrawVert*)RHICmdList.LockBuffer(VertexBuffer, 0u, RenderData->VertexData.NumBytes(), RLM_WriteOnly))
 					{
-						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
-						{
-							FMemory::Memcpy(VertexDst, CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size * sizeof(ImDrawVert));
-							VertexDst += CmdList->VtxBuffer.Size;
-						}
+						FMemory::Memcpy(VertexDst, RenderData->VertexData.GetData(), RenderData->VertexData.NumBytes());
 						RHICmdList.UnlockBuffer(VertexBuffer);
 					}
 
@@ -299,13 +306,9 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						RenderData->TotalIdxCount * sizeof(ImDrawIdx), EBufferUsageFlags::Volatile | EBufferUsageFlags::IndexBuffer,
 						sizeof(ImDrawIdx), ERHIAccess::VertexOrIndexBuffer, IndexBufferCreateInfo);
 #endif
-					if (ImDrawIdx* IndexDst = (ImDrawIdx*)RHICmdList.LockBuffer(IndexBuffer, 0, RenderData->TotalIdxCount * sizeof(ImDrawIdx), RLM_WriteOnly))
+					if (ImDrawIdx* IndexDst = (ImDrawIdx*)RHICmdList.LockBuffer(IndexBuffer, 0u, RenderData->IndexData.NumBytes(), RLM_WriteOnly))
 					{
-						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
-						{
-							FMemory::Memcpy(IndexDst, CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
-							IndexDst += CmdList->IdxBuffer.Size;
-						}
+						FMemory::Memcpy(IndexDst, RenderData->IndexData.GetData(), RenderData->IndexData.NumBytes());
 						RHICmdList.UnlockBuffer(IndexBuffer);
 					}
 
@@ -352,66 +355,61 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 								ProjectionMatrix);
 						};
 
-						uint32 GlobalVertexOffset = 0;
-						uint32 GlobalIndexOffset = 0;
 						uint32_t RenderStateOverrides = 0;
 
 						RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
 						UpdateVertexShaderParameters();
 
-						for (FRenderData::FDrawListPtr& CmdList : RenderData->DrawLists)
+						for (const ImDrawCmd& DrawCmd : RenderData->DrawCommands)
 						{
-							for (const ImDrawCmd& DrawCmd : CmdList->CmdBuffer)
+							if (DrawCmd.UserCallback != NULL)
 							{
-								if (DrawCmd.UserCallback != NULL)
+								if (DrawCmd.UserCallback == ImDrawCallback_ResetRenderState)
 								{
-									if (DrawCmd.UserCallback == ImDrawCallback_ResetRenderState)
-									{
-										RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
-										RenderStateOverrides = 0;
+									RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
+									RenderStateOverrides = 0;
 
-										UpdateVertexShaderParameters();
-									}
-									else if (DrawCmd.UserCallback == ImDrawCallback_SetRenderState)
-									{
-										RenderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
+									UpdateVertexShaderParameters();
+								}
+								else if (DrawCmd.UserCallback == ImDrawCallback_SetRenderState)
+								{
+									RenderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
 
-										//UpdateVertexShaderParameters(); No VS state exposed atm.
-									}
-									else
-									{
-										DrawCmd.UserCallback(CmdList.Get(), &DrawCmd);
-									}
+									//UpdateVertexShaderParameters(); No VS state exposed atm.
 								}
 								else
 								{
-									const ImVec2& ClipRectOffset = RenderData->DisplayPos;
-									RHICmdList.SetScissorRect(
-										true,
-										FMath::Max(0.f, DrawCmd.ClipRect.x - ClipRectOffset.x),							// >=Viewport.MinX
-										FMath::Max(0.f, DrawCmd.ClipRect.y - ClipRectOffset.y),							// >=Viewport.MinY
-										FMath::Min(RenderData->DisplaySize.x, DrawCmd.ClipRect.z - ClipRectOffset.x),	// <=Viewport.MaxX
-										FMath::Min(RenderData->DisplaySize.y, DrawCmd.ClipRect.w - ClipRectOffset.y));	// <=Viewport.MaxY
-									
-									uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
-									if (!(RenderData->BoundTextures.IsValidIndex(TextureIndex)/* && RenderData->BoundTextures[Index].IsValid()*/))
-									{
-										TextureIndex = RenderData->MissingTextureIndex;
-									}
-									
-									SetShaderParametersLegacyPS(
-										RHICmdList,
-										PixelShader,
-										RenderData->BoundTextures[TextureIndex].TextureRHI,
-										RenderData->BoundTextures[TextureIndex].SamplerRHI,
-										RenderData->BoundTextures[TextureIndex].IsSRGB,
-										RenderStateOverrides);
-
-									RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);
+									checkNoEntry();
+									// TODO: not implemented!
+									//DrawCmd.UserCallback(CmdList.Get(), &DrawCmd);
 								}
 							}
-							GlobalIndexOffset += CmdList->IdxBuffer.Size;
-							GlobalVertexOffset += CmdList->VtxBuffer.Size;
+							else
+							{
+								const ImVec2& ClipRectOffset = RenderData->DisplayPos;
+								RHICmdList.SetScissorRect(
+									true,
+									FMath::Max(0.f, DrawCmd.ClipRect.x - ClipRectOffset.x),							// >=Viewport.MinX
+									FMath::Max(0.f, DrawCmd.ClipRect.y - ClipRectOffset.y),							// >=Viewport.MinY
+									FMath::Min(RenderData->DisplaySize.x, DrawCmd.ClipRect.z - ClipRectOffset.x),	// <=Viewport.MaxX
+									FMath::Min(RenderData->DisplaySize.y, DrawCmd.ClipRect.w - ClipRectOffset.y));	// <=Viewport.MaxY
+									
+								uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
+								if (!(RenderData->BoundTextures.IsValidIndex(TextureIndex)/* && RenderData->BoundTextures[Index].IsValid()*/))
+								{
+									TextureIndex = RenderData->MissingTextureIndex;
+								}
+
+								SetShaderParametersLegacyPS(
+									RHICmdList,
+									PixelShader,
+									RenderData->BoundTextures[TextureIndex].TextureRHI,
+									RenderData->BoundTextures[TextureIndex].SamplerRHI,
+									RenderData->BoundTextures[TextureIndex].IsSRGB,
+									RenderStateOverrides);
+
+								RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset, DrawCmd.ElemCount / 3, 1);
+							}
 						}
 
 						delete RenderData;
