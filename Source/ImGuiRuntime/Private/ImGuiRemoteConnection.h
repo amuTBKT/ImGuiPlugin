@@ -1,8 +1,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "RemoteImGui.h"
 #include "IWebSocketServer.h"
+#include "remoteimgui/RemoteImGui.h"
 
 struct ImGuiIO;
 struct ImDrawData;

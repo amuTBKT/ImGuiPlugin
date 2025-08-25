@@ -1,13 +1,4 @@
-#if 0
-//---------------- ASSERT CUSTOMIZATION ----------------//
-// imported functions, defined in Unreal module 
-extern void GImAssertFunc(bool cond);
-extern void GImUserErrorFunc(bool cond, const char* message);
-
-#define IM_ASSERT(_EXPR)                    GImAssertFunc((bool)(_EXPR))
-#define IM_ASSERT_USER_ERROR(_EXPR,_MSG)    GImUserErrorFunc((bool)(_EXPR), (const char*)(_MSG))
-//---------------- ASSERT CUSTOMIZATION ----------------//
-#endif
+#include "ImGuiCustomizations.h"
 
 // imgui
 #include "imgui/imgui.cpp"

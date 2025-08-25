@@ -358,6 +358,8 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 						uint32_t RenderStateOverrides = 0;
 
 						RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
+						RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
+
 						UpdateVertexShaderParameters();
 
 						for (const ImDrawCmd& DrawCmd : RenderData->DrawCommands)
@@ -367,6 +369,8 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 								if (DrawCmd.UserCallback == ImDrawCallback_ResetRenderState)
 								{
 									RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
+									RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
+
 									RenderStateOverrides = 0;
 
 									UpdateVertexShaderParameters();
@@ -379,9 +383,18 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& Allotte
 								}
 								else
 								{
-									checkNoEntry();
-									// TODO: not implemented!
-									//DrawCmd.UserCallback(CmdList.Get(), &DrawCmd);
+									DrawCmd.UserCallback(&RHICmdList, DrawCmd.UserCallbackData, DrawCmd.UserCallbackDataSize);
+
+									// TODO: add a flag to tell whether callback modified the render state here?
+									{
+										SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
+										RHICmdList.SetStreamSource(0, VertexBuffer, 0);
+
+										RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
+										RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
+
+										UpdateVertexShaderParameters();
+									}
 								}
 							}
 							else
@@ -681,7 +694,6 @@ FReply SImGuiWidgetBase::OnMouseButtonDoubleClick(const FGeometry& InMyGeometry,
 FReply SImGuiWidgetBase::OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
-	IO.AddMouseWheelEvent(0.f, MouseEvent.GetWheelDelta());
 
 	// TODO: initial zoom support, can we do better than this?
 	if (IO.KeyCtrl)
@@ -689,6 +701,10 @@ FReply SImGuiWidgetBase::OnMouseWheel(const FGeometry& MyGeometry, const FPointe
 		m_WindowScale += MouseEvent.GetWheelDelta() * 0.25f;
 		m_WindowScale = FMath::Clamp(m_WindowScale, 1.f, 4.f);
 		ImGui::GetStyle().FontScaleMain = m_WindowScale;
+	}
+	else
+	{
+		IO.AddMouseWheelEvent(0.f, MouseEvent.GetWheelDelta());
 	}
 
 	return FReply::Handled();
