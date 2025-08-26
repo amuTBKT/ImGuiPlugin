@@ -50,6 +50,7 @@ public:
 		Set("Icon.ResetToDefault", new IMAGE_BRUSH_SVG("Icons/icon_reset_to_default", Icon16x16));
 		Set("Icon.BrowseToAsset", new IMAGE_BRUSH_SVG("Icons/icon_browse_to_asset", Icon16x16));
 		Set("Icon.FallbackAssetIcon", new IMAGE_BRUSH_SVG("Icons/icon_fallback_asset_icon", Icon16x16));
+		Set("Icon.CheckerPattern", new IMAGE_BRUSH_SVG("Icons/icon_checker_pattern", Icon16x16));
 
 		FSlateStyleRegistry::RegisterSlateStyle(*this);
 	}
