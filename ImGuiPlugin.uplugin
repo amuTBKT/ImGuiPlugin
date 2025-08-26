@@ -20,14 +20,16 @@
 			"Type": "Runtime",
 			"LoadingPhase": "PostConfigInit",
 			"TargetDenyList": [ "Server", "Program" ],
-			"TargetConfigurationDenyList": [ "Shipping" ]
+			"TargetConfigurationDenyList": [ "Shipping" ],
+			"PlatformAllowList": [ "Win64" ]
 		},
 		{
 			"Name": "ImGuiRuntime",
 			"Type": "Runtime",
 			"LoadingPhase": "PreDefault",
 			"TargetDenyList": [ "Server", "Program" ],
-			"TargetConfigurationDenyList": [ "Shipping" ]
+			"TargetConfigurationDenyList": [ "Shipping" ],
+			"PlatformAllowList": [ "Win64" ]
 		}
 	],
 	"Plugins": [
