@@ -51,6 +51,8 @@ public:
 		Set("Icon.BrowseToAsset", new IMAGE_BRUSH_SVG("Icons/icon_browse_to_asset", Icon16x16));
 		Set("Icon.FallbackAssetIcon", new IMAGE_BRUSH_SVG("Icons/icon_fallback_asset_icon", Icon16x16));
 		Set("Icon.CheckerPattern", new IMAGE_BRUSH_SVG("Icons/icon_checker_pattern", Icon16x16));
+		Set("Icon.Find", new IMAGE_BRUSH_SVG("Icons/icon_find", Icon16x16));
+		Set("Icon.FrameSelected", new IMAGE_BRUSH_SVG("Icons/icon_frame_selected", Icon16x16));
 
 		FSlateStyleRegistry::RegisterSlateStyle(*this);
 	}
