@@ -19,6 +19,7 @@ class FSpawnTabArgs;
 
 class SWindow;
 class UTexture2D;
+struct ImTextureData;
 class SImGuiWidgetBase;
 class FAutoConsoleCommand;
 class FSlateShaderResource;
