@@ -47,17 +47,12 @@ static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FS
 	FOnTickImGuiWidgetDelegate TickDelegate;
 	TickDelegate.BindStatic(RegisterParams.TickFunction);
 
-	TSharedPtr<SImGuiWidget> ImGuiWindow =
-		SNew(SImGuiWidget)
-		.OnTickDelegate(TickDelegate);
-	
-	const TSharedRef<SDockTab> ImguiTab =
-		SNew(SDockTab)
-		.TabRole(ETabRole::NomadTab);
-	ImguiTab->SetTabIcon(RegisterParams.WidgetIcon.GetIcon());
-	ImguiTab->SetContent(ImGuiWindow.ToSharedRef());
-
-	return ImguiTab;
+	return SNew(SDockTab)
+		.TabRole(ETabRole::NomadTab)
+		[
+			SNew(SImGuiWidget)
+			.OnTickDelegate(TickDelegate)
+		];
 }
 
 FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FStaticWidgetRegisterParams RegisterParams)

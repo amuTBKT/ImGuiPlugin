@@ -139,7 +139,7 @@ UImGuiSubsystem* UImGuiSubsystem::Get()
 	return nullptr;
 }
 
-TSharedPtr<SWindow> UImGuiSubsystem::CreateWindow(const FString& WindowName, const FVector2D& WindowSize, FOnTickImGuiWidgetDelegate TickDelegate)
+TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, const FVector2D& WindowSize, FOnTickImGuiWidgetDelegate TickDelegate)
 {	
 	TSharedPtr<SWindow> Window = SNew(SWindow)
 		.Title(FText::FromString(WindowName))

@@ -117,13 +117,11 @@ private:
 #if WITH_EDITOR
 	static TSharedRef<SDockTab> SpawnImGuiTab(const FSpawnTabArgs& SpawnTabArgs)
 	{
-		const TSharedRef<SDockTab> ImguiTab =
-			SNew(SDockTab)
-			.TabRole(ETabRole::NomadTab);
-		ImguiTab->SetTabIcon(FAppStyle::GetBrush("Icons.Layout"));
-		ImguiTab->SetContent(SNew(SImGuiMainWindowWidget));
-
-		return ImguiTab;
+		return SNew(SDockTab)
+			.TabRole(ETabRole::NomadTab)
+			[
+				SNew(SImGuiMainWindowWidget)
+			];
 	}
 #endif
 	
