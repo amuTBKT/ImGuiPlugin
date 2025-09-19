@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
 #include "ImGuiPluginTypes.h"
 #include "Styling/SlateBrush.h"
 #include "Textures/SlateIcon.h"
@@ -23,7 +22,6 @@ struct ImTextureData;
 class SImGuiWidgetBase;
 class FAutoConsoleCommand;
 class FSlateShaderResource;
-class FImGuiRemoteConnection;
 class UTextureRenderTarget2D;
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
@@ -103,16 +101,8 @@ public:
 
 	bool CaptureGpuFrame() const;
 
-	bool IsRemoteConnectionActive() const;
-	void RegisterWidgetForRemoteClient(TSharedPtr<SImGuiWidgetBase> Widget);
-
 private:
 	void OnBeginFrame();
-	void OnEndFrame();
-
-	void OnRemoteConnectionEstablished();
-	void OnRemoteConnectionClosed();
-	void TickRemoteConnection();
 
 private:
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnSubsystemInitialized, UImGuiSubsystem* /*Subsystem*/)
@@ -139,7 +129,4 @@ private:
 
 	TArray<FSlateBrush> m_CreatedSlateBrushes;
 	TArray<FImGuiTextureResource> m_OneFrameResources;
-
-	TArray<TWeakPtr<SImGuiWidgetBase>> RegisteredImGuiWidgets;
-	FImGuiRemoteConnection* RemoteConnection = nullptr;
 };

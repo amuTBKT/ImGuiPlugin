@@ -10,7 +10,6 @@
 #include "Widgets/SWindow.h"
 #include "Engine/Texture2D.h"
 #include "Styling/AppStyle.h"
-#include "ImGuiRemoteConnection.h"
 #include "Framework/Application/SlateApplication.h"
 
 static int32 GCaptureNextGpuFrames = 0;
@@ -95,29 +94,15 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	m_MissingImageSlateBrush.SetResourceObject(m_MissingImageTexture);
 
 	FCoreDelegates::OnBeginFrame.AddUObject(this, &UImGuiSubsystem::OnBeginFrame);
-	FCoreDelegates::OnEndFrame.AddUObject(this, &UImGuiSubsystem::OnEndFrame);
 
 	OnSubsystemInitializedDelegate.Broadcast(this);
 
 	// first frame setup
 	OnBeginFrame();
-
-#if 0 // TODO: enable this at some point
-	RemoteConnection = new FImGuiRemoteConnection();
-	RemoteConnection->OnConnected = FSimpleDelegate::CreateUObject(this, &UImGuiSubsystem::OnRemoteConnectionEstablished);
-	RemoteConnection->OnDisconnected = FSimpleDelegate::CreateUObject(this, &UImGuiSubsystem::OnRemoteConnectionClosed);
-	RemoteConnection->Connect(TEXT("127.0.0.1"), 7002);
-#endif
 }
 
 void UImGuiSubsystem::Deinitialize()
 {
-	if (RemoteConnection)
-	{
-		delete RemoteConnection;
-		RemoteConnection = nullptr;
-	}
-
 	Super::Deinitialize();
 }
 
@@ -170,11 +155,6 @@ void UImGuiSubsystem::OnBeginFrame()
 	check(SharedFontTexID == m_SharedFontImageParams.Id);
 
 	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);
-}
-
-void UImGuiSubsystem::OnEndFrame()
-{
-	TickRemoteConnection();
 }
 
 void UImGuiSubsystem::UpdateTextureData(ImTextureData* TexData) const
@@ -300,111 +280,4 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 	Params.Id = IndexToImGuiID(ResourceHandleIndex);
 
 	return Params;
-}
-
-void UImGuiSubsystem::OnRemoteConnectionEstablished()
-{
-	if (!ensure(RemoteConnection && RemoteConnection->IsConnected()))
-	{
-		return;
-	}
-
-	// register persistent textures
-
-	{
-		const int32 MissingImageSize = 1;
-		const uint32 MissingPixelData = FColor::Magenta.DWColor();
-		RemoteConnection->SendTextureData(MissingImageSize, MissingImageSize, sizeof(uint32), (uint8*)&MissingPixelData);
-	}
-	{
-		const int32 FontAtlasWidth = m_SharedFontAtlas.TexData->Width;
-		const int32 FontAtlasHeight = m_SharedFontAtlas.TexData->Height;
-		const int32 BytesPerPixel = m_SharedFontAtlas.TexData->BytesPerPixel;
-		unsigned char* FontAtlasData = m_SharedFontAtlas.TexData->Pixels;
-		RemoteConnection->SendTextureData(FontAtlasWidth, FontAtlasHeight, BytesPerPixel, (uint8*)FontAtlasData);
-	}
-
-	for (auto Itr = RegisteredImGuiWidgets.CreateIterator(); Itr; ++Itr)
-	{
-		const auto& WidgetWeakPtr = *Itr;
-		TSharedPtr<SImGuiWidgetBase> WidgetPtr = WidgetWeakPtr.Pin();
-		if (!WidgetPtr.IsValid())
-		{
-			Itr.RemoveCurrentSwap();
-			continue;
-		}
-
-		WidgetPtr->SetEnabled(false);
-	}
-}
-
-void UImGuiSubsystem::OnRemoteConnectionClosed()
-{
-	for (auto Itr = RegisteredImGuiWidgets.CreateIterator(); Itr; ++Itr)
-	{
-		const auto& WidgetWeakPtr = *Itr;
-		TSharedPtr<SImGuiWidgetBase> WidgetPtr = WidgetWeakPtr.Pin();
-		if (!WidgetPtr.IsValid())
-		{
-			Itr.RemoveCurrentSwap();
-			continue;
-		}
-
-		WidgetPtr->SetEnabled(true);
-	}
-}
-
-void UImGuiSubsystem::TickRemoteConnection()
-{
-	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Remote - Tick Connection"), STAT_ImGuiRemote_TickConnection, STATGROUP_ImGui);
-
-	if (!RemoteConnection)
-	{
-		return;
-	}
-
-	RemoteConnection->NewFrame();
-
-	if (!RegisteredImGuiWidgets.IsEmpty() && RemoteConnection->CanDrawWidgets())
-	{
-		TArray<ImDrawList*> RemoteDrawLists;
-		SCOPED_NAMED_EVENT(ImGuiRemote_TickWidgets, FColor::Orange);
-
-		const float DeltaTime = FSlateApplication::Get().GetDeltaTime();
-
-		for (auto Itr = RegisteredImGuiWidgets.CreateIterator(); Itr; ++Itr)
-		{
-			const auto& WidgetWeakPtr = *Itr;
-			TSharedPtr<SImGuiWidgetBase> WidgetPtr = WidgetWeakPtr.Pin();
-			if (!WidgetPtr.IsValid())
-			{
-				Itr.RemoveCurrentSwap();
-				continue;
-			}
-
-			const ImDrawData* DrawData = WidgetPtr->TickForRemoteClient(*RemoteConnection, DeltaTime);
-
-			{
-				DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Remote - Send Draw Data"), STAT_ImGuiRemote_SendDrawData, STATGROUP_ImGui);
-
-				RemoteConnection->SendDrawData(DrawData, WidgetPtr->GetMouseCursor());
-			}
-
-			break;
-		}
-	}
-}
-
-bool UImGuiSubsystem::IsRemoteConnectionActive() const
-{
-	return RemoteConnection && RemoteConnection->IsConnected();
-}
-
-void UImGuiSubsystem::RegisterWidgetForRemoteClient(TSharedPtr<SImGuiWidgetBase> Widget)
-{
-	if (IsRemoteConnectionActive())
-	{
-		Widget->SetEnabled(false);
-	}
-	RegisteredImGuiWidgets.AddUnique(Widget);
 }

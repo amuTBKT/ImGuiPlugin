@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "CoreMinimal.h"
 #include "ImGuiCustomizations.h"
 
 // Not ideal but we include internal header here as some files do need access to it and we would like all includes to be directed through "ImGuiPluginTypes.h"
@@ -23,12 +24,53 @@
 // commonly used function to get icon for the default app style
 #define IMGUI_ICON(IconName) IMGUI_STYLE_ICON("ImGuiStyle", IconName)
 
-// since the module is built as DLL, we need to set context before making ImGui calls.
-struct FImGuiTickScope final : FNoncopyable
+static inline ImU32 LinearColorToImU32(const FLinearColor& Color)
 {
-	explicit FImGuiTickScope(ImGuiContext* Context)
+	return ImColor(Color.R, Color.G, Color.B, Color.A);
+}
+static inline ImU32 FColorToImU32(const FColor& Color)
+{
+	return ImColor(Color.R, Color.G, Color.B, Color.A);
+}
+static inline ImColor LinearColorToImColor(const FLinearColor& Color)
+{
+	return ImColor(Color.R, Color.G, Color.B, Color.A);
+}
+static inline ImColor FColorToImColor(const FColor& Color)
+{
+	return ImColor(Color.R, Color.G, Color.B, Color.A);
+}
+
+struct FImGuiTickContext
+{
+	ImGuiContext* ImGuiContext = nullptr;
+
+	// inputs
+	TSharedPtr<class FDragDropOperation> DragDropOperation = nullptr;
+	bool bApplyDragDropOperation = false;
+
+	// outputs
+	bool bWasDragDropOperationHandled = false;
+
+	bool ConsumeDragDropOperation()
 	{
-		ImGui::SetCurrentContext(Context);
+		if (bApplyDragDropOperation && DragDropOperation.IsValid())
+		{
+			DragDropOperation.Reset();
+			bWasDragDropOperationHandled = true;
+
+			return true;
+		}
+		return false;
+	}
+};
+
+// since the module is built as DLL, we need to set context before making ImGui calls.
+struct FImGuiTickScope : FNoncopyable
+{
+	explicit FImGuiTickScope(FImGuiTickContext* Context)
+	{
+		ImGui::SetCurrentContext(Context->ImGuiContext);
 	}
 	~FImGuiTickScope()
 	{

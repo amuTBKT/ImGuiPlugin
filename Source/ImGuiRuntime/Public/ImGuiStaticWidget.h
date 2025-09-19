@@ -7,12 +7,12 @@
 
 // Static widgets are registered at ModuleInit, so we cannot use logic that relies on initialization order.
 
-struct ImGuiContext;
+struct FImGuiTickContext;
 
 struct FStaticWidgetRegisterParams
 {
 	void(*InitFunction)(void);
-	void(*TickFunction)(ImGuiContext* Context);
+	void(*TickFunction)(FImGuiTickContext* Context);
 	FSlateIcon WidgetIcon;
 	const char* WidgetName = nullptr;
 	const char* WidgetDescription = nullptr;

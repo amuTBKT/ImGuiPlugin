@@ -11,12 +11,18 @@
 struct ImGuiIO;
 struct ImDrawData;
 struct ImGuiContext;
-class FImGuiRemoteConnection;
+struct FImGuiTickContext;
 class UTextureRenderTarget2D;
 
 class IMGUIRUNTIME_API SImGuiWidgetBase : public SCompoundWidget, public FGCObject
 {
 	using Super = SCompoundWidget;
+
+	struct FImGuiTickResult
+	{
+		bool bWasDragOperationHandled = false;
+	};
+
 public:
 	SLATE_BEGIN_ARGS(SImGuiWidgetBase)
 	{		
@@ -31,33 +37,34 @@ public:
 	virtual FString GetReferencerName() const override;
 	// GCObject interface END
 
-	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override final;
+	virtual void Tick(const FGeometry& WidgetGeometry, const double InCurrentTime, const float InDeltaTime) override final;
 
-	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyClippingRect,
+	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& WidgetGeometry, const FSlateRect& ClippingRect,
 		FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const override final;
-
-	int32 GetMouseCursor() const;
-	ImDrawData* TickForRemoteClient(const FImGuiRemoteConnection& RemoteConnection, float InDeltaTime);
 
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 
-	virtual FReply OnKeyChar(const FGeometry& MyGeometry, const FCharacterEvent& CharacterEvent) override;
+	virtual FReply OnKeyChar(const FGeometry& WidgetGeometry, const FCharacterEvent& CharacterEvent) override;
 
-	virtual FReply OnKeyDown(const FGeometry& MyGeometry, const FKeyEvent& KeyEvent) override;
+	virtual FReply OnKeyDown(const FGeometry& WidgetGeometry, const FKeyEvent& KeyEvent) override;
 
-	virtual FReply OnKeyUp(const FGeometry& MyGeometry, const FKeyEvent& KeyEvent) override;
+	virtual FReply OnKeyUp(const FGeometry& WidgetGeometry, const FKeyEvent& KeyEvent) override;
 
-	virtual FReply OnMouseButtonDown(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
+	virtual FReply OnMouseButtonDown(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override;
 
-	virtual FReply OnMouseButtonUp(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
+	virtual FReply OnMouseButtonUp(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override;
 
-	virtual FReply OnMouseButtonDoubleClick(const FGeometry& InMyGeometry, const FPointerEvent& MouseEvent) override;
+	virtual FReply OnMouseButtonDoubleClick(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override;
 
-	virtual FReply OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
+	virtual FReply OnMouseWheel(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override;
 
-	virtual FReply OnMouseMove(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent) override;
+	virtual FReply OnMouseMove(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override;
 
-	virtual FCursorReply OnCursorQuery(const FGeometry& MyGeometry, const FPointerEvent& CursorEvent) const override;
+	virtual FCursorReply OnCursorQuery(const FGeometry& WidgetGeometry, const FPointerEvent& CursorEvent) const override;
+
+	virtual void OnDragLeave(const FDragDropEvent& DragDropEvent) override;
+	virtual FReply OnDragOver(const FGeometry& WidgetGeometry, const FDragDropEvent& DragDropEvent) override;
+	virtual FReply OnDrop(const FGeometry& WidgetGeometry, const FDragDropEvent& DragDropEvent) override;
 
 private:
 	FORCEINLINE ImGuiIO& GetImGuiIO() const;
@@ -65,19 +72,22 @@ private:
 	FORCEINLINE void AddMouseButtonEvent(ImGuiIO& IO, FKey MouseKey, bool IsDown);
 	FORCEINLINE void AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown);
 
-	virtual void TickInternal(float InDeltaTime) = 0;
+	FImGuiTickResult TickImGui(const FGeometry* WidgetGeometry, FImGuiTickContext* TickContext);
+	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) = 0;
 
 protected:
 	FSlateBrush m_ImGuiSlateBrush;
+	TObjectPtr<UTextureRenderTarget2D> m_ImGuiRT = nullptr;
 
 	ImGuiContext* m_ImGuiContext = nullptr;
-	TObjectPtr<UTextureRenderTarget2D> m_ImGuiRT = nullptr;
 
 	// TODO: initial zoom support, can we do better than this?
 	float m_WindowScale = 1.f;
 
 	// minor optimization to avoid texture clears when using opaque window.
 	bool m_ClearRenderTargetEveryFrame = false;
+	bool m_ImGuiTickedByInputProcessing = false;
+	bool m_IsDragOverActive = false;
 };
 
 /* Main window widget, only one instance active at a time */
@@ -88,7 +98,7 @@ public:
 	void Construct(const FArguments& InArgs);
 
 private:
-	virtual void TickInternal(float InDeltaTime) override;
+	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override;
 };
 
 /* Dynamic widgets (ColorPicker etc..) */
@@ -105,7 +115,7 @@ public:
 	void Construct(const FArguments& InArgs);
 
 private:
-	virtual void TickInternal(float InDeltaTime) override;
+	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override;
 
 private:
 	FOnTickImGuiWidgetDelegate m_OnTickDelegate = {};
