@@ -50,6 +50,8 @@ public:
 
 	virtual FReply OnKeyUp(const FGeometry& WidgetGeometry, const FKeyEvent& KeyEvent) override;
 
+	virtual void OnMouseLeave(const FPointerEvent& MouseEvent) override;
+
 	virtual FReply OnMouseButtonDown(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override;
 
 	virtual FReply OnMouseButtonUp(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override;
@@ -86,6 +88,8 @@ protected:
 
 	// minor optimization to avoid texture clears when using opaque window.
 	bool m_ClearRenderTargetEveryFrame = false;
+
+	// widgets can often be ticked from input events, so keep track to avoid ticking them again during Tick event.
 	bool m_ImGuiTickedByInputProcessing = false;
 	bool m_IsDragOverActive = false;
 };

@@ -633,6 +633,12 @@ FReply SImGuiWidgetBase::OnKeyUp(const FGeometry& WidgetGeometry, const FKeyEven
 	return IO.WantCaptureKeyboard ? FReply::Handled() : FReply::Unhandled();
 }
 
+void SImGuiWidgetBase::OnMouseLeave(const FPointerEvent& MouseEvent)
+{
+	ImGuiIO& IO = GetImGuiIO();
+	IO.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+}
+
 FReply SImGuiWidgetBase::OnMouseButtonDown(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
