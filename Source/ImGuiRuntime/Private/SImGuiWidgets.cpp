@@ -467,7 +467,8 @@ SImGuiWidgetBase::FImGuiTickResult SImGuiWidgetBase::TickImGui(const FGeometry* 
 
 	if (TickContext->DragDropOperation.IsValid() && m_IsDragOverActive)
 	{
-		ImGui::SetWindowFocus(nullptr);
+		// disable widgets from reacting to mouse events (hover/tooltips etc)
+		ImGui::SetActiveID(-1, nullptr);
 	}
 
 	TickImGuiInternal(TickContext);
@@ -731,6 +732,9 @@ FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& WidgetGeometry, co
 void SImGuiWidgetBase::OnDragLeave(const FDragDropEvent& DragDropEvent)
 {
 	m_IsDragOverActive = false;
+
+	ImGuiIO& IO = GetImGuiIO();
+	IO.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
 }
 
 FReply SImGuiWidgetBase::OnDragOver(const FGeometry& WidgetGeometry, const FDragDropEvent& DragDropEvent)
@@ -746,7 +750,9 @@ FReply SImGuiWidgetBase::OnDragOver(const FGeometry& WidgetGeometry, const FDrag
 		m_ImGuiTickedByInputProcessing = false;
 	}
 
-	OnMouseMove(WidgetGeometry, DragDropEvent);
+	ImGuiIO& IO = GetImGuiIO();
+	const FVector2D LocalMousePosition = WidgetGeometry.AbsoluteToLocal(DragDropEvent.GetScreenSpacePosition());
+	IO.AddMousePosEvent(LocalMousePosition.X * WidgetGeometry.Scale, LocalMousePosition.Y * WidgetGeometry.Scale);
 
 	FImGuiTickContext TickContext{};
 	TickContext.ImGuiContext = m_ImGuiContext;
@@ -760,6 +766,8 @@ FReply SImGuiWidgetBase::OnDragOver(const FGeometry& WidgetGeometry, const FDrag
 
 FReply SImGuiWidgetBase::OnDrop(const FGeometry& WidgetGeometry, const FDragDropEvent& DragDropEvent)
 {
+	m_IsDragOverActive = false;
+
 	if (m_ImGuiTickedByInputProcessing)
 	{
 		// dummy ImGui render in case slate widget was throttled
