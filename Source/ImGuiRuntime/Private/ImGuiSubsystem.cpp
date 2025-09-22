@@ -233,7 +233,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 	const FVector2f SizeUV = Proxy->SizeUV;
 
 	FImGuiImageBindingParams Params = {};
-	Params.Size = ImVec2(LocalSize.X, LocalSize.Y);
+	Params.Size = ImVec2(LocalSize.X, LocalSize.Y) * DrawScale;
 	Params.UV0 = ImVec2(StartUV.X, StartUV.Y);
 	Params.UV1 = ImVec2(StartUV.X + SizeUV.X, StartUV.Y + SizeUV.Y);
 	Params.Id = IndexToImGuiID(ResourceHandleIndex);
