@@ -53,6 +53,9 @@ public:
 		Set("Icon.CheckerPattern", new IMAGE_BRUSH_SVG("Icons/icon_checker_pattern", Icon16x16));
 		Set("Icon.Find", new IMAGE_BRUSH_SVG("Icons/icon_find", Icon16x16));
 		Set("Icon.FrameSelected", new IMAGE_BRUSH_SVG("Icons/icon_frame_selected", Icon16x16));
+		Set("Icon.Save", new IMAGE_BRUSH_SVG("Icons/icon_save", Icon16x16));
+		Set("Icon.CollapseAll", new IMAGE_BRUSH_SVG("Icons/icon_collapse_all", Icon16x16));
+		Set("Icon.ExpandAll", new IMAGE_BRUSH_SVG("Icons/icon_expand_all", Icon16x16));
 
 		Set("DashLine.Vertical", new IMAGE_BRUSH("Common/dash_line_vertical", FVector2D(1, 10), FLinearColor::White, ESlateBrushTileType::Vertical));
 		Set("DashLine.Horizontal", new IMAGE_BRUSH("Common/dash_line_horizontal", FVector2D(10, 1), FLinearColor::White, ESlateBrushTileType::Horizontal));
