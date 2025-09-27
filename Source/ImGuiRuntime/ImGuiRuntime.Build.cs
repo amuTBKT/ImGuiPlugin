@@ -21,8 +21,7 @@ public class ImGuiRuntime : ModuleRules
 				"InputCore",
 				"RenderCore",
 				"CoreUObject",
-				"ImGuiShaders",
-                "WebSocketNetworking",
+				"ImGuiShaders"
             }
 		);
 

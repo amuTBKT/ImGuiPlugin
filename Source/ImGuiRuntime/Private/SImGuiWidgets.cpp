@@ -816,8 +816,8 @@ void SImGuiMainWindowWidget::TickImGuiInternal(FImGuiTickContext* TickContext)
 		if (ImGui::Begin("Empty", nullptr))
 		{
 			ImGui::Text("Nothing to display...");
-			ImGui::End();
 		}
+		ImGui::End();
 	}
 }
 
