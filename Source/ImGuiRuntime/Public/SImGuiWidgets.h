@@ -3,39 +3,47 @@
 #pragma once
 
 #include "Widgets/DeclarativeSyntaxSupport.h"
-#include "Widgets/SCompoundWidget.h"
+#include "Widgets/SLeafWidget.h"
 #include "UObject/GCObject.h"
 
 #include "ImGuiPluginDelegates.h"
 
 struct ImGuiIO;
-struct ImDrawData;
 struct ImGuiContext;
 struct FImGuiTickContext;
 class UTextureRenderTarget2D;
 
-class IMGUIRUNTIME_API SImGuiWidgetBase : public SCompoundWidget, public FGCObject
+namespace ImGuiUtils
 {
-	using Super = SCompoundWidget;
+	class SImGuiViewportWidget;
+}
+
+class IMGUIRUNTIME_API SImGuiWidgetBase : public SLeafWidget, public FGCObject
+{
+	using Super = SLeafWidget;
 
 	struct FImGuiTickResult
 	{
 		bool bWasDragOperationHandled = false;
 	};
 
+	friend class ImGuiUtils::SImGuiViewportWidget;
+
 public:
 	SLATE_BEGIN_ARGS(SImGuiWidgetBase)
-	{		
+	{
 	}
 	SLATE_END_ARGS()
 
-	void Construct(const FArguments& InArgs, bool UseTranslucentBackground);
+	void Construct(const FArguments& InArgs, TSharedPtr<SWindow> MainViewportWindow, bool UseTranslucentBackground);
 	virtual ~SImGuiWidgetBase();
 
 	// GCObject interface 
 	virtual void AddReferencedObjects(FReferenceCollector& Collector) override;
 	virtual FString GetReferencerName() const override;
 	// GCObject interface END
+
+	virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D::ZeroVector; }
 
 	virtual void Tick(const FGeometry& WidgetGeometry, const double InCurrentTime, const float InDeltaTime) override final;
 
@@ -70,8 +78,6 @@ public:
 
 private:
 	FORCEINLINE ImGuiIO& GetImGuiIO() const;
-	
-	FORCEINLINE void AddMouseButtonEvent(ImGuiIO& IO, FKey MouseKey, bool IsDown);
 	FORCEINLINE void AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown);
 
 	FImGuiTickResult TickImGui(const FGeometry* WidgetGeometry, FImGuiTickContext* TickContext);
@@ -99,7 +105,7 @@ class SImGuiMainWindowWidget : public SImGuiWidgetBase
 {
 	using Super = SImGuiWidgetBase;
 public:
-	void Construct(const FArguments& InArgs);
+	void Construct(const FArguments& InArgs, TSharedPtr<SWindow> MainViewportWindow);
 
 private:
 	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override;
@@ -116,7 +122,7 @@ public:
 		SLATE_EVENT(FOnTickImGuiWidgetDelegate, OnTickDelegate);
 	SLATE_END_ARGS()
 	
-	void Construct(const FArguments& InArgs);
+	void Construct(const FArguments& InArgs, TSharedPtr<SWindow> MainViewportWindow);
 
 private:
 	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override;

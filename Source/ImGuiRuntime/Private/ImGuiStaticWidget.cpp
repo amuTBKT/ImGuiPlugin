@@ -50,7 +50,7 @@ static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FS
 	return SNew(SDockTab)
 		.TabRole(ETabRole::NomadTab)
 		[
-			SNew(SImGuiWidget)
+			SNew(SImGuiWidget, SpawnTabArgs.GetOwnerWindow())
 			.OnTickDelegate(TickDelegate)
 		];
 }

@@ -127,7 +127,7 @@ private:
 		return SNew(SDockTab)
 			.TabRole(ETabRole::NomadTab)
 			[
-				SNew(SImGuiMainWindowWidget)
+				SNew(SImGuiMainWindowWidget, SpawnTabArgs.GetOwnerWindow())
 			];
 	}
 #endif
@@ -147,7 +147,7 @@ private:
 				//.UserResizeBorder(FMargin(0.f))
 				.SizingRule(ESizingRule::UserSized);
 			m_ImGuiMainWindow = FSlateApplication::Get().AddWindow(m_ImGuiMainWindow.ToSharedRef());
-			m_ImGuiMainWindow->SetContent(SNew(SImGuiMainWindowWidget));
+			m_ImGuiMainWindow->SetContent(SNew(SImGuiMainWindowWidget, m_ImGuiMainWindow));
 
 			m_ImGuiMainWindow->GetOnWindowClosedEvent().AddLambda(
 				[this](const TSharedRef<SWindow>& Window)

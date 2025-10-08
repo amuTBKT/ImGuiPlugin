@@ -66,8 +66,6 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	// shared default font texture
 	m_SharedFontTexture = NewObject<UTextureRenderTarget2D>(this, FName("ImGui_DefaultFontTexture"));
-	m_SharedFontTexture->bCanCreateUAV = false;
-	m_SharedFontTexture->bAutoGenerateMips = false;
 	m_SharedFontTexture->Filter = TextureFilter::TF_Bilinear;
 	m_SharedFontTexture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
 	m_SharedFontTexture->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
@@ -136,7 +134,8 @@ TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, con
 		.SizingRule(ESizingRule::UserSized);
 	Window = FSlateApplication::Get().AddWindow(Window.ToSharedRef());
 
-	TSharedPtr<SImGuiWidget> ImGuiWindow = SNew(SImGuiWidget).OnTickDelegate(TickDelegate);
+	TSharedPtr<SImGuiWidget> ImGuiWindow = SNew(SImGuiWidget, Window).OnTickDelegate(TickDelegate);
+
 	Window->SetContent(ImGuiWindow.ToSharedRef());
 
 	return Window;

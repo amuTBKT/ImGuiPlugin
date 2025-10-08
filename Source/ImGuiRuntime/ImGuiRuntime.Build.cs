@@ -21,11 +21,12 @@ public class ImGuiRuntime : ModuleRules
 				"InputCore",
 				"RenderCore",
 				"CoreUObject",
-				"ImGuiShaders"
+				"ImGuiShaders",
+				"ApplicationCore",
             }
 		);
 
-		PublicDependencyModuleNames.AddRange( new string[] { "ImGui" });
+		PublicDependencyModuleNames.Add("ImGui");
 
 		// need to include private header files for accessing slate resource
 		var EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
