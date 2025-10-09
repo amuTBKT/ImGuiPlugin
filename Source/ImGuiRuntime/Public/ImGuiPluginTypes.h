@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+
 #include "ImGuiCustomizations.h"
 
 // Not ideal but we include internal header here as some files do need access to it and we would like all includes to be directed through "ImGuiPluginTypes.h"
@@ -24,21 +25,9 @@
 // commonly used function to get icon for the default app style
 #define IMGUI_ICON(IconName) IMGUI_STYLE_ICON("ImGuiStyle", IconName)
 
-static inline ImU32 LinearColorToImU32(const FLinearColor& Color)
+static constexpr ImU32 FColorToImU32(const FColor& Color)
 {
-	return ImColor(Color.R, Color.G, Color.B, Color.A);
-}
-static inline ImU32 FColorToImU32(const FColor& Color)
-{
-	return ImColor(Color.R, Color.G, Color.B, Color.A);
-}
-static inline ImColor LinearColorToImColor(const FLinearColor& Color)
-{
-	return ImColor(Color.R, Color.G, Color.B, Color.A);
-}
-static inline ImColor FColorToImColor(const FColor& Color)
-{
-	return ImColor(Color.R, Color.G, Color.B, Color.A);
+	return IM_COL32(Color.R, Color.G, Color.B, Color.A);
 }
 
 struct FImGuiTickContext

@@ -1,5 +1,12 @@
 #pragma once
 
+//-------------------- Config Customization --------------------//
+#define IMGUI_DISABLE_OBSOLETE_FUNCTIONS	1
+#define IMGUI_DEFINE_MATH_OPERATORS			1
+#define IMGUI_DISABLE_DEFAULT_ALLOCATORS	1
+#define IMGUI_DISABLE_DEMO_WINDOWS			1
+//-------------------- Config Customization --------------------//
+
 //-------------------- Assert Customization --------------------//
 #if 0
 // imported functions, defined in Unreal module 
