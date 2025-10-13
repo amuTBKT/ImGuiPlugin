@@ -1,4 +1,4 @@
-// Copyright 2024 Amit Kumar Mehar. All Rights Reserved.
+// Copyright 2024-25 Amit Kumar Mehar. All Rights Reserved.
 
 #include "SImGuiWidgets.h"
 #include "ImGuiShaders.h"
@@ -414,7 +414,7 @@ FReply SImGuiWidgetBase::OnDragOver(const FGeometry& WidgetGeometry, const FDrag
 
 	if (m_ImGuiTickedByInputProcessing)
 	{
-		// in case slate widget was throttled
+		// dummy ImGui render in case slate widget was throttled
 		ImGuiIO& IO = GetImGuiIO();
 		ImGui::EndFrame();
 		ImGui::UpdatePlatformWindows();

@@ -1,3 +1,5 @@
+// Copyright 2024-25 Amit Kumar Mehar. All Rights Reserved.
+
 #include "ImGuiCustomizations.h"
 
 // imgui

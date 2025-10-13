@@ -1,4 +1,4 @@
-// Copyright 2024 Amit Kumar Mehar. All Rights Reserved.
+// Copyright 2024-25 Amit Kumar Mehar. All Rights Reserved.
 
 using System.IO;
 using UnrealBuildTool;
@@ -29,7 +29,7 @@ public class ImGui : ModuleRules
 			{
 				if (Target.Platform == UnrealTargetPlatform.Win64)
 				{
-					PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Debug/Win64/ImGui.lib"));
+					PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Release/Win64/ImGui.lib"));
 				}
 			}
 		}
