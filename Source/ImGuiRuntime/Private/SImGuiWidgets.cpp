@@ -23,14 +23,27 @@
 
 #include "ImGuiViewportUtils.inl"
 
-void SImGuiWidgetBase::Construct(const FArguments& InArgs, TSharedPtr<SWindow> MainViewportWindow, bool UseTranslucentBackground)
+void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 {
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 
 	m_ImGuiContext = ImGui::CreateContext(ImGuiSubsystem->GetSharedFontAtlas());
 
+	if (InArgs._ConfigFileName && FCStringAnsi::Strlen(InArgs._ConfigFileName) > 2)
+	{
+		// sanitize filename
+		FAnsiString FileName = InArgs._ConfigFileName;
+		FileName.RemoveSpacesInline();
+
+		ConfigFilePath = FAnsiString::Printf("%s/%s.ini", ImGuiSubsystem->GetIniDirectoryPath(), *FileName);
+	}
+	else
+	{
+		ConfigFilePath = ImGuiSubsystem->GetIniFilePath();
+	}
+
 	ImGuiIO& IO = GetImGuiIO();
-	IO.IniFilename = ImGuiSubsystem->GetIniFilePath();
+	IO.IniFilename = *ConfigFilePath;
 
 	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -89,7 +102,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs, TSharedPtr<SWindow> M
 		ImGuiUtils::FImGuiViewportData* MainViewportData = IM_NEW(ImGuiUtils::FImGuiViewportData)();
 		MainViewportData->ViewportWindow = nullptr;
 		MainViewportData->ViewportWidget = nullptr;
-		MainViewportData->MainViewportWindow = MainViewportWindow;
+		MainViewportData->MainViewportWindow = InArgs._MainViewportWindow;
 		MainViewportData->MainViewportWidget = StaticCastWeakPtr<SImGuiWidgetBase>(AsShared().ToWeakPtr());
 
 		ImGuiViewport* MainViewport = ImGui::GetMainViewport();
@@ -110,7 +123,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs, TSharedPtr<SWindow> M
 	m_ImGuiSlateBrush.SetResourceObject(m_ImGuiRT);
 
 	// only need to clear the RT when using translucent window, otherwise ImGui fullscreen widget pass should clear the RT.
-	m_ClearRenderTargetEveryFrame = UseTranslucentBackground;
+	m_ClearRenderTargetEveryFrame = (InArgs._bUseOpaqueBackground == false);
 }
 
 SImGuiWidgetBase::~SImGuiWidgetBase()
@@ -453,9 +466,11 @@ FReply SImGuiWidgetBase::OnDrop(const FGeometry& WidgetGeometry, const FDragDrop
 }
 #pragma endregion SLATE_INPUT
 
-void SImGuiMainWindowWidget::Construct(const FArguments& InArgs, TSharedPtr<SWindow> MainViewportWindow)
+void SImGuiMainWindowWidget::Construct(const FArguments& InArgs)
 {
-	Super::Construct(InArgs, MainViewportWindow, /*UseTranslucentBackground=*/false);
+	Super::Construct(
+		Super::FArguments()
+		.MainViewportWindow(InArgs._MainViewportWindow));
 }
 
 void SImGuiMainWindowWidget::TickImGuiInternal(FImGuiTickContext* TickContext)
@@ -485,9 +500,13 @@ void SImGuiMainWindowWidget::TickImGuiInternal(FImGuiTickContext* TickContext)
 	}
 }
 
-void SImGuiWidget::Construct(const FArguments& InArgs, TSharedPtr<SWindow> MainViewportWindow)
+void SImGuiWidget::Construct(const FArguments& InArgs)
 {
-	Super::Construct(Super::FArguments(), MainViewportWindow, /*UseTranslucentBackground=*/true);
+	Super::Construct(
+		Super::FArguments()
+		.MainViewportWindow(InArgs._MainViewportWindow)
+		.ConfigFileName(InArgs._ConfigFileName)
+		.bUseOpaqueBackground(InArgs._bUseOpaqueBackground));
 
 	m_OnTickDelegate = InArgs._OnTickDelegate;
 }

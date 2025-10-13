@@ -50,8 +50,11 @@ static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FS
 	return SNew(SDockTab)
 		.TabRole(ETabRole::NomadTab)
 		[
-			SNew(SImGuiWidget, SpawnTabArgs.GetOwnerWindow())
+			SNew(SImGuiWidget)
+			.MainViewportWindow(SpawnTabArgs.GetOwnerWindow())
 			.OnTickDelegate(TickDelegate)
+			.ConfigFileName(RegisterParams.WidgetName)
+			.bUseOpaqueBackground(true)
 		];
 }
 
@@ -64,7 +67,7 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FStaticWidgetRegist
 
 	if (UImGuiSubsystem* Subsystem = UImGuiSubsystem::Get())
 	{
-		RegisterParams.InitFunction();		
+		RegisterParams.InitFunction();
 		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.WidgetName), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
 			.SetGroup(GetImGuiTabGroup())
 			.SetDisplayName(FText::FromString(ANSI_TO_TCHAR(RegisterParams.WidgetName)))

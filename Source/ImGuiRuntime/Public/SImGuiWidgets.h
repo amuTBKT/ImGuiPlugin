@@ -2,11 +2,11 @@
 
 #pragma once
 
-#include "Widgets/DeclarativeSyntaxSupport.h"
-#include "Widgets/SLeafWidget.h"
 #include "UObject/GCObject.h"
-
+#include "Widgets/SLeafWidget.h"
 #include "ImGuiPluginDelegates.h"
+#include "Containers/AnsiString.h"
+#include "Widgets/DeclarativeSyntaxSupport.h"
 
 struct ImGuiIO;
 struct ImGuiContext;
@@ -31,11 +31,17 @@ class IMGUIRUNTIME_API SImGuiWidgetBase : public SLeafWidget, public FGCObject
 
 public:
 	SLATE_BEGIN_ARGS(SImGuiWidgetBase)
-	{
-	}
+		: _MainViewportWindow(nullptr)
+		, _ConfigFileName(nullptr)
+		, _bUseOpaqueBackground(true)
+		{
+		}
+		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
+		SLATE_ARGUMENT(const ANSICHAR*, ConfigFileName);
+		SLATE_ARGUMENT(bool, bUseOpaqueBackground);
 	SLATE_END_ARGS()
 
-	void Construct(const FArguments& InArgs, TSharedPtr<SWindow> MainViewportWindow, bool UseTranslucentBackground);
+	void Construct(const FArguments& InArgs);
 	virtual ~SImGuiWidgetBase();
 
 	// GCObject interface 
@@ -87,6 +93,7 @@ protected:
 	FSlateBrush m_ImGuiSlateBrush;
 	TObjectPtr<UTextureRenderTarget2D> m_ImGuiRT = nullptr;
 
+	FAnsiString ConfigFilePath;
 	ImGuiContext* m_ImGuiContext = nullptr;
 
 	// TODO: initial zoom support, can we do better than this?
@@ -105,7 +112,14 @@ class SImGuiMainWindowWidget : public SImGuiWidgetBase
 {
 	using Super = SImGuiWidgetBase;
 public:
-	void Construct(const FArguments& InArgs, TSharedPtr<SWindow> MainViewportWindow);
+	SLATE_BEGIN_ARGS(SImGuiMainWindowWidget)
+		: _MainViewportWindow(nullptr)
+		{
+		}
+		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
+	SLATE_END_ARGS()
+
+	void Construct(const FArguments& InArgs);
 
 private:
 	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override;
@@ -117,12 +131,19 @@ class IMGUIRUNTIME_API SImGuiWidget : public SImGuiWidgetBase
 	using Super = SImGuiWidgetBase;
 public:
 	SLATE_BEGIN_ARGS(SImGuiWidget)
-		: _OnTickDelegate()
-		{}
+		: _MainViewportWindow(nullptr)
+		, _OnTickDelegate()
+		, _ConfigFileName(nullptr)
+		, _bUseOpaqueBackground(true)
+		{
+		}
+		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
 		SLATE_EVENT(FOnTickImGuiWidgetDelegate, OnTickDelegate);
+		SLATE_ARGUMENT(const ANSICHAR*, ConfigFileName);
+		SLATE_ARGUMENT(bool, bUseOpaqueBackground);
 	SLATE_END_ARGS()
 	
-	void Construct(const FArguments& InArgs, TSharedPtr<SWindow> MainViewportWindow);
+	void Construct(const FArguments& InArgs);
 
 private:
 	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override;

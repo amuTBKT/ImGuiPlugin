@@ -136,7 +136,12 @@ TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, con
 		.SizingRule(ESizingRule::UserSized);
 	Window = FSlateApplication::Get().AddWindow(Window.ToSharedRef());
 
-	TSharedPtr<SImGuiWidget> ImGuiWindow = SNew(SImGuiWidget, Window).OnTickDelegate(TickDelegate);
+	TSharedPtr<SImGuiWidget> ImGuiWindow = 
+		SNew(SImGuiWidget)
+		.MainViewportWindow(Window)
+		.OnTickDelegate(TickDelegate)
+		.ConfigFileName(TCHAR_TO_ANSI(*WindowName))
+		.bUseOpaqueBackground(true);
 
 	Window->SetContent(ImGuiWindow.ToSharedRef());
 
