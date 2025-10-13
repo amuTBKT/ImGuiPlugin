@@ -866,7 +866,7 @@ namespace ImGuiUtils
 		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
 		if (ViewportData->ViewportWidget.IsValid())
 		{
-			// window was destroyed by platform, happnes when MainViewportWindow is dragged invalidating all child windows
+			// window was destroyed by platform, happens when MainViewportWindow is dragged invalidating all child windows
 			if (!ViewportData->ViewportWindow.IsValid())
 			{
 				ImGui::DestroyPlatformWindow((ImGuiViewportP*)Viewport);

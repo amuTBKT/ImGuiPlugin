@@ -4,23 +4,15 @@
 
 #include "ImGuiPluginTypes.h"
 #include "Styling/SlateBrush.h"
-#include "Textures/SlateIcon.h"
 #include "ImGuiPluginDelegates.h"
 #include "Containers/AnsiString.h"
 #include "Subsystems/EngineSubsystem.h"
 #include "Textures/SlateShaderResource.h"
-#include "ImGuiSubsystem.generated.h"
 
-#if WITH_EDITOR
-class SDockTab;
-class FSpawnTabArgs;
-#endif
+#include "ImGuiSubsystem.generated.h"
 
 class SWindow;
 class UTexture2D;
-struct ImTextureData;
-class SImGuiWidgetBase;
-class FAutoConsoleCommand;
 class FSlateShaderResource;
 class UTextureRenderTarget2D;
 

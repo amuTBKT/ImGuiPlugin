@@ -29,7 +29,7 @@ public class ImGui : ModuleRules
 			{
 				if (Target.Platform == UnrealTargetPlatform.Win64)
 				{
-					PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Release/Win64/ImGui.lib"));
+					PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Debug/Win64/ImGui.lib"));
 				}
 			}
 		}

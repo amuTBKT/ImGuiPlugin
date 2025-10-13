@@ -6,10 +6,10 @@
 #include "Misc/App.h"
 #include "SImGuiWidgets.h"
 #include "HAL/FileManager.h"
-#include "TextureResource.h"
 #include "Widgets/SWindow.h"
+#include "TextureResource.h"
 #include "Engine/Texture2D.h"
-#include "Styling/AppStyle.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Framework/Application/SlateApplication.h"
 
 static int32 GCaptureNextGpuFrames = 0;
@@ -62,6 +62,8 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		IFileManager::Get().MakeDirectory(ANSI_TO_TCHAR(*m_IniDirectoryPath), true);
 	}
 
+	// NOTE: Add reference to make sure ImGuiContext destructor cannot release font atlas
+	m_SharedFontAtlas.RefCount = 1;
 	m_SharedFontAtlas.AddFontDefault();
 
 	// shared default font texture

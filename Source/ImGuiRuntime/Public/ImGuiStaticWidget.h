@@ -36,13 +36,13 @@ struct FAutoRegisterStandaloneWidget
 };
 
 #define IMGUI_REGISTER_MAIN_WINDOW_WIDGET(RegisterParams)				\
-static FAutoRegisterMainWindowWidget PREPROCESSOR_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
+static FAutoRegisterMainWindowWidget UE_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
 
 #if WITH_EDITOR
 #define IMGUI_REGISTER_STANDALONE_WIDGET(RegisterParams)				\
-static FAutoRegisterStandaloneWidget PREPROCESSOR_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
+static FAutoRegisterStandaloneWidget UE_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
 #else
 // at runtime push static widgets to the main window
 #define IMGUI_REGISTER_STANDALONE_WIDGET(RegisterParams)				\
-static FAutoRegisterMainWindowWidget PREPROCESSOR_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
+static FAutoRegisterMainWindowWidget UE_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
 #endif

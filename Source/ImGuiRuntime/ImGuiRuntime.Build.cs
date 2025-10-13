@@ -7,23 +7,23 @@ public class ImGuiRuntime : ModuleRules
 {
 	public ImGuiRuntime(ReadOnlyTargetRules Target) : base(Target)
 	{
-        PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        PrivateDependencyModuleNames.AddRange(
+		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
 				"RHI",
 				"Core",
 				"Slate",
 				"Engine",
-                "Projects",
-                "SlateCore",
+				"Projects",
+				"SlateCore",
 				"InputCore",
 				"RenderCore",
 				"CoreUObject",
 				"ImGuiShaders",
 				"ApplicationCore",
-            }
+			}
 		);
 
 		PublicDependencyModuleNames.Add("ImGui");
