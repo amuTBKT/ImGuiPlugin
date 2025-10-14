@@ -16,7 +16,6 @@ public class ImGuiRuntime : ModuleRules
 				"Core",
 				"Slate",
 				"Engine",
-				"Projects",
 				"SlateCore",
 				"InputCore",
 				"RenderCore",

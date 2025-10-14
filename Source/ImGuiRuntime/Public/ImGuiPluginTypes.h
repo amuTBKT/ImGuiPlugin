@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
 #include "Textures/SlateIcon.h"
 
 #include "ImGuiCustomizations.h"
@@ -23,39 +22,36 @@
 // returns FSlateBrush for specified icon and style name
 #define IMGUI_STYLE_ICON(StyleName, IconName) [](){ static const FSlateBrush* Brush = FSlateIcon(FName(StyleName), FName(IconName)).GetIcon(); return Brush; }()
 
-// commonly used function to get icon for the default app style
-#define IMGUI_ICON(IconName) IMGUI_STYLE_ICON("ImGuiStyle", IconName)
-
 static constexpr ImU32 FColorToImU32(const FColor& Color)
 {
 	return IM_COL32(Color.R, Color.G, Color.B, Color.A);
 }
 
+class FDragDropOperation;
 struct FImGuiTickContext
 {
 	ImGuiContext* ImGuiContext = nullptr;
 
 	// inputs
-	TSharedPtr<class FDragDropOperation> DragDropOperation = nullptr;
+	TSharedPtr<FDragDropOperation> DragDropOperation = nullptr;
 	bool bApplyDragDropOperation = false;
 
 	// outputs
 	bool bWasDragDropOperationHandled = false;
 
-	bool ConsumeDragDropOperation()
+	TSharedPtr<FDragDropOperation> ConsumeDragDropOperation()
 	{
+		TSharedPtr<FDragDropOperation> DragDropOp;
 		if (bApplyDragDropOperation && DragDropOperation.IsValid())
 		{
-			DragDropOperation.Reset();
-			bWasDragDropOperationHandled = true;
-
-			return true;
+			bWasDragDropOperationHandled = true;			
+			Swap(DragDropOp, DragDropOperation);
 		}
-		return false;
+		return DragDropOp;
 	}
 };
 
-// since the module is built as DLL, we need to set context before making ImGui calls.
+// since modules can be added as DLL, we need to set context before making ImGui calls.
 struct FImGuiTickScope : FNoncopyable
 {
 	explicit FImGuiTickScope(FImGuiTickContext* Context)
@@ -87,7 +83,6 @@ struct FImGuiNamedWidgetScope final : FNoncopyable
 		: FImGuiNamedWidgetScope(static_cast<int32>(ScopeId))
 	{
 	}
-
 	~FImGuiNamedWidgetScope()
 	{
 		ImGui::PopID();

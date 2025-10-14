@@ -21,18 +21,18 @@ FAutoRegisterMainWindowWidget::FAutoRegisterMainWindowWidget(FStaticWidgetRegist
 		return;
 	}
 
-	if (UImGuiSubsystem* Subsystem = UImGuiSubsystem::Get())
+	if (UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get())
 	{
 		RegisterParams.InitFunction();
-		Subsystem->GetMainWindowTickDelegate().AddStatic(RegisterParams.TickFunction);
+		ImGuiSubsystem->GetMainWindowTickDelegate().AddStatic(RegisterParams.TickFunction);
 	}
 	else
 	{
 		UImGuiSubsystem::OnSubsystemInitialized().AddLambda(
-			[RegisterParams](UImGuiSubsystem* Subsystem)
+			[RegisterParams](UImGuiSubsystem* ImGuiSubsystem)
 			{
 				RegisterParams.InitFunction();
-				Subsystem->GetMainWindowTickDelegate().AddStatic(RegisterParams.TickFunction);
+				ImGuiSubsystem->GetMainWindowTickDelegate().AddStatic(RegisterParams.TickFunction);
 			});
 	}
 }
@@ -65,7 +65,7 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FStaticWidgetRegist
 		return;
 	}
 
-	if (UImGuiSubsystem* Subsystem = UImGuiSubsystem::Get())
+	if (UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get())
 	{
 		RegisterParams.InitFunction();
 		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.WidgetName), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
@@ -77,7 +77,7 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FStaticWidgetRegist
 	else
 	{
 		UImGuiSubsystem::OnSubsystemInitialized().AddLambda(
-			[RegisterParams](UImGuiSubsystem* Subsystem)
+			[RegisterParams](UImGuiSubsystem* ImGuiSubsystem)
 			{
 				RegisterParams.InitFunction();
 				FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.WidgetName), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
