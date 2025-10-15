@@ -22,11 +22,6 @@
 // returns FSlateBrush for specified icon and style name
 #define IMGUI_STYLE_ICON(StyleName, IconName) [](){ static const FSlateBrush* Brush = FSlateIcon(FName(StyleName), FName(IconName)).GetIcon(); return Brush; }()
 
-static constexpr ImU32 FColorToImU32(const FColor& Color)
-{
-	return IM_COL32(Color.R, Color.G, Color.B, Color.A);
-}
-
 class FDragDropOperation;
 struct FImGuiTickContext
 {
