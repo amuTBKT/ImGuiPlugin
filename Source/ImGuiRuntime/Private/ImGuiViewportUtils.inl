@@ -362,7 +362,7 @@ namespace ImGuiUtils
 								ProjectionMatrix);
 						};
 
-					uint32_t RenderStateOverrides = 0;
+					uint32_t ShaderStateOverrides = 0;
 
 					RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
 					RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
@@ -378,13 +378,13 @@ namespace ImGuiUtils
 								RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
 								RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
 
-								RenderStateOverrides = 0;
+								ShaderStateOverrides = 0;
 
 								UpdateVertexShaderParameters();
 							}
-							else if (DrawCmd.UserCallback == ImDrawCallback_SetRenderState)
+							else if (DrawCmd.UserCallback == ImDrawCallback_SetShaderState)
 							{
-								RenderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
+								ShaderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
 
 								//UpdateVertexShaderParameters(); No VS state exposed atm.
 							}
@@ -426,7 +426,7 @@ namespace ImGuiUtils
 								RenderData->BoundTextures[TextureIndex].TextureRHI,
 								RenderData->BoundTextures[TextureIndex].SamplerRHI,
 								RenderData->BoundTextures[TextureIndex].IsSRGB,
-								RenderStateOverrides);
+								ShaderStateOverrides);
 
 							RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset, DrawCmd.ElemCount / 3, 1);
 						}
@@ -510,7 +510,7 @@ namespace ImGuiUtils
 			};
 
 			OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
-			FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, m_ImGuiSlateBrush.GetRenderingResource(), Vertices, Indices, nullptr, 0, 0, ESlateDrawEffect::NoGamma);
+			FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, m_ImGuiSlateBrush.GetRenderingResource(), MoveTemp(Vertices), MoveTemp(Indices), nullptr, 0, 0, ESlateDrawEffect::NoGamma);
 			OutDrawElements.PopClip();
 
 			return LayerId;

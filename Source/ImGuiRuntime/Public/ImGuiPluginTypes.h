@@ -89,26 +89,69 @@ struct FImGuiNamedWidgetScope final : FNoncopyable
 	}
 };
 
-// params used to create Image widget, works for slate icons too (they are atlased)
+// params used to create image widgets, works for slate icons too (they are atlased)
 struct FImGuiImageBindingParams
 {
-	ImVec2 Size = ImVec2(1.f, 1.f);
-	ImVec2 UV0 = ImVec2(0.f, 0.f);
-	ImVec2 UV1 = ImVec2(1.f, 1.f);
-	ImTextureID Id = 0;
+	ImVec2 Size;
+	ImVec2 UV0;
+	ImVec2 UV1;
+	ImTextureID Id;
 };
 
-#define ImDrawCallback_SetRenderState (ImDrawCallback)(-2)
-using FImGuiRenderState = void*;
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-enum class EImGuiRenderState : uint32
+#define ImDrawCallback_SetShaderState (ImDrawCallback)(-2)
+using FImGuiShaderState = void*;
+
+enum class EImGuiShaderState : uint32
 {
-	Default				 = 0,
-	DisableAlphaBlending = 1 << 0,  // disable alpha writes from shader (outputs Color.a=1)
+	Default				 = 0u,
+	DisableAlphaBlending = 1u << 0,  // disable alpha writes from shader (outputs Color.a=1)
 };
-ENUM_CLASS_FLAGS(EImGuiRenderState);
+ENUM_CLASS_FLAGS(EImGuiShaderState);
 
-FORCEINLINE FImGuiRenderState MakeImGuiRenderState(EImGuiRenderState RenderState)
+static constexpr FImGuiShaderState MakeImGuiShaderState(EImGuiShaderState ShaderState)
 {
-	return (FImGuiRenderState)RenderState;
+	return (FImGuiShaderState)ShaderState;
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// params used to register an ImGui widget as standalone or main window widget
+struct FStaticWidgetRegisterParams
+{
+	void(*InitFunction)(void);
+	void(*TickFunction)(FImGuiTickContext* Context);
+	FSlateIcon WidgetIcon;
+	const char* WidgetName = nullptr;
+	const char* WidgetDescription = nullptr;
+
+	bool IsValid() const
+	{
+		return InitFunction && TickFunction && WidgetName && WidgetDescription;
+	}
+};
+
+// adds widget to the main ImGui window
+struct FAutoRegisterMainWindowWidget
+{
+	IMGUIRUNTIME_API FAutoRegisterMainWindowWidget(FStaticWidgetRegisterParams RegisterParams);
+};
+
+// creates a new tab for displaying widget
+struct FAutoRegisterStandaloneWidget
+{
+	IMGUIRUNTIME_API FAutoRegisterStandaloneWidget(FStaticWidgetRegisterParams RegisterParams);
+};
+
+#define IMGUI_REGISTER_MAIN_WINDOW_WIDGET(RegisterParams)				\
+static FAutoRegisterMainWindowWidget UE_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
+
+#if WITH_EDITOR
+#define IMGUI_REGISTER_STANDALONE_WIDGET(RegisterParams)				\
+static FAutoRegisterStandaloneWidget UE_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
+#else
+// at runtime push standalone widgets to the main window
+#define IMGUI_REGISTER_STANDALONE_WIDGET(RegisterParams)				\
+static FAutoRegisterMainWindowWidget UE_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
+#endif

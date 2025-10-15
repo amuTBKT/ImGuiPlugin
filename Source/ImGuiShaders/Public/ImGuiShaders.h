@@ -2,12 +2,10 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
-
-#include "ShaderParameterStruct.h"
-#include "ShaderParameterUtils.h"
-#include "GlobalShader.h"
 #include "Shader.h"
+#include "GlobalShader.h"
+#include "ShaderParameterUtils.h"
+#include "ShaderParameterStruct.h"
 
 class IMGUISHADERS_API FImGuiVS : public FGlobalShader
 {
@@ -48,7 +46,7 @@ public:
 		TextureParam.Bind(Initializer.ParameterMap, TEXT("Texture"));
 		TextureSamplerParam.Bind(Initializer.ParameterMap, TEXT("TextureSampler"));
 		SrgbParam.Bind(Initializer.ParameterMap, TEXT("IsTextureSrgb"));
-		RenderStateOverridesParam.Bind(Initializer.ParameterMap, TEXT("RenderStateOverrides"));
+		ShaderStateOverridesParam.Bind(Initializer.ParameterMap, TEXT("ShaderStateOverrides"));
 	}
 	FImGuiPS() {}
 
@@ -62,17 +60,17 @@ public:
 		FRHITexture* Texture,
 		FRHISamplerState* SamplerState,
 		bool EnableSrgb,
-		uint32 RenderStateOverrides)
+		uint32 ShaderStateOverrides)
 	{
 		SetTextureParameter(BatchedParameters, TextureParam, Texture);
 		SetSamplerParameter(BatchedParameters, TextureSamplerParam, SamplerState);
 		SetShaderValue(BatchedParameters, SrgbParam, EnableSrgb ? 1 : 0);
-		SetShaderValue(BatchedParameters, RenderStateOverridesParam, RenderStateOverrides);
+		SetShaderValue(BatchedParameters, ShaderStateOverridesParam, ShaderStateOverrides);
 	}
 
 private:
 	LAYOUT_FIELD(FShaderResourceParameter, TextureParam);
 	LAYOUT_FIELD(FShaderResourceParameter, TextureSamplerParam);
 	LAYOUT_FIELD(FShaderParameter, SrgbParam);
-	LAYOUT_FIELD(FShaderParameter, RenderStateOverridesParam);
+	LAYOUT_FIELD(FShaderParameter, ShaderStateOverridesParam);
 };

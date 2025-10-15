@@ -1,9 +1,5 @@
 // Copyright 2024-25 Amit Kumar Mehar. All Rights Reserved.
 
-#pragma once
-
-#include "ImGuiStaticWidget.h"
-
 #include "SImGuiWidgets.h"
 #include "ImGuiSubsystem.h"
 
