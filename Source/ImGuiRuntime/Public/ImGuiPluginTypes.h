@@ -87,10 +87,10 @@ struct FImGuiNamedWidgetScope final : FNoncopyable
 // params used to create image widgets, works for slate icons too (they are atlased)
 struct FImGuiImageBindingParams
 {
-	ImVec2 Size;
-	ImVec2 UV0;
-	ImVec2 UV1;
-	ImTextureID Id;
+	ImVec2 Size = ImVec2(1.f, 1.f);
+	ImVec2 UV0 = ImVec2(0.f, 0.f);
+	ImVec2 UV1 = ImVec2(1.f, 1.f);
+	ImTextureID Id = 0u;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////

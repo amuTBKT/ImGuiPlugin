@@ -68,17 +68,18 @@ public:
 	IMGUIRUNTIME_API const char* GetIniFilePath()		const { return *m_IniFilePath; }
 
 	// resources
-	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale = 1.f);
+	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2f LocalSize, float DrawScale = 1.f);
+	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, float UniformSize) { return RegisterOneFrameResource(SlateBrush, FVector2f(UniformSize)); }
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush);
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(UTexture2D* Texture);
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource);
 
 	// widget
-	IMGUIRUNTIME_API TSharedPtr<SWindow> CreateWidget(const FString& WindowName, const FVector2D& WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
+	IMGUIRUNTIME_API TSharedPtr<SWindow> CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
 	IMGUIRUNTIME_API FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() { return m_ImGuiMainWindowTickDelegate; }
 	IMGUIRUNTIME_API const FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() const { return m_ImGuiMainWindowTickDelegate; }
 
-	FORCEINLINE ImFontAtlas* GetSharedFontAtlas()				  { return &m_SharedFontAtlas; }
+	FORCEINLINE ImFontAtlas* GetSharedFontAtlas()				  { return m_SharedFontAtlas.Get(); }
 	FORCEINLINE ImTextureID  GetSharedFontTextureID()		const { return m_SharedFontImageParams.Id; }
 	FORCEINLINE ImTextureID  GetMissingImageTextureID()		const { return m_MissingImageParams.Id; }
 	FORCEINLINE uint32		 GetSharedFontTextureIndex()	const { return ImGuiIDToIndex(m_SharedFontImageParams.Id); }
@@ -112,7 +113,7 @@ private:
 	UTexture2D* m_MissingImageTexture = nullptr;
 
 	int32 FontAtlasBuilderFrameCount = 0;
-	ImFontAtlas m_SharedFontAtlas = {};
+	TSharedPtr<ImFontAtlas, ESPMode::NotThreadSafe> m_SharedFontAtlas;
 	FSlateBrush m_SharedFontSlateBrush = {};
 	FSlateBrush m_MissingImageSlateBrush = {};
 	FImGuiImageBindingParams m_SharedFontImageParams = {};

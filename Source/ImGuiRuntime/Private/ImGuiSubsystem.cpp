@@ -63,11 +63,12 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 
 	// NOTE: Add reference to make sure ImGuiContext destructor cannot release font atlas
-	m_SharedFontAtlas.RefCount = 1;
-	m_SharedFontAtlas.AddFontDefault();
+	m_SharedFontAtlas = MakeShared<ImFontAtlas, ESPMode::NotThreadSafe>();
+	m_SharedFontAtlas->RefCount = 1;
+	m_SharedFontAtlas->AddFontDefault();
 
-	// shared default font texture
-	m_SharedFontTexture = NewObject<UTextureRenderTarget2D>(this, FName("ImGui_DefaultFontTexture"));
+	// shared font texture
+	m_SharedFontTexture = NewObject<UTextureRenderTarget2D>(this, FName("ImGui_SharedFontTexture"));
 	m_SharedFontTexture->Filter = TextureFilter::TF_Bilinear;
 	m_SharedFontTexture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
 	m_SharedFontTexture->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
@@ -94,6 +95,16 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	m_MissingImageSlateBrush.SetResourceObject(m_MissingImageTexture);
 
 	FCoreDelegates::OnBeginFrame.AddUObject(this, &UImGuiSubsystem::OnBeginFrame);
+	
+	// Need to ensure shared font atlas is released after all slate windows have exited
+	// Note: subsystem is deinitialized before slate so copy the pointer for callback
+	FCoreDelegates::OnPreExit.AddLambda(
+		[FontAtlasToDestroy=m_SharedFontAtlas]() mutable
+		{
+			ensure(FontAtlasToDestroy->RefCount == 1);
+			FontAtlasToDestroy->RefCount = 0;
+			FontAtlasToDestroy = nullptr;
+		});
 
 	OnSubsystemInitializedDelegate.Broadcast(this);
 
@@ -104,6 +115,8 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 void UImGuiSubsystem::Deinitialize()
 {
 	Super::Deinitialize();
+
+	m_SharedFontAtlas = nullptr;
 }
 
 bool UImGuiSubsystem::ShouldEnableImGui()
@@ -124,7 +137,7 @@ UImGuiSubsystem* UImGuiSubsystem::Get()
 	return nullptr;
 }
 
-TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, const FVector2D& WindowSize, FOnTickImGuiWidgetDelegate TickDelegate)
+TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate)
 {	
 	TSharedPtr<SWindow> Window = SNew(SWindow)
 		.Title(FText::FromString(WindowName))
@@ -154,7 +167,7 @@ void UImGuiSubsystem::OnBeginFrame()
 	m_CreatedSlateBrushes.Reset();
 	
 	// queue font updates
-	ImFontAtlasUpdateNewFrame(&m_SharedFontAtlas, FontAtlasBuilderFrameCount++, true);
+	ImFontAtlasUpdateNewFrame(m_SharedFontAtlas.Get(), FontAtlasBuilderFrameCount++, true);
 
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
 	m_SharedFontImageParams = RegisterOneFrameResource(&m_SharedFontSlateBrush);
@@ -169,12 +182,12 @@ void UImGuiSubsystem::UpdateTextureData(ImTextureData* TexData) const
 	if (TexData->Status == ImTextureStatus_WantDestroy && TexData->UnusedFrames > 2)
 	{
 		// latest shared font texture data should never be destroyed!
-		check(TexData != m_SharedFontAtlas.TexData);
+		check(TexData != m_SharedFontAtlas->TexData);
 
 		TexData->SetStatus(ImTextureStatus_Destroyed);
 		TexData->SetTexID(ImTextureID_Invalid);
 	}
-	else if (TexData == m_SharedFontAtlas.TexData)
+	else if (TexData == m_SharedFontAtlas->TexData)
 	{
 		check(IsValid(m_SharedFontTexture));
 
@@ -215,7 +228,7 @@ bool UImGuiSubsystem::CaptureGpuFrame() const
 	return GCaptureNextGpuFrames > 0;
 }
 
-FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2D LocalSize, float DrawScale/*=1.f*/)
+FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2f LocalSize, float DrawScale/*=1.f*/)
 {
 	if (!SlateBrush)
 	{

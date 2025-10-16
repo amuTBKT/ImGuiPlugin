@@ -378,8 +378,6 @@ namespace ImGuiUtils
 								RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
 								RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
 
-								ShaderStateOverrides = 0;
-
 								UpdateVertexShaderParameters();
 							}
 							else if (DrawCmd.UserCallback == ImDrawCallback_SetShaderState)
