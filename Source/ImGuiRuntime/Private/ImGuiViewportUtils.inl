@@ -190,7 +190,7 @@ namespace ImGuiUtils
 
 		RenderCaptureInterface::FScopedCapture RenderCapture(ImGuiSubsystem->CaptureGpuFrame(), TEXT("ImGuiWidget"));
 
-		struct FRenderData : FNoncopyable
+		struct FRenderData
 		{
 			struct FTextureInfo
 			{
@@ -198,48 +198,22 @@ namespace ImGuiUtils
 				FSamplerStateRHIRef SamplerRHI = nullptr;
 				bool IsSRGB = false;
 			};
-			TArray<ImDrawVert> VertexData;
-			TArray<ImDrawIdx> IndexData;
-			TArray<ImDrawCmd> DrawCommands;
 			TArray<FTextureInfo> BoundTextures;
-			ImVec2 DisplayPos = {};
-			ImVec2 DisplaySize = {};
-			int32 TotalVtxCount = 0;
-			int32 TotalIdxCount = 0;
-			int32 MissingTextureIndex = INDEX_NONE;
+			ImDrawData DrawData;
 			bool bClearRenderTarget = false;
-		};
-		FRenderData* RenderData = new FRenderData();
-		RenderData->DisplayPos = ImVec2(FMath::FloorToInt(DrawData->DisplayPos.x), FMath::FloorToInt(DrawData->DisplayPos.y));
-		RenderData->DisplaySize = DrawData->DisplaySize;
-		RenderData->TotalVtxCount = DrawData->TotalVtxCount;
-		RenderData->TotalIdxCount = DrawData->TotalIdxCount;
-		RenderData->VertexData.Reserve(RenderData->TotalVtxCount);
-		RenderData->IndexData.Reserve(RenderData->TotalIdxCount);
-		RenderData->DrawCommands.Reserve(DrawData->CmdListsCount * 4);
 
-		uint32 GlobalVertexOffset = 0;
-		uint32 GlobalIndexOffset = 0;
-		for (const ImDrawList* CmdList : DrawData->CmdLists)
-		{
-			RenderData->IndexData.Append(CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size);
-			RenderData->VertexData.Append(CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size);
-
-			for (const ImDrawCmd& DrawCmd : CmdList->CmdBuffer)
+			~FRenderData()
 			{
-				auto& Cmd = RenderData->DrawCommands.Add_GetRef(DrawCmd);
-				Cmd.VtxOffset += GlobalVertexOffset;
-				Cmd.IdxOffset += GlobalIndexOffset;
+				DrawData.Clear();
 			}
-			GlobalIndexOffset += CmdList->IdxBuffer.Size;
-			GlobalVertexOffset += CmdList->VtxBuffer.Size;
-		}
+		};
+		FRenderData RenderData_GT = {};
+		RenderData_GT.DrawData = *DrawData;
 
-		RenderData->MissingTextureIndex = ImGuiSubsystem->GetMissingImageTextureIndex();
-		RenderData->BoundTextures.Reserve(ImGuiSubsystem->GetOneFrameResources().Num());
+		RenderData_GT.BoundTextures.Reserve(ImGuiSubsystem->GetOneFrameResources().Num());
 		for (const FImGuiTextureResource& TextureResource : ImGuiSubsystem->GetOneFrameResources())
 		{
-			auto& TextureInfo = RenderData->BoundTextures.AddDefaulted_GetRef();
+			auto& TextureInfo = RenderData_GT.BoundTextures.AddDefaulted_GetRef();
 
 			FSlateShaderResource* ShaderResource = TextureResource.GetSlateShaderResource();
 			if (ShaderResource)
@@ -276,50 +250,60 @@ namespace ImGuiUtils
 			}
 		}
 
-		RenderData->bClearRenderTarget = bClearRT;
+		RenderData_GT.bClearRenderTarget = bClearRT;
 
 		ENQUEUE_RENDER_COMMAND(RenderImGui)(
-			[RenderData, RT_Resource = RenderTarget->GetResource()](FRHICommandListImmediate& RHICmdList)
+			[RenderData=MoveTemp(RenderData_GT), RT_Resource=RenderTarget->GetResource()](FRHICommandListImmediate& RHICmdList)
 			{
+				DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [RT]"), STAT_ImGui_RenderWidget_RT, STATGROUP_ImGui);
+
+				const ImDrawData* DrawData = &RenderData.DrawData;
+				const ImVec2 DisplayPos = ImVec2(FMath::FloorToInt(DrawData->DisplayPos.x), FMath::FloorToInt(DrawData->DisplayPos.y));
+				const ImVec2 DisplaySize = DrawData->DisplaySize;
+
 #if ((ENGINE_MAJOR_VERSION * 100u + ENGINE_MINOR_VERSION) > 505) //(Version > 5.5)
 				FRHIBufferCreateDesc VertexBufferDesc =
-					FRHIBufferCreateDesc::CreateVertex<ImDrawVert>(TEXT("ImGui_VertexBuffer"), RenderData->TotalVtxCount)
+					FRHIBufferCreateDesc::CreateVertex<ImDrawVert>(TEXT("ImGui_VertexBuffer"), DrawData->TotalVtxCount)
 					.AddUsage(EBufferUsageFlags::Volatile | EBufferUsageFlags::VertexBuffer)
 					.SetInitialState(ERHIAccess::VertexOrIndexBuffer)
 					.SetInitActionNone();
 				FBufferRHIRef VertexBuffer = RHICmdList.CreateBuffer(VertexBufferDesc);
-#else
-				FRHIResourceCreateInfo VertexBufferCreateInfo(TEXT("ImGui_VertexBuffer"));
-				FBufferRHIRef VertexBuffer = RHICmdList.CreateBuffer(
-					RenderData->TotalVtxCount * sizeof(ImDrawVert), EBufferUsageFlags::Volatile | EBufferUsageFlags::VertexBuffer,
-					sizeof(ImDrawVert), ERHIAccess::VertexOrIndexBuffer, VertexBufferCreateInfo);
-#endif
-				if (ImDrawVert* VertexDst = (ImDrawVert*)RHICmdList.LockBuffer(VertexBuffer, 0u, RenderData->VertexData.NumBytes(), RLM_WriteOnly))
-				{
-					FMemory::Memcpy(VertexDst, RenderData->VertexData.GetData(), RenderData->VertexData.NumBytes());
-					RHICmdList.UnlockBuffer(VertexBuffer);
-				}
 
-#if ((ENGINE_MAJOR_VERSION * 100u + ENGINE_MINOR_VERSION) > 505) //(Version > 5.5)
 				FRHIBufferCreateDesc IndexBufferDesc =
-					FRHIBufferCreateDesc::CreateIndex<ImDrawIdx>(TEXT("ImGui_IndexBuffer"), RenderData->TotalIdxCount)
+					FRHIBufferCreateDesc::CreateIndex<ImDrawIdx>(TEXT("ImGui_IndexBuffer"), DrawData->TotalIdxCount)
 					.AddUsage(EBufferUsageFlags::Volatile | EBufferUsageFlags::IndexBuffer)
 					.SetInitialState(ERHIAccess::VertexOrIndexBuffer)
 					.SetInitActionNone();
 				FBufferRHIRef IndexBuffer = RHICmdList.CreateBuffer(IndexBufferDesc);
 #else
+				FRHIResourceCreateInfo VertexBufferCreateInfo(TEXT("ImGui_VertexBuffer"));
+				FBufferRHIRef VertexBuffer = RHICmdList.CreateBuffer(
+					DrawData->TotalVtxCount * sizeof(ImDrawVert), EBufferUsageFlags::Volatile | EBufferUsageFlags::VertexBuffer,
+					sizeof(ImDrawVert), ERHIAccess::VertexOrIndexBuffer, VertexBufferCreateInfo);
+
 				FRHIResourceCreateInfo IndexBufferCreateInfo(TEXT("ImGui_IndexBuffer"));
 				FBufferRHIRef IndexBuffer = RHICmdList.CreateBuffer(
-					RenderData->TotalIdxCount * sizeof(ImDrawIdx), EBufferUsageFlags::Volatile | EBufferUsageFlags::IndexBuffer,
+					DrawData->TotalIdxCount * sizeof(ImDrawIdx), EBufferUsageFlags::Volatile | EBufferUsageFlags::IndexBuffer,
 					sizeof(ImDrawIdx), ERHIAccess::VertexOrIndexBuffer, IndexBufferCreateInfo);
 #endif
-				if (ImDrawIdx* IndexDst = (ImDrawIdx*)RHICmdList.LockBuffer(IndexBuffer, 0u, RenderData->IndexData.NumBytes(), RLM_WriteOnly))
+
+				ImDrawVert* VertexDst = (ImDrawVert*)RHICmdList.LockBuffer(VertexBuffer, 0u, DrawData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly);
+				ImDrawIdx* IndexDst = (ImDrawIdx*)RHICmdList.LockBuffer(IndexBuffer, 0u, DrawData->TotalIdxCount * sizeof(ImDrawIdx), RLM_WriteOnly);
+				if (ensure(VertexDst && IndexDst))
 				{
-					FMemory::Memcpy(IndexDst, RenderData->IndexData.GetData(), RenderData->IndexData.NumBytes());
+					for (const ImDrawList* CmdList : DrawData->CmdLists)
+					{
+						FMemory::Memcpy(VertexDst, CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size * sizeof(ImDrawVert));
+						FMemory::Memcpy(IndexDst, CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
+
+						VertexDst += CmdList->VtxBuffer.Size;
+						IndexDst += CmdList->IdxBuffer.Size;
+					}
+					RHICmdList.UnlockBuffer(VertexBuffer);
 					RHICmdList.UnlockBuffer(IndexBuffer);
 				}
 
-				const ERenderTargetLoadAction LoadAction = RenderData->bClearRenderTarget ? ERenderTargetLoadAction::EClear : ERenderTargetLoadAction::ENoAction;
+				const ERenderTargetLoadAction LoadAction = RenderData.bClearRenderTarget ? ERenderTargetLoadAction::EClear : ERenderTargetLoadAction::ENoAction;
 				FRHIRenderPassInfo RPInfo(RT_Resource->TextureRHI, MakeRenderTargetActions(LoadAction, ERenderTargetStoreAction::EStore));
 				RHICmdList.Transition(FRHITransitionInfo(RT_Resource->TextureRHI, ERHIAccess::SRVGraphicsPixel, ERHIAccess::RTV));
 				RHICmdList.BeginRenderPass(RPInfo, TEXT("RenderImGui"));
@@ -344,10 +328,10 @@ namespace ImGuiUtils
 
 					auto UpdateVertexShaderParameters = [&]() -> void
 						{
-							const float L = RenderData->DisplayPos.x;
-							const float R = RenderData->DisplayPos.x + RenderData->DisplaySize.x;
-							const float T = RenderData->DisplayPos.y;
-							const float B = RenderData->DisplayPos.y + RenderData->DisplaySize.y;
+							const float L = DisplayPos.x;
+							const float R = DisplayPos.x + DisplaySize.x;
+							const float T = DisplayPos.y;
+							const float B = DisplayPos.y + DisplaySize.y;
 							FMatrix44f ProjectionMatrix =
 							{
 								{ 2.0f / (R - L)	, 0.0f			   , 0.0f, 0.0f },
@@ -364,73 +348,78 @@ namespace ImGuiUtils
 
 					uint32_t ShaderStateOverrides = 0;
 
-					RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
+					RHICmdList.SetViewport(0.f, 0.f, 0.f, DisplaySize.x, DisplaySize.y, 1.f);
 					RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
 
 					UpdateVertexShaderParameters();
 
-					for (const ImDrawCmd& DrawCmd : RenderData->DrawCommands)
+					uint32 GlobalVertexOffset = 0;
+					uint32 GlobalIndexOffset = 0;
+					for (const ImDrawList* CmdList : DrawData->CmdLists)
 					{
-						if (DrawCmd.UserCallback != NULL)
+						for (const ImDrawCmd& DrawCmd : CmdList->CmdBuffer)
 						{
-							if (DrawCmd.UserCallback == ImDrawCallback_ResetRenderState)
+							if (DrawCmd.UserCallback != NULL)
 							{
-								RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
-								RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
-
-								UpdateVertexShaderParameters();
-							}
-							else if (DrawCmd.UserCallback == ImDrawCallback_SetShaderState)
-							{
-								ShaderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
-
-								//UpdateVertexShaderParameters(); No VS state exposed atm.
-							}
-							else
-							{
-								DrawCmd.UserCallback(&RHICmdList, DrawCmd.UserCallbackData, DrawCmd.UserCallbackDataSize);
-
-								// TODO: add a flag to tell whether callback modified the render state here?
+								if (DrawCmd.UserCallback == ImDrawCallback_ResetRenderState)
 								{
-									SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
-									RHICmdList.SetStreamSource(0, VertexBuffer, 0);
-
-									RHICmdList.SetViewport(0.f, 0.f, 0.f, RenderData->DisplaySize.x, RenderData->DisplaySize.y, 1.f);
+									RHICmdList.SetViewport(0.f, 0.f, 0.f, DisplaySize.x, DisplaySize.y, 1.f);
 									RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
 
 									UpdateVertexShaderParameters();
 								}
-							}
-						}
-						else
-						{
-							const ImVec2& ClipRectOffset = RenderData->DisplayPos;
-							RHICmdList.SetScissorRect(
-								true,
-								FMath::Max(0.f, DrawCmd.ClipRect.x - ClipRectOffset.x),							// >=Viewport.MinX
-								FMath::Max(0.f, DrawCmd.ClipRect.y - ClipRectOffset.y),							// >=Viewport.MinY
-								FMath::Min(RenderData->DisplaySize.x, DrawCmd.ClipRect.z - ClipRectOffset.x),	// <=Viewport.MaxX
-								FMath::Min(RenderData->DisplaySize.y, DrawCmd.ClipRect.w - ClipRectOffset.y));	// <=Viewport.MaxY
+								else if (DrawCmd.UserCallback == ImDrawCallback_SetShaderState)
+								{
+									ShaderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
 
-							uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
-							if (!(RenderData->BoundTextures.IsValidIndex(TextureIndex)/* && RenderData->BoundTextures[Index].IsValid()*/))
+									//UpdateVertexShaderParameters(); No VS state exposed atm.
+								}
+								else
+								{
+									DrawCmd.UserCallback(&RHICmdList, DrawCmd.UserCallbackData, DrawCmd.UserCallbackDataSize);
+
+									// TODO: add a flag to tell whether callback modified the render state here?
+									{
+										SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
+										RHICmdList.SetStreamSource(0, VertexBuffer, 0);
+
+										RHICmdList.SetViewport(0.f, 0.f, 0.f, DisplaySize.x, DisplaySize.y, 1.f);
+										RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
+
+										UpdateVertexShaderParameters();
+									}
+								}
+							}
+							else
 							{
-								TextureIndex = RenderData->MissingTextureIndex;
+								const ImVec2& ClipRectOffset = DisplayPos;
+								RHICmdList.SetScissorRect(
+									true,
+									FMath::Max(0.f, DrawCmd.ClipRect.x - ClipRectOffset.x),							// >=Viewport.MinX
+									FMath::Max(0.f, DrawCmd.ClipRect.y - ClipRectOffset.y),							// >=Viewport.MinY
+									FMath::Min(DisplaySize.x, DrawCmd.ClipRect.z - ClipRectOffset.x),	// <=Viewport.MaxX
+									FMath::Min(DisplaySize.y, DrawCmd.ClipRect.w - ClipRectOffset.y));	// <=Viewport.MaxY
+
+								uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
+								if (!(RenderData.BoundTextures.IsValidIndex(TextureIndex)/* && RenderData.BoundTextures[Index].IsValid()*/))
+								{
+									TextureIndex = UImGuiSubsystem::GetMissingImageTextureIndex();
+								}
+
+								SetShaderParametersLegacyPS(
+									RHICmdList,
+									PixelShader,
+									RenderData.BoundTextures[TextureIndex].TextureRHI,
+									RenderData.BoundTextures[TextureIndex].SamplerRHI,
+									RenderData.BoundTextures[TextureIndex].IsSRGB,
+									ShaderStateOverrides);
+
+								RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);
 							}
-
-							SetShaderParametersLegacyPS(
-								RHICmdList,
-								PixelShader,
-								RenderData->BoundTextures[TextureIndex].TextureRHI,
-								RenderData->BoundTextures[TextureIndex].SamplerRHI,
-								RenderData->BoundTextures[TextureIndex].IsSRGB,
-								ShaderStateOverrides);
-
-							RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset, DrawCmd.ElemCount / 3, 1);
 						}
+						GlobalVertexOffset += CmdList->VtxBuffer.Size;
+						GlobalIndexOffset += CmdList->IdxBuffer.Size;
 					}
-
-					delete RenderData;
 				}
 				RHICmdList.EndRenderPass();
 				RHICmdList.Transition(FRHITransitionInfo(RT_Resource->TextureRHI, ERHIAccess::RTV, ERHIAccess::SRVGraphicsPixel));
@@ -457,7 +446,7 @@ namespace ImGuiUtils
 			m_ImGuiRT->Filter = TextureFilter::TF_Nearest;
 			m_ImGuiRT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
 			m_ImGuiRT->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
-			m_ImGuiRT->InitAutoFormat(32, 32);
+			m_ImGuiRT->InitAutoFormat(1, 1);
 			m_ImGuiRT->UpdateResourceImmediate(true);
 
 			m_ImGuiSlateBrush.SetResourceObject(m_ImGuiRT);
@@ -480,6 +469,8 @@ namespace ImGuiUtils
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& WidgetGeometry, const FSlateRect& ClippingRect,
 			FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const override final
 		{
+			DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [GT]"), STAT_ImGui_RenderWidget_GT, STATGROUP_ImGui);
+
 			const FSlateRenderTransform WidgetOffsetTransform = FTransform2f(1.f, { 0.f, 0.f });
 			const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
 
@@ -516,8 +507,11 @@ namespace ImGuiUtils
 
 		virtual bool SupportsKeyboardFocus() const override { return true; }
 
-		void OnDrawDataGenerated(TNonNullPtr<const ImDrawData> DrawData)
+		void OnDrawDataGenerated(ImDrawData* DrawData)
 		{
+			DrawDataSnapshot.SnapUsingSwap(DrawData, ImGui::GetFrameCount());
+			DrawData = &DrawDataSnapshot.DrawData;
+
 			// resize RT if needed
 			{
 				const int32 NewSizeX = FMath::CeilToInt(DrawData->DisplaySize.x);
@@ -659,6 +653,7 @@ namespace ImGuiUtils
 
 	protected:
 		FSlateBrush m_ImGuiSlateBrush;
+		ImDrawDataSnapshot DrawDataSnapshot;
 		TObjectPtr<UTextureRenderTarget2D> m_ImGuiRT = nullptr;
 		TWeakPtr<SImGuiWidgetBase> MainViewportWidget = nullptr;
 	};
@@ -759,7 +754,8 @@ namespace ImGuiUtils
 		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
 		if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 		{
-			ViewportWindow->MoveWindowTo(FVector2f{ NewPosition.x, NewPosition.y });
+			// TODO: Popup location seems to be 1px off, so adjust here
+			ViewportWindow->MoveWindowTo(FVector2f{ NewPosition.x, NewPosition.y + 1.f });
 		}
 	}
 
@@ -796,7 +792,7 @@ namespace ImGuiUtils
 			const FVector2f WindowSize = ViewportWindow->GetSizeInScreen();
 			return ImVec2{ WindowSize.X, WindowSize.Y };
 		}
-		return ImVec2(0.f, 0.f);
+		return ImVec2{ 0.f, 0.f };
 	}
 
 	static void UnrealPlatform_SetWindowTitle(ImGuiViewport* Viewport, const char* Title)
@@ -867,6 +863,7 @@ namespace ImGuiUtils
 			// window was destroyed by platform, happens when MainViewportWindow is dragged invalidating all child windows
 			if (!ViewportData->ViewportWindow.IsValid())
 			{
+				// TODO: maybe not ideal to access viewport as 'ImGuiViewportP', but there doesn't seem to be a way to request window recreation
 				ImGui::DestroyPlatformWindow((ImGuiViewportP*)Viewport);
 			}
 		}

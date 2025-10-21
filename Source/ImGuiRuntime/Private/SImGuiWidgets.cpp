@@ -21,6 +21,7 @@
 #include "Runtime/Launch/Resources/Version.h"
 #include "Framework/Application/SlateApplication.h"
 
+#include "imgui_threaded_rendering.h"
 #include "ImGuiViewportUtils.inl"
 
 void SImGuiWidgetBase::Construct(const FArguments& InArgs)
@@ -28,6 +29,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 
 	m_ImGuiContext = ImGui::CreateContext(ImGuiSubsystem->GetSharedFontAtlas());
+	m_DrawDataSnapshot = IM_NEW(ImDrawDataSnapshot)();
 
 	if (InArgs._ConfigFileName && FCStringAnsi::Strlen(InArgs._ConfigFileName) > 2)
 	{
@@ -35,15 +37,15 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 		FAnsiString FileName = InArgs._ConfigFileName;
 		FileName.RemoveSpacesInline();
 
-		ConfigFilePath = FAnsiString::Printf("%s/%s.ini", ImGuiSubsystem->GetIniDirectoryPath(), *FileName);
+		m_ConfigFilePath = FAnsiString::Printf("%s/%s.ini", ImGuiSubsystem->GetIniDirectoryPath(), *FileName);
 	}
 	else
 	{
-		ConfigFilePath = ImGuiSubsystem->GetIniFilePath();
+		m_ConfigFilePath = ImGuiSubsystem->GetIniFilePath();
 	}
 
 	ImGuiIO& IO = GetImGuiIO();
-	IO.IniFilename = *ConfigFilePath;
+	IO.IniFilename = *m_ConfigFilePath;
 
 	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -117,7 +119,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	m_ImGuiRT->Filter = TextureFilter::TF_Nearest;
 	m_ImGuiRT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
 	m_ImGuiRT->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
-	m_ImGuiRT->InitAutoFormat(32, 32);
+	m_ImGuiRT->InitAutoFormat(1, 1);
 	m_ImGuiRT->UpdateResourceImmediate(true);
 
 	m_ImGuiSlateBrush.SetResourceObject(m_ImGuiRT);
@@ -132,6 +134,9 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 	{
 		ImGuiIO& IO = GetImGuiIO();
 		ImGui::DestroyPlatformWindows();
+
+		IM_DELETE(m_DrawDataSnapshot);
+		m_DrawDataSnapshot = nullptr;
 
 		ImGui::DestroyContext(m_ImGuiContext);
 		m_ImGuiContext = nullptr;
@@ -178,7 +183,7 @@ void SImGuiWidgetBase::Tick(const FGeometry& WidgetGeometry, const double Curren
 int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetGeometry, const FSlateRect& ClippingRect,
 	FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const
 {
-	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget"), STAT_ImGui_RenderWidget, STATGROUP_ImGui);
+	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [GT]"), STAT_ImGui_RenderWidget_GT, STATGROUP_ImGui);
 
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 
@@ -186,14 +191,14 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 
 	ImGui::Render();
 
-	ImDrawData* DrawData = ImGui::GetDrawData();
+	m_DrawDataSnapshot->SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetFrameCount());
 
-	for (ImTextureData* TexData : *DrawData->Textures)
+	for (ImTextureData* TexData : *m_DrawDataSnapshot->DrawData.Textures)
 	{
 		ImGuiSubsystem->UpdateTextureData(TexData);
 	}
 
-	if (ImGuiUtils::RenderImGuiWidgetToRenderTarget(DrawData, m_ImGuiRT.Get(), m_ClearRenderTargetEveryFrame))
+	if (ImGuiUtils::RenderImGuiWidgetToRenderTarget(&m_DrawDataSnapshot->DrawData, m_ImGuiRT.Get(), m_ClearRenderTargetEveryFrame))
 	{
 		const FSlateRenderTransform WidgetOffsetTransform = FTransform2f(1.f, { 0.f, 0.f });
 		const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();

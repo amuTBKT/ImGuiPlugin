@@ -11,6 +11,7 @@
 struct ImGuiIO;
 struct ImGuiContext;
 struct FImGuiTickContext;
+struct ImDrawDataSnapshot;
 class UTextureRenderTarget2D;
 
 namespace ImGuiUtils
@@ -93,8 +94,9 @@ protected:
 	FSlateBrush m_ImGuiSlateBrush;
 	TObjectPtr<UTextureRenderTarget2D> m_ImGuiRT = nullptr;
 
-	FAnsiString ConfigFilePath;
+	FAnsiString m_ConfigFilePath;
 	ImGuiContext* m_ImGuiContext = nullptr;
+	ImDrawDataSnapshot* m_DrawDataSnapshot = nullptr;
 
 	// TODO: initial zoom support, can we do better than this?
 	float m_WindowScale = 1.f;

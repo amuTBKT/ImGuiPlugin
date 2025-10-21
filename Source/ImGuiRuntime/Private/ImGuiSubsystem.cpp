@@ -165,12 +165,13 @@ void UImGuiSubsystem::OnBeginFrame()
 {
 	m_OneFrameResources.Reset();
 	m_CreatedSlateBrushes.Reset();
-	
+
 	// queue font updates
 	ImFontAtlasUpdateNewFrame(m_SharedFontAtlas.Get(), FontAtlasBuilderFrameCount++, true);
 
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
 	m_SharedFontImageParams = RegisterOneFrameResource(&m_SharedFontSlateBrush);
+	check(MissingImageTexID == m_MissingImageParams.Id);
 	check(SharedFontTexID == m_SharedFontImageParams.Id);
 
 	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);

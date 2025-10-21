@@ -77,18 +77,17 @@ public:
 	// widget
 	IMGUIRUNTIME_API TSharedPtr<SWindow> CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
 	IMGUIRUNTIME_API FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() { return m_ImGuiMainWindowTickDelegate; }
-	IMGUIRUNTIME_API const FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() const { return m_ImGuiMainWindowTickDelegate; }
-
-	FORCEINLINE ImFontAtlas* GetSharedFontAtlas()				  { return m_SharedFontAtlas.Get(); }
-	FORCEINLINE ImTextureID  GetSharedFontTextureID()		const { return m_SharedFontImageParams.Id; }
-	FORCEINLINE ImTextureID  GetMissingImageTextureID()		const { return m_MissingImageParams.Id; }
-	FORCEINLINE uint32		 GetSharedFontTextureIndex()	const { return ImGuiIDToIndex(m_SharedFontImageParams.Id); }
-	FORCEINLINE uint32		 GetMissingImageTextureIndex()	const { return ImGuiIDToIndex(m_MissingImageParams.Id); }
-	
-	FORCEINLINE const TArray<FImGuiTextureResource>& GetOneFrameResources() const { return m_OneFrameResources; }
 
 	static ImTextureID  IndexToImGuiID(uint32 Index)	{ return static_cast<ImTextureID>(Index); }
 	static uint32		ImGuiIDToIndex(ImTextureID ID)  { return static_cast<uint32>(ID); }
+
+	ImFontAtlas*		 GetSharedFontAtlas()			{ return m_SharedFontAtlas.Get(); }
+	static ImTextureID   GetSharedFontTextureID()		{ return SharedFontTexID; }
+	static ImTextureID   GetMissingImageTextureID()		{ return MissingImageTexID; }
+	static uint32		 GetSharedFontTextureIndex()	{ return ImGuiIDToIndex(SharedFontTexID); }
+	static uint32		 GetMissingImageTextureIndex()	{ return ImGuiIDToIndex(MissingImageTexID); }
+	
+	const TArray<FImGuiTextureResource>& GetOneFrameResources() const { return m_OneFrameResources; }
 
 	void UpdateTextureData(ImTextureData* TexData) const;
 
@@ -114,10 +113,11 @@ private:
 
 	int32 FontAtlasBuilderFrameCount = 0;
 	TSharedPtr<ImFontAtlas, ESPMode::NotThreadSafe> m_SharedFontAtlas;
-	FSlateBrush m_SharedFontSlateBrush = {};
 	FSlateBrush m_MissingImageSlateBrush = {};
-	FImGuiImageBindingParams m_SharedFontImageParams = {};
+	FSlateBrush m_SharedFontSlateBrush = {};
 	FImGuiImageBindingParams m_MissingImageParams = {};
+	FImGuiImageBindingParams m_SharedFontImageParams = {};
+	static inline const ImTextureID MissingImageTexID = IndexToImGuiID(0u);
 	static inline const ImTextureID SharedFontTexID = IndexToImGuiID(1u);
 
 	TArray<FSlateBrush> m_CreatedSlateBrushes;
