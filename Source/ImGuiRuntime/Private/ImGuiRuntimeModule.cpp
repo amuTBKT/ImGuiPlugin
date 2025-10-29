@@ -85,7 +85,7 @@ private:
 		{
 			m_ImGuiMainWindow = SNew(SWindow)
 				.Title(LOCTEXT("ImGuiWindowTitle", "ImGui"))
-				.ClientSize(FVector2D(640, 640))
+				.ClientSize(FVector2f(512.f, 512.f))
 				.AutoCenter(EAutoCenter::None)
 				.SupportsMaximize(true)
 				.SupportsMinimize(true)
