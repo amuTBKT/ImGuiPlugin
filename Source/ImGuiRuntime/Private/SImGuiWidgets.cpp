@@ -29,7 +29,8 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 
 	m_ImGuiContext = ImGui::CreateContext(ImGuiSubsystem->GetSharedFontAtlas());
-	m_DrawDataSnapshot = IM_NEW(ImDrawDataSnapshot)();
+	m_DoubleBufferedDrawData[0] = IM_NEW(ImDrawDataSnapshot)();
+	m_DoubleBufferedDrawData[1] = IM_NEW(ImDrawDataSnapshot)();
 
 	if (InArgs._ConfigFileName && FCStringAnsi::Strlen(InArgs._ConfigFileName) > 2)
 	{
@@ -135,8 +136,10 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 		ImGuiIO& IO = GetImGuiIO();
 		ImGui::DestroyPlatformWindows();
 
-		IM_DELETE(m_DrawDataSnapshot);
-		m_DrawDataSnapshot = nullptr;
+		IM_DELETE(m_DoubleBufferedDrawData[0]);
+		IM_DELETE(m_DoubleBufferedDrawData[1]);
+		m_DoubleBufferedDrawData[0] = nullptr;
+		m_DoubleBufferedDrawData[1] = nullptr;
 
 		ImGui::DestroyContext(m_ImGuiContext);
 		m_ImGuiContext = nullptr;
@@ -191,14 +194,15 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 
 	ImGui::Render();
 
-	m_DrawDataSnapshot->SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetFrameCount());
+	ImDrawDataSnapshot* DrawDataSnapshot = m_DoubleBufferedDrawData[ImGui::GetFrameCount() & 0x1];
+	DrawDataSnapshot->SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetFrameCount());
 
-	for (ImTextureData* TexData : *m_DrawDataSnapshot->DrawData.Textures)
+	for (ImTextureData* TexData : *DrawDataSnapshot->DrawData.Textures)
 	{
 		ImGuiSubsystem->UpdateTextureData(TexData);
 	}
 
-	if (ImGuiUtils::RenderImGuiWidgetToRenderTarget(&m_DrawDataSnapshot->DrawData, m_ImGuiRT.Get(), m_ClearRenderTargetEveryFrame))
+	if (ImGuiUtils::RenderImGuiWidgetToRenderTarget(&DrawDataSnapshot->DrawData, m_ImGuiRT.Get(), m_ClearRenderTargetEveryFrame))
 	{
 		const FSlateRenderTransform WidgetOffsetTransform = FTransform2f(1.f, { 0.f, 0.f });
 		const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();

@@ -199,16 +199,11 @@ namespace ImGuiUtils
 				bool IsSRGB = false;
 			};
 			TArray<FTextureInfo> BoundTextures;
-			ImDrawData DrawData;
+			const ImDrawData* DrawData = nullptr;
 			bool bClearRenderTarget = false;
-
-			~FRenderData()
-			{
-				DrawData.Clear();
-			}
 		};
 		FRenderData RenderData_GT = {};
-		RenderData_GT.DrawData = *DrawData;
+		RenderData_GT.DrawData = DrawData;
 
 		RenderData_GT.BoundTextures.Reserve(ImGuiSubsystem->GetOneFrameResources().Num());
 		for (const FImGuiTextureResource& TextureResource : ImGuiSubsystem->GetOneFrameResources())
@@ -257,7 +252,7 @@ namespace ImGuiUtils
 			{
 				DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [RT]"), STAT_ImGui_RenderWidget_RT, STATGROUP_ImGui);
 
-				const ImDrawData* DrawData = &RenderData.DrawData;
+				const ImDrawData* DrawData = RenderData.DrawData;
 				const ImVec2 DisplayPos = ImVec2(FMath::FloorToInt(DrawData->DisplayPos.x), FMath::FloorToInt(DrawData->DisplayPos.y));
 				const ImVec2 DisplaySize = DrawData->DisplaySize;
 
@@ -440,7 +435,7 @@ namespace ImGuiUtils
 
 		void Construct(const FArguments& InArgs, TWeakPtr<SImGuiWidgetBase> InMainViewportWidget)
 		{
-			MainViewportWidget = InMainViewportWidget;
+			m_MainViewportWidget = InMainViewportWidget;
 
 			m_ImGuiRT = NewObject<UTextureRenderTarget2D>();
 			m_ImGuiRT->Filter = TextureFilter::TF_Nearest;
@@ -509,6 +504,7 @@ namespace ImGuiUtils
 
 		void OnDrawDataGenerated(ImDrawData* DrawData)
 		{
+			ImDrawDataSnapshot& DrawDataSnapshot = m_DoubleBufferedDrawData[ImGui::GetFrameCount() & 0x1];
 			DrawDataSnapshot.SnapUsingSwap(DrawData, ImGui::GetFrameCount());
 			DrawData = &DrawDataSnapshot.DrawData;
 
@@ -528,19 +524,19 @@ namespace ImGuiUtils
 
 		virtual FReply OnKeyChar(const FGeometry& WidgetGeometry, const FCharacterEvent& CharacterEvent) override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 			return RootWidget ? RootWidget->OnKeyChar(RootWidget->GetCachedGeometry(), CharacterEvent) : FReply::Unhandled();
 		}
 
 		virtual FReply OnKeyDown(const FGeometry& WidgetGeometry, const FKeyEvent& KeyEvent) override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
-			return RootWidget ? RootWidget->OnKeyDown(MainViewportWidget.Pin()->GetCachedGeometry(), KeyEvent) : FReply::Unhandled();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
+			return RootWidget ? RootWidget->OnKeyDown(m_MainViewportWidget.Pin()->GetCachedGeometry(), KeyEvent) : FReply::Unhandled();
 		}
 
 		virtual FReply OnKeyUp(const FGeometry& WidgetGeometry, const FKeyEvent& KeyEvent) override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 			return RootWidget ? RootWidget->OnKeyUp(RootWidget->GetCachedGeometry(), KeyEvent) : FReply::Unhandled();
 		}
 
@@ -550,7 +546,7 @@ namespace ImGuiUtils
 			// so don't call OnMouseLeave if we could potentially be moving a viewport window (check for HasMouseCapture())
 			if (!HasMouseCapture())
 			{
-				TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+				TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 				if (RootWidget)
 				{
 					RootWidget->OnMouseLeave(MouseEvent);
@@ -560,7 +556,7 @@ namespace ImGuiUtils
 
 		virtual FReply OnMouseButtonDown(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 			if (!RootWidget)
 			{
 				return FReply::Unhandled();
@@ -584,7 +580,7 @@ namespace ImGuiUtils
 
 		virtual FReply OnMouseButtonUp(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 			if (!RootWidget)
 			{
 				return FReply::Unhandled();
@@ -608,31 +604,31 @@ namespace ImGuiUtils
 
 		virtual FReply OnMouseButtonDoubleClick(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 			return RootWidget ? RootWidget->OnMouseButtonDoubleClick(RootWidget->GetCachedGeometry(), MouseEvent) : FReply::Unhandled();
 		}
 
 		virtual FReply OnMouseWheel(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 			return RootWidget ? RootWidget->OnMouseWheel(RootWidget->GetCachedGeometry(), MouseEvent) : FReply::Unhandled();
 		}
 
 		virtual FReply OnMouseMove(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 			return RootWidget ? RootWidget->OnMouseMove(RootWidget->GetCachedGeometry(), MouseEvent) : FReply::Unhandled();
 		}
 
 		virtual FCursorReply OnCursorQuery(const FGeometry& WidgetGeometry, const FPointerEvent& CursorEvent) const override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 			return RootWidget ? RootWidget->OnCursorQuery(RootWidget->GetCachedGeometry(), CursorEvent) : FCursorReply::Unhandled();
 		}
 
 		virtual void OnDragLeave(const FDragDropEvent& DragDropEvent) override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 			if (RootWidget)
 			{
 				RootWidget->OnDragLeave(DragDropEvent);
@@ -641,21 +637,21 @@ namespace ImGuiUtils
 
 		virtual FReply OnDragOver(const FGeometry& WidgetGeometry, const FDragDropEvent& DragDropEvent) override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 			return RootWidget ? RootWidget->OnDragOver(RootWidget->GetCachedGeometry(), DragDropEvent) : FReply::Unhandled();
 		}
 
 		virtual FReply OnDrop(const FGeometry& WidgetGeometry, const FDragDropEvent& DragDropEvent) override
 		{
-			TSharedPtr<SImGuiWidgetBase> RootWidget = MainViewportWidget.Pin();
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 			return RootWidget ? RootWidget->OnDrop(RootWidget->GetCachedGeometry(), DragDropEvent) : FReply::Unhandled();
 		}
 
 	protected:
 		FSlateBrush m_ImGuiSlateBrush;
-		ImDrawDataSnapshot DrawDataSnapshot;
+		ImDrawDataSnapshot m_DoubleBufferedDrawData[2];
 		TObjectPtr<UTextureRenderTarget2D> m_ImGuiRT = nullptr;
-		TWeakPtr<SImGuiWidgetBase> MainViewportWidget = nullptr;
+		TWeakPtr<SImGuiWidgetBase> m_MainViewportWidget = nullptr;
 	};
 
 	struct FImGuiViewportData

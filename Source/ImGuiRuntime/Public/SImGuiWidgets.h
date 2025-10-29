@@ -96,7 +96,7 @@ protected:
 
 	FAnsiString m_ConfigFilePath;
 	ImGuiContext* m_ImGuiContext = nullptr;
-	ImDrawDataSnapshot* m_DrawDataSnapshot = nullptr;
+	ImDrawDataSnapshot* m_DoubleBufferedDrawData[2] = { nullptr, nullptr };
 
 	// TODO: initial zoom support, can we do better than this?
 	float m_WindowScale = 1.f;
