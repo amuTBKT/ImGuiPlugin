@@ -202,7 +202,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 		ImGuiSubsystem->UpdateTextureData(TexData);
 	}
 
-	if (ImGuiUtils::RenderImGuiWidgetToRenderTarget(&DrawDataSnapshot->DrawData, m_ImGuiRT.Get(), m_ClearRenderTargetEveryFrame))
+	if (ImGuiUtils::RenderImGuiWidgetToTexture(&DrawDataSnapshot->DrawData, m_ImGuiRT.Get(), m_ClearRenderTargetEveryFrame))
 	{
 		const FSlateRenderTransform WidgetOffsetTransform = FTransform2f(1.f, { 0.f, 0.f });
 		const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
@@ -232,7 +232,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 		};
 
 		OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
-		FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, m_ImGuiSlateBrush.GetRenderingResource(), Vertices, Indices, nullptr, 0, 0, ESlateDrawEffect::NoGamma);
+		FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, m_ImGuiSlateBrush.GetRenderingResource(), MoveTemp(Vertices), MoveTemp(Indices), nullptr, 0, 0, ESlateDrawEffect::NoGamma);
 		OutDrawElements.PopClip();
 	}
 
@@ -240,13 +240,20 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 	{
 		ImGuiViewport* MainViewport = ImGui::GetMainViewport();
 		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)MainViewport->PlatformUserData;
-		if (ViewportData && !ViewportData->MainViewportWindow.IsValid())
+
+		// TODO: maybe find a better way to detect window docking operations? This is not expensive, just a bit ugly!
+		TSharedPtr<SWindow> PreviousParentWindow = ViewportData->MainViewportWindow.Pin();
+		TSharedPtr<SWindow> CurrentParentWindow = FSlateApplication::Get().FindWidgetWindow(AsShared());
+		if (ViewportData && !PreviousParentWindow || (PreviousParentWindow != CurrentParentWindow))
 		{
-			ViewportData->MainViewportWindow = FSlateApplication::Get().FindWidgetWindow(AsShared());
+			ViewportData->MainViewportWindow = CurrentParentWindow;
+			ViewportData->bInvalidateManagedViewportWindows = true;
 		}
 
 		ImGui::UpdatePlatformWindows();
 		ImGui::RenderPlatformWindowsDefault();
+
+		ViewportData->bInvalidateManagedViewportWindows = false;
 	}
 	
 	return LayerId;

@@ -139,12 +139,22 @@ namespace ImGuiUtils
 		return MouseButton;
 	}
 
+	struct FImGuiViewportData
+	{
+		TWeakPtr<SWindow> ViewportWindow = nullptr;
+		TSharedPtr<SImGuiViewportWidget> ViewportWidget = nullptr;
+
+		TWeakPtr<SWindow> MainViewportWindow = nullptr;
+		TWeakPtr<SImGuiWidgetBase> MainViewportWidget = nullptr;
+
+		// to request viewport window recreation (for patching slate window references etc.)
+		bool bInvalidateManagedViewportWindows = false;
+	};
+
 	class FImGuiVertexDeclaration : public FRenderResource
 	{
 	public:
 		FVertexDeclarationRHIRef VertexDeclarationRHI;
-
-		virtual ~FImGuiVertexDeclaration() {}
 
 		virtual void InitRHI(FRHICommandListBase& RHICmdList) override
 		{
@@ -171,7 +181,7 @@ namespace ImGuiUtils
 	};
 	static TGlobalResource<FImGuiVertexDeclaration, FRenderResource::EInitPhase::Pre> GImGuiVertexDeclaration;
 
-	static bool RenderImGuiWidgetToRenderTarget(TNonNullPtr<const ImDrawData> DrawData, TNonNullPtr<UTextureRenderTarget2D> RenderTarget, bool bClearRT)
+	static bool RenderImGuiWidgetToTexture(TNonNullPtr<const ImDrawData> DrawData, TNonNullPtr<UTextureRenderTarget2D> RenderTarget, bool bClearRT)
 	{
 		if (DrawData->TotalVtxCount == 0 || DrawData->TotalIdxCount == 0)
 		{
@@ -433,8 +443,9 @@ namespace ImGuiUtils
 		}
 		SLATE_END_ARGS()
 
-		void Construct(const FArguments& InArgs, TWeakPtr<SImGuiWidgetBase> InMainViewportWidget)
+		void Construct(const FArguments& InArgs, TWeakPtr<SImGuiWidgetBase> InMainViewportWidget, ImGuiViewport* InImGuiViewport)
 		{
+			m_ImGuiViewport = InImGuiViewport;
 			m_MainViewportWidget = InMainViewportWidget;
 
 			m_ImGuiRT = NewObject<UTextureRenderTarget2D>();
@@ -445,9 +456,16 @@ namespace ImGuiUtils
 			m_ImGuiRT->UpdateResourceImmediate(true);
 
 			m_ImGuiSlateBrush.SetResourceObject(m_ImGuiRT);
+
+#if WITH_SLATE_DEBUGGING
+			FCoreDelegates::OnEndFrame.AddRaw(this, &SImGuiViewportWidget::UpdateWindowVisibility);
+#endif
 		}
 		virtual ~SImGuiViewportWidget()
 		{
+#if WITH_SLATE_DEBUGGING
+			FCoreDelegates::OnEndFrame.RemoveAll(this);
+#endif
 		}
 
 		virtual void AddReferencedObjects(FReferenceCollector& Collector) override
@@ -460,6 +478,33 @@ namespace ImGuiUtils
 		}
 
 		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D::ZeroVector; }
+
+#if WITH_SLATE_DEBUGGING
+		void UpdateWindowVisibility()
+		{
+			// slate doesn't update visibility for child windows, so a little workaround for it...
+			// Probably only need to worry about this in editor, if needed for packaged game we cannot rely on `slate debugging` logic
+			const ImGuiUtils::FImGuiViewportData* ViewportData = (const ImGuiUtils::FImGuiViewportData*)m_ImGuiViewport->PlatformUserData;
+			if (ViewportData && ViewportData->ViewportWidget.IsValid())
+			{
+				TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin();
+				TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
+
+				const bool bNewVisibility = RootWidget.IsValid() ? (RootWidget->Debug_GetLastPaintFrame() >= GFrameNumber) : false;
+				if (ViewportWindow && (bNewVisibility != ViewportWindow->IsVisible()))
+				{
+					if (bNewVisibility)
+					{
+						ViewportWindow->ShowWindow();
+					}
+					else
+					{
+						ViewportWindow->HideWindow();
+					}
+				}
+			}
+		}
+#endif //#if WITH_SLATE_DEBUGGING
 
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& WidgetGeometry, const FSlateRect& ClippingRect,
 			FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const override final
@@ -519,7 +564,7 @@ namespace ImGuiUtils
 				}
 			}
 
-			RenderImGuiWidgetToRenderTarget(DrawData, m_ImGuiRT.Get(), /*bClearRT=*/false);
+			RenderImGuiWidgetToTexture(DrawData, m_ImGuiRT.Get(), /*bClearRT=*/false);
 		}
 
 		virtual FReply OnKeyChar(const FGeometry& WidgetGeometry, const FCharacterEvent& CharacterEvent) override
@@ -649,22 +694,14 @@ namespace ImGuiUtils
 
 	protected:
 		FSlateBrush m_ImGuiSlateBrush;
+		const ImGuiViewport* m_ImGuiViewport = nullptr;
 		ImDrawDataSnapshot m_DoubleBufferedDrawData[2];
 		TObjectPtr<UTextureRenderTarget2D> m_ImGuiRT = nullptr;
 		TWeakPtr<SImGuiWidgetBase> m_MainViewportWidget = nullptr;
 	};
 
-	struct FImGuiViewportData
-	{
-		TWeakPtr<SWindow> ViewportWindow = nullptr;
-		TSharedPtr<SImGuiViewportWidget> ViewportWidget = nullptr;
-
-		TWeakPtr<SWindow> MainViewportWindow = nullptr;
-		TWeakPtr<SImGuiWidgetBase> MainViewportWidget = nullptr;
-	};
-
 	static void UnrealPlatform_CreateWindow(ImGuiViewport* Viewport)
-	{		
+	{
 		TWeakPtr<SWindow> MainViewportWindowPtr = nullptr;
 		TWeakPtr<SImGuiWidgetBase> MainViewportWidgetPtr = nullptr;
 		{
@@ -686,7 +723,7 @@ namespace ImGuiUtils
 		}
 		ensure(MainViewportWindowPtr.IsValid() && MainViewportWidgetPtr.IsValid());
 
-		TSharedPtr<ImGuiUtils::SImGuiViewportWidget> ViewportWidget = SNew(ImGuiUtils::SImGuiViewportWidget, MainViewportWidgetPtr);
+		TSharedPtr<ImGuiUtils::SImGuiViewportWidget> ViewportWidget = SNew(ImGuiUtils::SImGuiViewportWidget, MainViewportWidgetPtr, Viewport);
 		TSharedPtr<SWindow> ViewportWindow = 
 			SNew(SWindow)
 			// window size/layout
@@ -747,130 +784,165 @@ namespace ImGuiUtils
 
 	static void UnrealPlatform_SetWindowPosition(ImGuiViewport* Viewport, ImVec2 NewPosition)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			// TODO: Popup location seems to be 1px off, so adjust here
-			ViewportWindow->MoveWindowTo(FVector2f{ NewPosition.x, NewPosition.y + 1.f });
+			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+			{
+				// TODO: Popup location seems to be 1px off, so adjust here
+				ViewportWindow->MoveWindowTo(FVector2f{ NewPosition.x, NewPosition.y + 1.f });
+			}
 		}
 	}
 
 	static ImVec2 UnrealPlatform_GetWindowPosition(ImGuiViewport* Viewport)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (ViewportData->ViewportWidget.IsValid())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			FVector2f Position = ViewportData->ViewportWidget->GetCachedGeometry().GetAbsolutePosition();
-			return ImVec2{ Position.X, Position.Y };
-		}
-		else if (TSharedPtr<SImGuiWidgetBase> MainViewportWidget = ViewportData->MainViewportWidget.Pin())
-		{
-			FVector2f Position = MainViewportWidget->GetCachedGeometry().GetAbsolutePosition();
-			return ImVec2{ Position.X, Position.Y };
+			if (ViewportData->ViewportWidget.IsValid())
+			{
+				FVector2f Position = ViewportData->ViewportWidget->GetCachedGeometry().GetAbsolutePosition();
+				return ImVec2{ Position.X, Position.Y };
+			}
+			else if (TSharedPtr<SImGuiWidgetBase> MainViewportWidget = ViewportData->MainViewportWidget.Pin())
+			{
+				FVector2f Position = MainViewportWidget->GetCachedGeometry().GetAbsolutePosition();
+				return ImVec2{ Position.X, Position.Y };
+			}
 		}
 		return ImVec2{ 0.f, 0.f };
 	}
 
 	static void UnrealPlatform_SetWindowSize(ImGuiViewport* Viewport, ImVec2 NewSize)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			ViewportWindow->Resize(FVector2f{ NewSize.x, NewSize.y });
+			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+			{
+				ViewportWindow->Resize(FVector2f{ NewSize.x, NewSize.y });
+			}
 		}
 	}
 	
 	static ImVec2 UnrealPlatform_GetWindowSize(ImGuiViewport* Viewport)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			const FVector2f WindowSize = ViewportWindow->GetSizeInScreen();
-			return ImVec2{ WindowSize.X, WindowSize.Y };
+			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+			{
+				const FVector2f WindowSize = ViewportWindow->GetSizeInScreen();
+				return ImVec2{ WindowSize.X, WindowSize.Y };
+			}
 		}
 		return ImVec2{ 0.f, 0.f };
 	}
 
 	static void UnrealPlatform_SetWindowTitle(ImGuiViewport* Viewport, const char* Title)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			ViewportWindow->SetTitle(FText::FromString(ANSI_TO_TCHAR(Title)));
+			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+			{
+				ViewportWindow->SetTitle(FText::FromString(ANSI_TO_TCHAR(Title)));
+			}
 		}
 	}
 
 	static void UnrealPlatform_ShowWindow(ImGuiViewport* Viewport)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			ViewportWindow->ShowWindow();
-			if (!(Viewport->Flags & ImGuiViewportFlags_NoFocusOnAppearing) && ViewportData->ViewportWindow.IsValid())
+			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
-				ViewportWindow->GetNativeWindow()->SetWindowFocus();
+				ViewportWindow->ShowWindow();
+				if (!(Viewport->Flags & ImGuiViewportFlags_NoFocusOnAppearing) && ViewportData->ViewportWindow.IsValid())
+				{
+					ViewportWindow->GetNativeWindow()->SetWindowFocus();
+				}
+
 			}
 		}
 	}
 
 	static void UnrealPlatform_SetWindowFocus(ImGuiViewport* Viewport)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			ViewportWindow->GetNativeWindow()->SetWindowFocus();
+			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+			{
+				ViewportWindow->GetNativeWindow()->SetWindowFocus();
+			}
 		}
 	}
 
 	static bool UnrealPlatform_GetWindowFocus(ImGuiViewport* Viewport)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			return ViewportWindow->HasAnyUserFocusOrFocusedDescendants();
+			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+			{
+				return ViewportWindow->HasAnyUserFocusOrFocusedDescendants();
+			}
 		}
 		return false;
 	}
 
 	static bool UnrealPlatform_GetWindowMinimized(ImGuiViewport* Viewport)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			return ViewportWindow->IsWindowMinimized();
+			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+			{
+				return ViewportWindow->IsWindowMinimized();
+			}
 		}
 		return false;
 	}
 
 	static void UnrealPlatform_SetWindowAlpha(ImGuiViewport* Viewport, float Alpha)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			ViewportWindow->SetOpacity(Alpha);
+			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+			{
+				ViewportWindow->SetOpacity(Alpha);
+			}
 		}
 	}
 
 	static void UnrealPlatform_UpdateWindow(ImGuiViewport* Viewport)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (ViewportData->ViewportWidget.IsValid())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			// window was destroyed by platform, happens when MainViewportWindow is dragged invalidating all child windows
-			if (!ViewportData->ViewportWindow.IsValid())
+			if (ViewportData->ViewportWidget.IsValid())
 			{
-				// TODO: maybe not ideal to access viewport as 'ImGuiViewportP', but there doesn't seem to be a way to request window recreation
-				ImGui::DestroyPlatformWindow((ImGuiViewportP*)Viewport);
+				// window was destroyed by platform, happens when MainViewportWindow is dragged invalidating all child windows
+				bool bInvalidateWindow = !ViewportData->ViewportWindow.IsValid();
+
+#if WITH_EDITOR
+				// recreate window if parent viewport requested it, needed for patching parent slate window reference after docking/undocking tabs
+				if (ImGuiViewport* ParentViewport = ImGui::FindViewportByID(Viewport->ParentViewportId))
+				{
+					bInvalidateWindow |= ParentViewport->PlatformUserData ? ((ImGuiUtils::FImGuiViewportData*)ParentViewport->PlatformUserData)->bInvalidateManagedViewportWindows : false;
+				}
+#endif
+
+				if (bInvalidateWindow)
+				{
+					// TODO: maybe not ideal to access viewport as 'ImGuiViewportP', but there doesn't seem to be a way to request window recreation
+					ImGui::DestroyPlatformWindow((ImGuiViewportP*)Viewport);
+				}
 			}
 		}
 	}
 
 	static void UnrealPlatform_RenderWindow(ImGuiViewport* Viewport, void*)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (ViewportData && Viewport->DrawData && ViewportData->ViewportWidget.IsValid())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			ViewportData->ViewportWidget->OnDrawDataGenerated(Viewport->DrawData);
+			if (Viewport->DrawData && ViewportData->ViewportWidget.IsValid())
+			{
+				ViewportData->ViewportWidget->OnDrawDataGenerated(Viewport->DrawData);
+			}
 		}
 	}
 }
