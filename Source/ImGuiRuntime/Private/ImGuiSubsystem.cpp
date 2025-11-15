@@ -199,19 +199,22 @@ void UImGuiSubsystem::UpdateTextureData(ImTextureData* TexData) const
 
 		if (TexData->Status == ImTextureStatus_WantCreate || TexData->Status == ImTextureStatus_WantUpdates)
 		{
+			bool bReuploadTexture = (TexData->Status == ImTextureStatus_WantCreate);
 			if (m_SharedFontTexture->SizeX != FontAtlasWidth || m_SharedFontTexture->SizeY != FontAtlasHeight)
 			{
 				m_SharedFontTexture->ResizeTarget(FontAtlasWidth, FontAtlasHeight);
+				bReuploadTexture = true;
 			}
 
+			const ImTextureRect UpdateRect = bReuploadTexture ? ImTextureRect(0, 0, TexData->Width, TexData->Height) : TexData->UpdateRect;
 			ENQUEUE_RENDER_COMMAND(UpdateFontTexture)(
 				[this,
-				SrcData=(uint8*)TexData->GetPixels(),
-				SrcStride=BytesPerPixel * FontAtlasWidth,
-				UpdateRegion=FUpdateTextureRegion2D(0, 0, 0, 0, FontAtlasWidth, FontAtlasHeight),
+				SrcPitch=TexData->GetPitch(),
+				SrcData = (uint8*)TexData->GetPixelsAt(UpdateRect.x, UpdateRect.y),
+				UpdateRegion = FUpdateTextureRegion2D(UpdateRect.x, UpdateRect.y, 0, 0, UpdateRect.w, UpdateRect.h),
 				TexResource=m_SharedFontTexture->GameThread_GetRenderTargetResource()](FRHICommandListImmediate& RHICmdList)
 				{
-					RHICmdList.UpdateTexture2D(TexResource->GetTexture2DRHI(), 0, UpdateRegion, SrcStride, SrcData);
+					RHICmdList.UpdateTexture2D(TexResource->GetTexture2DRHI(), 0, UpdateRegion, SrcPitch, SrcData);
 				});
 
 			TexData->SetStatus(ImTextureStatus_OK);
