@@ -167,7 +167,7 @@ void UImGuiSubsystem::OnBeginFrame()
 	m_CreatedSlateBrushes.Reset();
 
 	// queue font updates
-	ImFontAtlasUpdateNewFrame(m_SharedFontAtlas.Get(), FontAtlasBuilderFrameCount++, true);
+	ImFontAtlasUpdateNewFrame(m_SharedFontAtlas.Get(), m_FontAtlasBuilderFrameCount++, true);
 
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
 	m_SharedFontImageParams = RegisterOneFrameResource(&m_SharedFontSlateBrush);
@@ -210,8 +210,8 @@ void UImGuiSubsystem::UpdateTextureData(ImTextureData* TexData) const
 			ENQUEUE_RENDER_COMMAND(UpdateFontTexture)(
 				[this,
 				SrcPitch=TexData->GetPitch(),
-				SrcData = (uint8*)TexData->GetPixelsAt(UpdateRect.x, UpdateRect.y),
-				UpdateRegion = FUpdateTextureRegion2D(UpdateRect.x, UpdateRect.y, 0, 0, UpdateRect.w, UpdateRect.h),
+				SrcData=(uint8*)TexData->GetPixelsAt(UpdateRect.x, UpdateRect.y),
+				UpdateRegion=FUpdateTextureRegion2D(UpdateRect.x, UpdateRect.y, 0, 0, UpdateRect.w, UpdateRect.h),
 				TexResource=m_SharedFontTexture->GameThread_GetRenderTargetResource()](FRHICommandListImmediate& RHICmdList)
 				{
 					RHICmdList.UpdateTexture2D(TexResource->GetTexture2DRHI(), 0, UpdateRegion, SrcPitch, SrcData);

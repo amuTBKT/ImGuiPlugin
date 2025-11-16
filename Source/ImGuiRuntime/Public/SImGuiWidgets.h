@@ -35,11 +35,13 @@ public:
 		: _MainViewportWindow(nullptr)
 		, _ConfigFileName(nullptr)
 		, _bUseOpaqueBackground(true)
+		, _bEnableViewports(true)
 		{
 		}
 		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
 		SLATE_ARGUMENT(const ANSICHAR*, ConfigFileName);
 		SLATE_ARGUMENT(bool, bUseOpaqueBackground);
+		SLATE_ARGUMENT(bool, bEnableViewports);
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -137,12 +139,14 @@ public:
 		, _OnTickDelegate()
 		, _ConfigFileName(nullptr)
 		, _bUseOpaqueBackground(true)
+		, _bEnableViewports(true)
 		{
 		}
 		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
 		SLATE_EVENT(FOnTickImGuiWidgetDelegate, OnTickDelegate);
 		SLATE_ARGUMENT(const ANSICHAR*, ConfigFileName);
 		SLATE_ARGUMENT(bool, bUseOpaqueBackground);
+		SLATE_ARGUMENT(bool, bEnableViewports);
 	SLATE_END_ARGS()
 	
 	void Construct(const FArguments& InArgs);

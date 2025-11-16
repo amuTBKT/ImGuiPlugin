@@ -51,12 +51,16 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
-	IO.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
-	IO.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
-	IO.BackendFlags |= ImGuiBackendFlags_PlatformHasViewports;
+
+	if (InArgs._bEnableViewports)
+	{
+		IO.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+		IO.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
+		IO.BackendFlags |= ImGuiBackendFlags_PlatformHasViewports;
+	}
 
 	// viewport setup
 	if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
@@ -522,7 +526,8 @@ void SImGuiWidget::Construct(const FArguments& InArgs)
 		Super::FArguments()
 		.MainViewportWindow(InArgs._MainViewportWindow)
 		.ConfigFileName(InArgs._ConfigFileName)
-		.bUseOpaqueBackground(InArgs._bUseOpaqueBackground));
+		.bUseOpaqueBackground(InArgs._bUseOpaqueBackground)
+		.bEnableViewports(InArgs._bEnableViewports));
 
 	m_OnTickDelegate = InArgs._OnTickDelegate;
 }

@@ -105,13 +105,13 @@ private:
 	FAnsiString m_IniDirectoryPath;
 	FAnsiString m_IniFilePath;
 
-	UPROPERTY()
+	UPROPERTY(VisibleAnywhere)
 	UTextureRenderTarget2D* m_SharedFontTexture = nullptr;
 	
 	UPROPERTY()
 	UTexture2D* m_MissingImageTexture = nullptr;
 
-	int32 FontAtlasBuilderFrameCount = 0;
+	int32 m_FontAtlasBuilderFrameCount = 0;
 	TSharedPtr<ImFontAtlas, ESPMode::NotThreadSafe> m_SharedFontAtlas;
 	FSlateBrush m_MissingImageSlateBrush = {};
 	FSlateBrush m_SharedFontSlateBrush = {};
