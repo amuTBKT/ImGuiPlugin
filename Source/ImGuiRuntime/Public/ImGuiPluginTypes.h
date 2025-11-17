@@ -120,6 +120,7 @@ struct FStaticWidgetRegisterParams
 	FSlateIcon WidgetIcon;
 	const char* WidgetName = nullptr;
 	const char* WidgetDescription = nullptr;
+	bool bEnableViewports = true;
 
 	bool IsValid() const
 	{

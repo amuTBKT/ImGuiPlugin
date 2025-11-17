@@ -105,7 +105,7 @@ private:
 	FAnsiString m_IniDirectoryPath;
 	FAnsiString m_IniFilePath;
 
-	UPROPERTY(VisibleAnywhere)
+	UPROPERTY()
 	UTextureRenderTarget2D* m_SharedFontTexture = nullptr;
 	
 	UPROPERTY()
