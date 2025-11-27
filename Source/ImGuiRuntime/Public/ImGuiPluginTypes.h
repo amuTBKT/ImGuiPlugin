@@ -105,7 +105,7 @@ enum class EImGuiShaderState : uint32
 };
 ENUM_CLASS_FLAGS(EImGuiShaderState);
 
-static constexpr FImGuiShaderState MakeImGuiShaderState(EImGuiShaderState ShaderState)
+static FORCEINLINE FImGuiShaderState MakeImGuiShaderState(EImGuiShaderState ShaderState)
 {
 	return (FImGuiShaderState)ShaderState;
 }
