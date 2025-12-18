@@ -841,8 +841,7 @@ namespace ImGuiUtils
 		{
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
-				// TODO: Popup location seems to be 1px off, so adjust here
-				ViewportWindow->MoveWindowTo(FVector2f{ NewPosition.x, NewPosition.y + 1.f });
+				ViewportWindow->MoveWindowTo(FVector2f{ NewPosition.x, NewPosition.y });
 			}
 		}
 	}
