@@ -1,26 +1,25 @@
 // Copyright 2024-25 Amit Kumar Mehar. All Rights Reserved.
 
 #include "SImGuiWidgets.h"
-#include "ImGuiShaders.h"
-#include "ImGuiSubsystem.h"
-#include "Widgets/SWindow.h"
 
 #include "RHI.h"
 #include "RHIStaticStates.h"
-#include "Engine/Texture2D.h"
 #include "RenderGraphUtils.h"
 #include "GlobalRenderResources.h"
 #include "CommonRenderResources.h"
 #include "SlateUTextureResource.h"
 #include "RenderCaptureInterface.h"
-#include "Engine/TextureRenderTarget2D.h"
+#include "Rendering/RenderingCommon.h"
 
 #include "Input/Events.h"
 #include "InputCoreTypes.h"
+#include "Widgets/SWindow.h"
 #include "Application/ThrottleManager.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "Framework/Application/SlateApplication.h"
 
+#include "ImGuiShaders.h"
+#include "ImGuiSubsystem.h"
 #include "imgui_threaded_rendering.h"
 #include "ImGuiViewportUtils.inl"
 
@@ -29,8 +28,8 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 
 	m_ImGuiContext = ImGui::CreateContext(ImGuiSubsystem->GetSharedFontAtlas());
-	m_DoubleBufferedDrawData[0] = IM_NEW(ImDrawDataSnapshot)();
-	m_DoubleBufferedDrawData[1] = IM_NEW(ImDrawDataSnapshot)();
+	m_WidgetDrawers[0] = MakeShared<ImGuiUtils::FWidgetDrawer>();
+	m_WidgetDrawers[1] = MakeShared<ImGuiUtils::FWidgetDrawer>();
 
 	if (InArgs._ConfigFileName && FCStringAnsi::Strlen(InArgs._ConfigFileName) > 2)
 	{
@@ -118,34 +117,26 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 
 	// TODO: setting?
 	ImGui::StyleColorsDark();
-
-	// allocate rendering resources
-	m_ImGuiRT = NewObject<UTextureRenderTarget2D>();
-	m_ImGuiRT->Filter = TextureFilter::TF_Nearest;
-	m_ImGuiRT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
-	m_ImGuiRT->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
-	m_ImGuiRT->InitAutoFormat(1, 1);
-	m_ImGuiRT->UpdateResourceImmediate(true);
-
-	m_ImGuiSlateBrush.SetResourceObject(m_ImGuiRT);
-
-	// only need to clear the RT when using translucent window, otherwise ImGui fullscreen widget pass should clear the RT.
-	m_ClearRenderTargetEveryFrame = (InArgs._bUseOpaqueBackground == false);
 }
 
 SImGuiWidgetBase::~SImGuiWidgetBase()
 {
 	if (m_ImGuiContext)
 	{
-		ImGuiIO& IO = GetImGuiIO();
-		ImGui::DestroyPlatformWindows();
+		// cleanup references to this widget
+		{
+			ImGuiIO& IO = GetImGuiIO();
 
-		IM_DELETE(m_DoubleBufferedDrawData[0]);
-		IM_DELETE(m_DoubleBufferedDrawData[1]);
-		m_DoubleBufferedDrawData[0] = nullptr;
-		m_DoubleBufferedDrawData[1] = nullptr;
+			// duplicate of context shutdown operation as we clear the IniFilename here
+			if (m_ImGuiContext->SettingsLoaded && IO.IniFilename)
+			{
+				ImGui::SaveIniSettingsToDisk(IO.IniFilename);
+			}
+			IO.IniFilename = nullptr;
+		}
 
-		ImGui::DestroyContext(m_ImGuiContext);
+		// NOTE: widget drawers should be queued before context
+		ImGuiUtils::DeferredDeletionQueue.DeferredDeleteObjects(MoveTemp(m_WidgetDrawers[0]), MoveTemp(m_WidgetDrawers[1]), m_ImGuiContext);
 		m_ImGuiContext = nullptr;
 	}
 }
@@ -156,16 +147,6 @@ ImGuiIO& SImGuiWidgetBase::GetImGuiIO() const
 
 	ImGui::SetCurrentContext(m_ImGuiContext);
 	return ImGui::GetIO();
-}
-
-void SImGuiWidgetBase::AddReferencedObjects(FReferenceCollector& Collector)
-{
-	Collector.AddReferencedObject(m_ImGuiRT);
-}
-
-FString SImGuiWidgetBase::GetReferencerName() const
-{
-	return TEXT("SImGuiWidgetBase");
 }
 
 void SImGuiWidgetBase::Tick(const FGeometry& WidgetGeometry, const double CurrentTime, const float DeltaTime)
@@ -192,51 +173,16 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 {
 	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [GT]"), STAT_ImGui_RenderWidget_GT, STATGROUP_ImGui);
 
-	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
+	const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
 
 	ImGuiIO& IO = GetImGuiIO();
-
 	ImGui::Render();
 
-	ImDrawDataSnapshot* DrawDataSnapshot = m_DoubleBufferedDrawData[ImGui::GetFrameCount() & 0x1];
-	DrawDataSnapshot->SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetFrameCount());
-
-	for (ImTextureData* TexData : *DrawDataSnapshot->DrawData.Textures)
+	TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
+	if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetFrameCount(), DrawRect.GetTopLeft2f()))
 	{
-		ImGuiSubsystem->UpdateTextureData(TexData);
-	}
-
-	if (ImGuiUtils::RenderImGuiWidgetToTexture(&DrawDataSnapshot->DrawData, m_ImGuiRT.Get(), m_ClearRenderTargetEveryFrame))
-	{
-		const FSlateRenderTransform WidgetOffsetTransform = FTransform2f(1.f, { 0.f, 0.f });
-		const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
-
-		const FVector2f V0 = DrawRect.GetTopLeft();
-		const FVector2f V1 = DrawRect.GetTopRight();
-		const FVector2f V2 = DrawRect.GetBottomRight();
-		const FVector2f V3 = DrawRect.GetBottomLeft();
-
-		// adjust UVs based on RT vs Viewport scaling
-		const float UVMinX = 0.f;
-		const float UVMinY = 0.f;
-		const float UVMaxX = (DrawRect.Right - DrawRect.Left) / (float)m_ImGuiRT->SizeX;
-		const float UVMaxY = (DrawRect.Bottom - DrawRect.Top) / (float)m_ImGuiRT->SizeY;
-
-		TArray<FSlateVertex> Vertices =
-		{
-			FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V0, FVector2f{ UVMinX, UVMinY }, FColor::White),
-			FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V1, FVector2f{ UVMaxX, UVMinY }, FColor::White),
-			FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V2, FVector2f{ UVMaxX, UVMaxY }, FColor::White),
-			FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V3, FVector2f{ UVMinX, UVMaxY }, FColor::White)
-		};
-		TArray<uint32> Indices =
-		{
-			0, 1, 2,
-			0, 2, 3,
-		};
-
 		OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
-		FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, m_ImGuiSlateBrush.GetRenderingResource(), MoveTemp(Vertices), MoveTemp(Indices), nullptr, 0, 0, ESlateDrawEffect::NoGamma);
+		FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
 		OutDrawElements.PopClip();
 	}
 
@@ -248,7 +194,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 		// TODO: maybe find a better way to detect window docking operations? This is not expensive, just a bit ugly!
 		TSharedPtr<SWindow> PreviousParentWindow = ViewportData->MainViewportWindow.Pin();
 		TSharedPtr<SWindow> CurrentParentWindow = FSlateApplication::Get().FindWidgetWindow(AsShared());
-		if (ViewportData && !PreviousParentWindow || (PreviousParentWindow != CurrentParentWindow))
+		if (ViewportData && (!PreviousParentWindow || (PreviousParentWindow != CurrentParentWindow)))
 		{
 			ViewportData->MainViewportWindow = CurrentParentWindow;
 			ViewportData->bInvalidateManagedViewportWindows = true;
@@ -257,7 +203,10 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 		ImGui::UpdatePlatformWindows();
 		ImGui::RenderPlatformWindowsDefault();
 
-		ViewportData->bInvalidateManagedViewportWindows = false;
+		if (ViewportData)
+		{
+			ViewportData->bInvalidateManagedViewportWindows = false;
+		}
 	}
 	
 	return LayerId;
@@ -269,19 +218,8 @@ SImGuiWidgetBase::FImGuiTickResult SImGuiWidgetBase::TickImGui(const FGeometry* 
 
 	if (WidgetGeometry)
 	{
-		IO.DisplaySize.x = FMath::CeilToInt(WidgetGeometry->GetAbsoluteSize().X);
-		IO.DisplaySize.y = FMath::CeilToInt(WidgetGeometry->GetAbsoluteSize().Y);
-		
-		// resize RT if needed
-		{
-			const int32 NewSizeX = FMath::Max(1, FMath::CeilToInt(IO.DisplaySize.x));
-			const int32 NewSizeY = FMath::Max(1, FMath::CeilToInt(IO.DisplaySize.y));
-
-			if (m_ImGuiRT->SizeX < NewSizeX || m_ImGuiRT->SizeY < NewSizeY)
-			{
-				m_ImGuiRT->ResizeTarget(NewSizeX, NewSizeY);
-			}
-		}
+		FVector2f WidgetSize = WidgetGeometry->GetAbsoluteSize();
+		IO.DisplaySize = ImVec2(WidgetSize.X, WidgetSize.Y);
 	}
 	IO.DeltaTime = FSlateApplication::Get().GetDeltaTime();
 
@@ -498,19 +436,12 @@ void SImGuiMainWindowWidget::TickImGuiInternal(FImGuiTickContext* TickContext)
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 	if (ImGuiSubsystem->GetMainWindowTickDelegate().IsBound())
 	{
-		const ImU32 BackgroundColor = m_ClearRenderTargetEveryFrame ? ImGui::GetColorU32(ImGuiCol_WindowBg) : (ImGui::GetColorU32(ImGuiCol_WindowBg) | 0xFF000000);
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, BackgroundColor);
 		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
-		ImGui::PopStyleColor(1);
 		ImGuiSubsystem->GetMainWindowTickDelegate().Broadcast(TickContext);
 	}
 	else
 	{
-		const ImU32 BackgroundColor = m_ClearRenderTargetEveryFrame ? ImGui::GetColorU32(ImGuiCol_WindowBg) : (ImGui::GetColorU32(ImGuiCol_WindowBg) | 0xFF000000);
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, BackgroundColor);
 		const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
-		ImGui::PopStyleColor(1);
-
 		ImGui::SetNextWindowDockID(MainDockSpaceID);
 		if (ImGui::Begin("Empty", nullptr))
 		{
@@ -526,7 +457,6 @@ void SImGuiWidget::Construct(const FArguments& InArgs)
 		Super::FArguments()
 		.MainViewportWindow(InArgs._MainViewportWindow)
 		.ConfigFileName(InArgs._ConfigFileName)
-		.bUseOpaqueBackground(InArgs._bUseOpaqueBackground)
 		.bEnableViewports(InArgs._bEnableViewports));
 
 	m_OnTickDelegate = InArgs._OnTickDelegate;

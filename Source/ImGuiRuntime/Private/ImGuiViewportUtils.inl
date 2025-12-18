@@ -2,6 +2,77 @@
 
 namespace ImGuiUtils
 {
+	class FWidgetDrawer;
+	struct FDeferredDeletionQueue
+	{
+		FDeferredDeletionQueue()
+		{
+			FCoreDelegates::OnBeginFrame.AddRaw(this, &FDeferredDeletionQueue::ProcessObjects, /*bForceDestroy=*/false);
+			FCoreDelegates::OnPreExit.AddRaw(this, &FDeferredDeletionQueue::ProcessObjects, /*bForceDestroy=*/true);
+		}
+
+		template <typename ...Args>
+		void DeferredDeleteObjects(Args&&... InArgs)
+		{
+			(ObjectsPendingDelete.Emplace(Forward<Args>(InArgs)), ...);
+		}
+
+	private:
+		void ProcessObjects(bool bForceDestroy)
+		{
+			if (ObjectsPendingDelete.IsEmpty())
+			{
+				return;
+			}
+
+			if (bForceDestroy)
+			{
+				FlushRenderingCommands();
+			}
+
+			while (ObjectsPendingDelete.Num())
+			{
+				FDeferredDeleteObject& Object = ObjectsPendingDelete[0];
+				if (!bForceDestroy && (Object.FrameIndex > GFrameCounter))
+				{
+					break;
+				}
+
+				if (Object.Storage.IsType<ImGuiContext*>())
+				{
+					ImGuiContext* Context = Object.Storage.Get<ImGuiContext*>();
+					ImGui::SetCurrentContext(Context);
+					{
+						ImGui::DestroyPlatformWindows();
+						ImGui::DestroyContext(Context);
+					}
+					ImGui::SetCurrentContext(nullptr);
+				}
+
+				ObjectsPendingDelete.RemoveAt(0, EAllowShrinking::No);
+			}
+		}
+
+		struct FDeferredDeleteObject
+		{
+			explicit FDeferredDeleteObject(TSharedPtr<FWidgetDrawer> InWidgetDrawer)
+				: Storage(TInPlaceType<TSharedPtr<FWidgetDrawer>>(), InWidgetDrawer)
+				, FrameIndex(GFrameCounter + 2)
+			{
+			}
+			explicit FDeferredDeleteObject(ImGuiContext* InContext)
+				: Storage(TInPlaceType<ImGuiContext*>(), InContext)
+				, FrameIndex(GFrameCounter + 2)
+			{
+			}
+
+			TVariant<TSharedPtr<FWidgetDrawer>, ImGuiContext*> Storage;
+			uint64 FrameIndex;
+		};
+		TArray<FDeferredDeleteObject> ObjectsPendingDelete;
+	};
+	static FDeferredDeletionQueue DeferredDeletionQueue;
+
 	FORCEINLINE static ImGuiKey ImGuiToUnrealKey(FName Keyname)
 	{
 #define CONVERSION_OP(Key) { EKeys::Key.GetFName(), ImGuiKey_##Key }
@@ -139,18 +210,6 @@ namespace ImGuiUtils
 		return MouseButton;
 	}
 
-	struct FImGuiViewportData
-	{
-		TWeakPtr<SWindow> ViewportWindow = nullptr;
-		TSharedPtr<SImGuiViewportWidget> ViewportWidget = nullptr;
-
-		TWeakPtr<SWindow> MainViewportWindow = nullptr;
-		TWeakPtr<SImGuiWidgetBase> MainViewportWidget = nullptr;
-
-		// to request viewport window recreation (for patching slate window references etc.)
-		bool bInvalidateManagedViewportWindows = false;
-	};
-
 	class FImGuiVertexDeclaration : public FRenderResource
 	{
 	public:
@@ -181,260 +240,298 @@ namespace ImGuiUtils
 	};
 	static TGlobalResource<FImGuiVertexDeclaration, FRenderResource::EInitPhase::Pre> GImGuiVertexDeclaration;
 
-	static bool RenderImGuiWidgetToTexture(TNonNullPtr<const ImDrawData> DrawData, TNonNullPtr<UTextureRenderTarget2D> RenderTarget, bool bClearRT)
+	class FWidgetDrawer : public ICustomSlateElement
 	{
-		if (DrawData->TotalVtxCount == 0 || DrawData->TotalIdxCount == 0)
-		{
-			return false;
-		}
-		if (DrawData->DisplaySize.x < KINDA_SMALL_NUMBER || DrawData->DisplaySize.y < KINDA_SMALL_NUMBER)
-		{
-			return false;
-		}
+		BEGIN_SHADER_PARAMETER_STRUCT(FRenderParameters, )
+			RENDER_TARGET_BINDING_SLOTS()
+		END_SHADER_PARAMETER_STRUCT()
 
-		UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
-		for (ImTextureData* TexData : *DrawData->Textures)
+	public:
+		virtual ~FWidgetDrawer()
 		{
-			ImGuiSubsystem->UpdateTextureData(TexData);
+			m_BoundTextures.Reset();
+			m_DrawDataSnapshot.Clear();
 		}
 
-		RenderCaptureInterface::FScopedCapture RenderCapture(ImGuiSubsystem->CaptureGpuFrame(), TEXT("ImGuiWidget"));
-
-		struct FRenderData
+		bool SetDrawData(ImDrawData* DrawData, int32 FrameCount, FVector2f DrawRectOffset)
 		{
-			struct FTextureInfo
+			m_DrawDataSnapshot.SnapUsingSwap(DrawData, FrameCount);
+			DrawData = &m_DrawDataSnapshot.DrawData;
+
+			m_DrawRectOffset = DrawRectOffset;
+
+			UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
+			for (ImTextureData* TexData : *DrawData->Textures)
 			{
-				FTextureRHIRef TextureRHI = nullptr;
-				FSamplerStateRHIRef SamplerRHI = nullptr;
-				bool IsSRGB = false;
-			};
-			TArray<FTextureInfo> BoundTextures;
-			const ImDrawData* DrawData = nullptr;
-			bool bClearRenderTarget = false;
-		};
-		FRenderData RenderData_GT = {};
-		RenderData_GT.DrawData = DrawData;
+				ImGuiSubsystem->UpdateTextureData(TexData);
+			}
+			m_BoundTextures.Reset(ImGuiSubsystem->GetOneFrameResources().Num());
 
-		RenderData_GT.BoundTextures.Reserve(ImGuiSubsystem->GetOneFrameResources().Num());
-		for (const FImGuiTextureResource& TextureResource : ImGuiSubsystem->GetOneFrameResources())
-		{
-			auto& TextureInfo = RenderData_GT.BoundTextures.AddDefaulted_GetRef();
-
-			FSlateShaderResource* ShaderResource = TextureResource.GetSlateShaderResource();
-			if (ShaderResource)
+			m_bHasDrawCommands = DrawData->TotalVtxCount > 0 &&
+								 DrawData->TotalIdxCount > 0 &&
+								 (DrawData->DisplaySize.x > KINDA_SMALL_NUMBER) &&
+								 (DrawData->DisplaySize.y > KINDA_SMALL_NUMBER);
+			if (!m_bHasDrawCommands)
 			{
-				ESlateShaderResource::Type ResourceType = ShaderResource->GetType();
+				return false;
+			}
 
-				if (ResourceType == ESlateShaderResource::Type::TextureObject)
+			for (const FImGuiTextureResource& TextureResource : ImGuiSubsystem->GetOneFrameResources())
+			{
+				auto& TextureInfo = m_BoundTextures.AddDefaulted_GetRef();
+
+				FSlateShaderResource* ShaderResource = TextureResource.GetSlateShaderResource();
+				if (ShaderResource)
 				{
-					FSlateBaseUTextureResource* TextureObjectResource = static_cast<FSlateBaseUTextureResource*>(ShaderResource);
-					if (FTextureResource* Resource = TextureObjectResource->GetTextureObject()->GetResource())
+					ESlateShaderResource::Type ResourceType = ShaderResource->GetType();
+
+					if (ResourceType == ESlateShaderResource::Type::TextureObject)
 					{
-						TextureInfo.TextureRHI = Resource->TextureRHI;
-						TextureInfo.SamplerRHI = Resource->SamplerStateRHI;
-						TextureInfo.IsSRGB = Resource->bSRGB;
+						FSlateBaseUTextureResource* TextureObjectResource = static_cast<FSlateBaseUTextureResource*>(ShaderResource);
+						if (FTextureResource* Resource = TextureObjectResource->GetTextureObject()->GetResource())
+						{
+							TextureInfo.TextureRHI = Resource->TextureRHI;
+							TextureInfo.SamplerRHI = Resource->SamplerStateRHI;
+							TextureInfo.IsSRGB = Resource->bSRGB;
+						}
+					}
+					else if (ResourceType == ESlateShaderResource::Type::NativeTexture)
+					{
+						if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTextureRHIRef>*)ShaderResource)->GetTypedResource())
+						{
+							TextureInfo.TextureRHI = NativeTextureRHI;
+							TextureInfo.IsSRGB = EnumHasAnyFlags(NativeTextureRHI->GetFlags(), ETextureCreateFlags::SRGB);
+						}
 					}
 				}
-				else if (ResourceType == ESlateShaderResource::Type::NativeTexture)
+
+				if (TextureInfo.TextureRHI == nullptr)
 				{
-					if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTextureRHIRef>*)ShaderResource)->GetTypedResource())
-					{
-						TextureInfo.TextureRHI = NativeTextureRHI;
-						TextureInfo.IsSRGB = EnumHasAnyFlags(NativeTextureRHI->GetFlags(), ETextureCreateFlags::SRGB);
-					}
+					TextureInfo.TextureRHI = GBlackTexture->TextureRHI;
+				}
+				if (TextureInfo.SamplerRHI == nullptr)
+				{
+					TextureInfo.SamplerRHI = TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
 				}
 			}
 
-			if (TextureInfo.TextureRHI == nullptr)
-			{
-				TextureInfo.TextureRHI = GBlackTexture->TextureRHI;
-			}
-			if (TextureInfo.SamplerRHI == nullptr)
-			{
-				TextureInfo.SamplerRHI = TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
-			}
+			return true;
 		}
 
-		RenderData_GT.bClearRenderTarget = bClearRT;
+		void SetDrawRectOffset(FVector2f DrawRectOffset)
+		{
+			m_DrawRectOffset = DrawRectOffset;
+		}
 
-		ENQUEUE_RENDER_COMMAND(RenderImGui)(
-			[RenderData=MoveTemp(RenderData_GT), RT_Resource=RenderTarget->GetResource()](FRHICommandListImmediate& RHICmdList)
-			{
-				DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [RT]"), STAT_ImGui_RenderWidget_RT, STATGROUP_ImGui);
+		bool HasDrawCommands() const
+		{
+			return m_bHasDrawCommands;
+		}
 
-				const ImDrawData* DrawData = RenderData.DrawData;
-				const ImVec2 DisplayPos = ImVec2(FMath::FloorToInt(DrawData->DisplayPos.x), FMath::FloorToInt(DrawData->DisplayPos.y));
-				const ImVec2 DisplaySize = DrawData->DisplaySize;
+		virtual void Draw_RenderThread(FRDGBuilder& GraphBuilder, const FDrawPassInputs& Inputs) override
+		{
+			DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [RT]"), STAT_ImGui_RenderWidget_RT, STATGROUP_ImGui);
+
+			FRenderParameters* PassParameters = GraphBuilder.AllocParameters<FRenderParameters>();
+			PassParameters->RenderTargets[0] = FRenderTargetBinding(Inputs.OutputTexture, ERenderTargetLoadAction::ELoad);
+
+			GraphBuilder.AddPass(RDG_EVENT_NAME("RenderImGui"), PassParameters, ERDGPassFlags::Raster | ERDGPassFlags::NeverCull,
+				[this](FRHICommandListImmediate& RHICmdList)
+				{
+					const ImDrawData* DrawData = &m_DrawDataSnapshot.DrawData;
+					const ImVec2 DisplayPos = DrawData->DisplayPos;
+					const ImVec2 DisplaySize = DrawData->DisplaySize;
+
+					const ImRect DrawRect = ImRect(
+						ImVec2(m_DrawRectOffset.X, m_DrawRectOffset.Y),
+						ImVec2(m_DrawRectOffset.X, m_DrawRectOffset.Y) + DisplaySize);
+					const ImRect ViewportRect = ImRect(
+						FMath::RoundToFloat(DrawRect.Min.x), FMath::RoundToFloat(DrawRect.Min.y),
+						FMath::RoundToFloat(DrawRect.Max.x), FMath::RoundToFloat(DrawRect.Max.y));
 
 #if ((ENGINE_MAJOR_VERSION * 100u + ENGINE_MINOR_VERSION) > 505) //(Version > 5.5)
-				FRHIBufferCreateDesc VertexBufferDesc =
-					FRHIBufferCreateDesc::CreateVertex<ImDrawVert>(TEXT("ImGui_VertexBuffer"), DrawData->TotalVtxCount)
-					.AddUsage(EBufferUsageFlags::Volatile | EBufferUsageFlags::VertexBuffer)
-					.SetInitialState(ERHIAccess::VertexOrIndexBuffer)
-					.SetInitActionNone();
-				FBufferRHIRef VertexBuffer = RHICmdList.CreateBuffer(VertexBufferDesc);
+					FRHIBufferCreateDesc VertexBufferDesc =
+						FRHIBufferCreateDesc::CreateVertex<ImDrawVert>(TEXT("ImGui_VertexBuffer"), DrawData->TotalVtxCount)
+						.AddUsage(EBufferUsageFlags::Volatile | EBufferUsageFlags::VertexBuffer)
+						.SetInitialState(ERHIAccess::VertexOrIndexBuffer)
+						.SetInitActionNone();
+					FBufferRHIRef VertexBuffer = RHICmdList.CreateBuffer(VertexBufferDesc);
 
-				FRHIBufferCreateDesc IndexBufferDesc =
-					FRHIBufferCreateDesc::CreateIndex<ImDrawIdx>(TEXT("ImGui_IndexBuffer"), DrawData->TotalIdxCount)
-					.AddUsage(EBufferUsageFlags::Volatile | EBufferUsageFlags::IndexBuffer)
-					.SetInitialState(ERHIAccess::VertexOrIndexBuffer)
-					.SetInitActionNone();
-				FBufferRHIRef IndexBuffer = RHICmdList.CreateBuffer(IndexBufferDesc);
+					FRHIBufferCreateDesc IndexBufferDesc =
+						FRHIBufferCreateDesc::CreateIndex<ImDrawIdx>(TEXT("ImGui_IndexBuffer"), DrawData->TotalIdxCount)
+						.AddUsage(EBufferUsageFlags::Volatile | EBufferUsageFlags::IndexBuffer)
+						.SetInitialState(ERHIAccess::VertexOrIndexBuffer)
+						.SetInitActionNone();
+					FBufferRHIRef IndexBuffer = RHICmdList.CreateBuffer(IndexBufferDesc);
 #else
-				FRHIResourceCreateInfo VertexBufferCreateInfo(TEXT("ImGui_VertexBuffer"));
-				FBufferRHIRef VertexBuffer = RHICmdList.CreateBuffer(
-					DrawData->TotalVtxCount * sizeof(ImDrawVert), EBufferUsageFlags::Volatile | EBufferUsageFlags::VertexBuffer,
-					sizeof(ImDrawVert), ERHIAccess::VertexOrIndexBuffer, VertexBufferCreateInfo);
+					FRHIResourceCreateInfo VertexBufferCreateInfo(TEXT("ImGui_VertexBuffer"));
+					FBufferRHIRef VertexBuffer = RHICmdList.CreateBuffer(
+						DrawData->TotalVtxCount * sizeof(ImDrawVert), EBufferUsageFlags::Volatile | EBufferUsageFlags::VertexBuffer,
+						sizeof(ImDrawVert), ERHIAccess::VertexOrIndexBuffer, VertexBufferCreateInfo);
 
-				FRHIResourceCreateInfo IndexBufferCreateInfo(TEXT("ImGui_IndexBuffer"));
-				FBufferRHIRef IndexBuffer = RHICmdList.CreateBuffer(
-					DrawData->TotalIdxCount * sizeof(ImDrawIdx), EBufferUsageFlags::Volatile | EBufferUsageFlags::IndexBuffer,
-					sizeof(ImDrawIdx), ERHIAccess::VertexOrIndexBuffer, IndexBufferCreateInfo);
+					FRHIResourceCreateInfo IndexBufferCreateInfo(TEXT("ImGui_IndexBuffer"));
+					FBufferRHIRef IndexBuffer = RHICmdList.CreateBuffer(
+						DrawData->TotalIdxCount * sizeof(ImDrawIdx), EBufferUsageFlags::Volatile | EBufferUsageFlags::IndexBuffer,
+						sizeof(ImDrawIdx), ERHIAccess::VertexOrIndexBuffer, IndexBufferCreateInfo);
 #endif
 
-				ImDrawVert* VertexDst = (ImDrawVert*)RHICmdList.LockBuffer(VertexBuffer, 0u, DrawData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly);
-				ImDrawIdx* IndexDst = (ImDrawIdx*)RHICmdList.LockBuffer(IndexBuffer, 0u, DrawData->TotalIdxCount * sizeof(ImDrawIdx), RLM_WriteOnly);
-				if (ensure(VertexDst && IndexDst))
-				{
-					for (const ImDrawList* CmdList : DrawData->CmdLists)
+					ImDrawVert* VertexDst = (ImDrawVert*)RHICmdList.LockBuffer(VertexBuffer, 0u, DrawData->TotalVtxCount * sizeof(ImDrawVert), RLM_WriteOnly);
+					ImDrawIdx* IndexDst = (ImDrawIdx*)RHICmdList.LockBuffer(IndexBuffer, 0u, DrawData->TotalIdxCount * sizeof(ImDrawIdx), RLM_WriteOnly);
+					if (ensure(VertexDst && IndexDst))
 					{
-						FMemory::Memcpy(VertexDst, CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size * sizeof(ImDrawVert));
-						FMemory::Memcpy(IndexDst, CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
-
-						VertexDst += CmdList->VtxBuffer.Size;
-						IndexDst += CmdList->IdxBuffer.Size;
-					}
-					RHICmdList.UnlockBuffer(VertexBuffer);
-					RHICmdList.UnlockBuffer(IndexBuffer);
-				}
-
-				const ERenderTargetLoadAction LoadAction = RenderData.bClearRenderTarget ? ERenderTargetLoadAction::EClear : ERenderTargetLoadAction::ENoAction;
-				FRHIRenderPassInfo RPInfo(RT_Resource->TextureRHI, MakeRenderTargetActions(LoadAction, ERenderTargetStoreAction::EStore));
-				RHICmdList.Transition(FRHITransitionInfo(RT_Resource->TextureRHI, ERHIAccess::SRVGraphicsPixel, ERHIAccess::RTV));
-				RHICmdList.BeginRenderPass(RPInfo, TEXT("RenderImGui"));
-				{
-					SCOPED_DRAW_EVENT(RHICmdList, RenderImGui);
-
-					TShaderMapRef<FImGuiVS> VertexShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
-					TShaderMapRef<FImGuiPS> PixelShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
-
-					FGraphicsPipelineStateInitializer GraphicsPSOInit;
-					RHICmdList.ApplyCachedRenderTargets(GraphicsPSOInit);
-					GraphicsPSOInit.DepthStencilState = TStaticDepthStencilState<false, CF_Always>::GetRHI();
-					GraphicsPSOInit.RasterizerState = TStaticRasterizerState<FM_Solid, CM_None>::GetRHI();
-					GraphicsPSOInit.BlendState = TStaticBlendState<CW_RGBA, BO_Add, BF_SourceAlpha, BF_InverseSourceAlpha, BO_Add, BF_One, BF_One>::GetRHI();
-					GraphicsPSOInit.BoundShaderState.VertexDeclarationRHI = GImGuiVertexDeclaration.VertexDeclarationRHI;
-					GraphicsPSOInit.BoundShaderState.VertexShaderRHI = VertexShader.GetVertexShader();
-					GraphicsPSOInit.BoundShaderState.PixelShaderRHI = PixelShader.GetPixelShader();
-					GraphicsPSOInit.PrimitiveType = PT_TriangleList;
-					SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
-
-					RHICmdList.SetStreamSource(0, VertexBuffer, 0);
-
-					auto UpdateVertexShaderParameters = [&]() -> void
+						for (const ImDrawList* CmdList : DrawData->CmdLists)
 						{
-							const float L = DisplayPos.x;
-							const float R = DisplayPos.x + DisplaySize.x;
-							const float T = DisplayPos.y;
-							const float B = DisplayPos.y + DisplaySize.y;
-							FMatrix44f ProjectionMatrix =
+							FMemory::Memcpy(VertexDst, CmdList->VtxBuffer.Data, CmdList->VtxBuffer.Size * sizeof(ImDrawVert));
+							FMemory::Memcpy(IndexDst, CmdList->IdxBuffer.Data, CmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
+
+							VertexDst += CmdList->VtxBuffer.Size;
+							IndexDst += CmdList->IdxBuffer.Size;
+						}
+						RHICmdList.UnlockBuffer(VertexBuffer);
+						RHICmdList.UnlockBuffer(IndexBuffer);
+					}
+
+					{
+						TShaderMapRef<FImGuiVS> VertexShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+						TShaderMapRef<FImGuiPS> PixelShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+
+						FGraphicsPipelineStateInitializer GraphicsPSOInit;
+						RHICmdList.ApplyCachedRenderTargets(GraphicsPSOInit);
+						GraphicsPSOInit.DepthStencilState = TStaticDepthStencilState<false, CF_Always>::GetRHI();
+						GraphicsPSOInit.RasterizerState = TStaticRasterizerState<FM_Solid, CM_None>::GetRHI();
+						GraphicsPSOInit.BlendState = TStaticBlendState<CW_RGBA, BO_Add, BF_SourceAlpha, BF_InverseSourceAlpha, BO_Add, BF_One, BF_One>::GetRHI();
+						GraphicsPSOInit.BoundShaderState.VertexDeclarationRHI = GImGuiVertexDeclaration.VertexDeclarationRHI;
+						GraphicsPSOInit.BoundShaderState.VertexShaderRHI = VertexShader.GetVertexShader();
+						GraphicsPSOInit.BoundShaderState.PixelShaderRHI = PixelShader.GetPixelShader();
+						GraphicsPSOInit.PrimitiveType = PT_TriangleList;
+						SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
+
+						RHICmdList.SetStreamSource(0, VertexBuffer, 0);
+
+						auto UpdateVertexShaderParameters = [&]()
 							{
-								{ 2.0f / (R - L)	, 0.0f			   , 0.0f, 0.0f },
-								{ 0.0f				, 2.0f / (T - B)   , 0.0f, 0.0f },
-								{ 0.0f				, 0.0f			   , 0.5f, 0.0f },
-								{ (R + L) / (L - R)	, (T + B) / (B - T), 0.5f, 1.0f },
+								const float L = DisplayPos.x;
+								const float R = DisplayPos.x + DisplaySize.x;
+								const float T = DisplayPos.y;
+								const float B = DisplayPos.y + DisplaySize.y;
+								FMatrix44f ProjectionMatrix =
+								{
+									{ 2.0f / (R - L)	, 0.0f			   , 0.0f, 0.0f },
+									{ 0.0f				, 2.0f / (T - B)   , 0.0f, 0.0f },
+									{ 0.0f				, 0.0f			   , 0.5f, 0.0f },
+									{ (R + L) / (L - R)	, (T + B) / (B - T), 0.5f, 1.0f },
+								};
+
+								SetShaderParametersLegacyVS(
+									RHICmdList,
+									VertexShader,
+									ProjectionMatrix);
 							};
 
-							SetShaderParametersLegacyVS(
-								RHICmdList,
-								VertexShader,
-								ProjectionMatrix);
-						};
+						uint32_t ShaderStateOverrides = 0;
 
-					uint32_t ShaderStateOverrides = 0;
+						RHICmdList.SetViewport(ViewportRect.Min.x, ViewportRect.Min.y, 0.f, ViewportRect.Max.x, ViewportRect.Max.y, 1.f);
+						RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
 
-					RHICmdList.SetViewport(0.f, 0.f, 0.f, DisplaySize.x, DisplaySize.y, 1.f);
-					RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
+						UpdateVertexShaderParameters();
 
-					UpdateVertexShaderParameters();
-
-					uint32 GlobalVertexOffset = 0;
-					uint32 GlobalIndexOffset = 0;
-					for (const ImDrawList* CmdList : DrawData->CmdLists)
-					{
-						for (const ImDrawCmd& DrawCmd : CmdList->CmdBuffer)
+						uint32 GlobalVertexOffset = 0;
+						uint32 GlobalIndexOffset = 0;
+						for (const ImDrawList* CmdList : DrawData->CmdLists)
 						{
-							if (DrawCmd.UserCallback != NULL)
+							for (const ImDrawCmd& DrawCmd : CmdList->CmdBuffer)
 							{
-								if (DrawCmd.UserCallback == ImDrawCallback_ResetRenderState)
+								if (DrawCmd.UserCallback != NULL)
 								{
-									RHICmdList.SetViewport(0.f, 0.f, 0.f, DisplaySize.x, DisplaySize.y, 1.f);
-									RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
-
-									UpdateVertexShaderParameters();
-								}
-								else if (DrawCmd.UserCallback == ImDrawCallback_SetShaderState)
-								{
-									ShaderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
-
-									//UpdateVertexShaderParameters(); No VS state exposed atm.
-								}
-								else
-								{
-									DrawCmd.UserCallback(&RHICmdList, DrawCmd.UserCallbackData, DrawCmd.UserCallbackDataSize);
-
-									// TODO: add a flag to tell whether callback modified the render state here?
+									if (DrawCmd.UserCallback == ImDrawCallback_ResetRenderState)
 									{
-										SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
-										RHICmdList.SetStreamSource(0, VertexBuffer, 0);
-
-										RHICmdList.SetViewport(0.f, 0.f, 0.f, DisplaySize.x, DisplaySize.y, 1.f);
+										RHICmdList.SetViewport(ViewportRect.Min.x, ViewportRect.Min.y, 0.f, ViewportRect.Max.x, ViewportRect.Max.y, 1.f);
 										RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
 
 										UpdateVertexShaderParameters();
 									}
-								}
-							}
-							else
-							{
-								const ImVec2& ClipRectOffset = DisplayPos;
-								RHICmdList.SetScissorRect(
-									true,
-									FMath::Max(0.f, DrawCmd.ClipRect.x - ClipRectOffset.x),							// >=Viewport.MinX
-									FMath::Max(0.f, DrawCmd.ClipRect.y - ClipRectOffset.y),							// >=Viewport.MinY
-									FMath::Min(DisplaySize.x, DrawCmd.ClipRect.z - ClipRectOffset.x),	// <=Viewport.MaxX
-									FMath::Min(DisplaySize.y, DrawCmd.ClipRect.w - ClipRectOffset.y));	// <=Viewport.MaxY
+									else if (DrawCmd.UserCallback == ImDrawCallback_SetShaderState)
+									{
+										ShaderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
 
-								uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
-								if (!(RenderData.BoundTextures.IsValidIndex(TextureIndex)/* && RenderData.BoundTextures[Index].IsValid()*/))
+										//UpdateVertexShaderParameters(); No VS state exposed atm.
+									}
+									else
+									{
+										DrawCmd.UserCallback(RHICmdList, DrawRect, DrawCmd.UserCallbackData, DrawCmd.UserCallbackDataSize);
+
+										// TODO: add a flag to tell whether callback modified the render state here?
+										{
+											SetGraphicsPipelineState(RHICmdList, GraphicsPSOInit, 0);
+											RHICmdList.SetStreamSource(0, VertexBuffer, 0);
+
+											RHICmdList.SetViewport(ViewportRect.Min.x, ViewportRect.Min.y, 0.f, ViewportRect.Max.x, ViewportRect.Max.y, 1.f);
+											RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
+
+											UpdateVertexShaderParameters();
+										}
+									}
+								}
+								else
 								{
-									TextureIndex = UImGuiSubsystem::GetMissingImageTextureIndex();
+									const ImVec2& ClipRectOffset = DisplayPos;
+									RHICmdList.SetScissorRect(
+										true,
+										FMath::Max(0.f, DrawCmd.ClipRect.x - ClipRectOffset.x) + ViewportRect.Min.x,
+										FMath::Max(0.f, DrawCmd.ClipRect.y - ClipRectOffset.y) + ViewportRect.Min.y,
+										FMath::Min(ViewportRect.Max.x, DrawCmd.ClipRect.z - ClipRectOffset.x + ViewportRect.Min.x),
+										FMath::Min(ViewportRect.Max.y, DrawCmd.ClipRect.w - ClipRectOffset.y + ViewportRect.Min.y));
+
+									uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
+									if (!(m_BoundTextures.IsValidIndex(TextureIndex)/* && RenderData.BoundTextures[Index].IsValid()*/))
+									{
+										TextureIndex = UImGuiSubsystem::GetMissingImageTextureIndex();
+									}
+
+									SetShaderParametersLegacyPS(
+										RHICmdList,
+										PixelShader,
+										m_BoundTextures[TextureIndex].TextureRHI,
+										m_BoundTextures[TextureIndex].SamplerRHI,
+										m_BoundTextures[TextureIndex].IsSRGB,
+										ShaderStateOverrides);
+
+									RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);
 								}
-
-								SetShaderParametersLegacyPS(
-									RHICmdList,
-									PixelShader,
-									RenderData.BoundTextures[TextureIndex].TextureRHI,
-									RenderData.BoundTextures[TextureIndex].SamplerRHI,
-									RenderData.BoundTextures[TextureIndex].IsSRGB,
-									ShaderStateOverrides);
-
-								RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);
 							}
+							GlobalVertexOffset += CmdList->VtxBuffer.Size;
+							GlobalIndexOffset += CmdList->IdxBuffer.Size;
 						}
-						GlobalVertexOffset += CmdList->VtxBuffer.Size;
-						GlobalIndexOffset += CmdList->IdxBuffer.Size;
 					}
-				}
-				RHICmdList.EndRenderPass();
-				RHICmdList.Transition(FRHITransitionInfo(RT_Resource->TextureRHI, ERHIAccess::RTV, ERHIAccess::SRVGraphicsPixel));
-			});
+				});
+		}
+	private:
+		struct FTextureInfo
+		{
+			FTextureRHIRef TextureRHI = nullptr;
+			FSamplerStateRHIRef SamplerRHI = nullptr;
+			bool IsSRGB = false;
+		};
+		TArray<FTextureInfo> m_BoundTextures;
+		FVector2f m_DrawRectOffset = FVector2f::ZeroVector;
+		ImDrawDataSnapshot m_DrawDataSnapshot;
+		bool m_bHasDrawCommands = false;
+	};
 
-		return true;
-	}
+	struct FImGuiViewportData
+	{
+		TWeakPtr<SWindow> ViewportWindow = nullptr;
+		TSharedPtr<SImGuiViewportWidget> ViewportWidget = nullptr;
+
+		TWeakPtr<SWindow> MainViewportWindow = nullptr;
+		TWeakPtr<SImGuiWidgetBase> MainViewportWidget = nullptr;
+
+		// to request viewport window recreation (for patching slate window references etc.)
+		bool bInvalidateManagedViewportWindows = false;
+	};
 
 	// Widget handling rendering and inputs (no Tick logic)
-	class SImGuiViewportWidget final : public SLeafWidget, public FGCObject
+	class SImGuiViewportWidget final : public SLeafWidget
 	{
 		using Super = SLeafWidget;
 	public:
@@ -447,15 +544,8 @@ namespace ImGuiUtils
 		{
 			m_ImGuiViewport = InImGuiViewport;
 			m_MainViewportWidget = InMainViewportWidget;
-
-			m_ImGuiRT = NewObject<UTextureRenderTarget2D>();
-			m_ImGuiRT->Filter = TextureFilter::TF_Nearest;
-			m_ImGuiRT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
-			m_ImGuiRT->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
-			m_ImGuiRT->InitAutoFormat(1, 1);
-			m_ImGuiRT->UpdateResourceImmediate(true);
-
-			m_ImGuiSlateBrush.SetResourceObject(m_ImGuiRT);
+			m_WidgetDrawers[0] = MakeShared<ImGuiUtils::FWidgetDrawer>();
+			m_WidgetDrawers[1] = MakeShared<ImGuiUtils::FWidgetDrawer>();
 
 #if WITH_SLATE_DEBUGGING
 			FCoreDelegates::OnEndFrame.AddRaw(this, &SImGuiViewportWidget::UpdateWindowVisibility);
@@ -463,18 +553,14 @@ namespace ImGuiUtils
 		}
 		virtual ~SImGuiViewportWidget()
 		{
+			// NOTE: This widget is only used along with a standalone slate window
+			// The destructor will *always* be called after the window is destroyed which flushes the rendering thread.
+			// Lets us clear the widget drawers without worrying about pending render work.
+			m_WidgetDrawers[0] = m_WidgetDrawers[1] = nullptr;
+
 #if WITH_SLATE_DEBUGGING
 			FCoreDelegates::OnEndFrame.RemoveAll(this);
 #endif
-		}
-
-		virtual void AddReferencedObjects(FReferenceCollector& Collector) override
-		{
-			Collector.AddReferencedObject(m_ImGuiRT);
-		}
-		virtual FString GetReferencerName() const override
-		{
-			return TEXT("SImGuiViewportWidget");
 		}
 
 		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D::ZeroVector; }
@@ -511,37 +597,16 @@ namespace ImGuiUtils
 		{
 			DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [GT]"), STAT_ImGui_RenderWidget_GT, STATGROUP_ImGui);
 
-			const FSlateRenderTransform WidgetOffsetTransform = FTransform2f(1.f, { 0.f, 0.f });
-			const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
-
-			const FVector2f V0 = (FVector2f)DrawRect.GetTopLeft();
-			const FVector2f V1 = (FVector2f)DrawRect.GetTopRight();
-			const FVector2f V2 = (FVector2f)DrawRect.GetBottomRight();
-			const FVector2f V3 = (FVector2f)DrawRect.GetBottomLeft();
-
-			// adjust UVs based on RT vs Viewport scaling
-			const float UVMinX = 0.f;
-			const float UVMinY = 0.f;
-			const float UVMaxX = (DrawRect.Right - DrawRect.Left) / (float)m_ImGuiRT->SizeX;
-			const float UVMaxY = (DrawRect.Bottom - DrawRect.Top) / (float)m_ImGuiRT->SizeY;
-
-			TArray<FSlateVertex> Vertices =
+			TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
+			if (WidgetDrawer->HasDrawCommands())
 			{
-				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V0, FVector2f{ UVMinX, UVMinY }, FColor::White),
-				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V1, FVector2f{ UVMaxX, UVMinY }, FColor::White),
-				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V2, FVector2f{ UVMaxX, UVMaxY }, FColor::White),
-				FSlateVertex::Make<ESlateVertexRounding::Disabled>(WidgetOffsetTransform, V3, FVector2f{ UVMinX, UVMaxY }, FColor::White)
-			};
-			TArray<uint32> Indices =
-			{
-				0, 1, 2,
-				0, 2, 3,
-			};
+				const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
+				WidgetDrawer->SetDrawRectOffset(DrawRect.GetTopLeft2f());
 
-			OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
-			FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, m_ImGuiSlateBrush.GetRenderingResource(), MoveTemp(Vertices), MoveTemp(Indices), nullptr, 0, 0, ESlateDrawEffect::NoGamma);
-			OutDrawElements.PopClip();
-
+				OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
+				FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
+				OutDrawElements.PopClip();
+			}
 			return LayerId;
 		}
 
@@ -549,22 +614,7 @@ namespace ImGuiUtils
 
 		void OnDrawDataGenerated(ImDrawData* DrawData)
 		{
-			ImDrawDataSnapshot& DrawDataSnapshot = m_DoubleBufferedDrawData[ImGui::GetFrameCount() & 0x1];
-			DrawDataSnapshot.SnapUsingSwap(DrawData, ImGui::GetFrameCount());
-			DrawData = &DrawDataSnapshot.DrawData;
-
-			// resize RT if needed
-			{
-				const int32 NewSizeX = FMath::CeilToInt(DrawData->DisplaySize.x);
-				const int32 NewSizeY = FMath::CeilToInt(DrawData->DisplaySize.y);
-
-				if (m_ImGuiRT->SizeX < NewSizeX || m_ImGuiRT->SizeY < NewSizeY)
-				{
-					m_ImGuiRT->ResizeTarget(NewSizeX, NewSizeY);
-				}
-			}
-
-			RenderImGuiWidgetToTexture(DrawData, m_ImGuiRT.Get(), /*bClearRT=*/false);
+			m_WidgetDrawers[ImGui::GetFrameCount() & 0x1]->SetDrawData(DrawData, ImGui::GetFrameCount(), FVector2f::ZeroVector);
 		}
 
 		virtual FReply OnKeyChar(const FGeometry& WidgetGeometry, const FCharacterEvent& CharacterEvent) override
@@ -692,11 +742,9 @@ namespace ImGuiUtils
 			return RootWidget ? RootWidget->OnDrop(RootWidget->GetCachedGeometry(), DragDropEvent) : FReply::Unhandled();
 		}
 
-	protected:
-		FSlateBrush m_ImGuiSlateBrush;
+	private:
 		const ImGuiViewport* m_ImGuiViewport = nullptr;
-		ImDrawDataSnapshot m_DoubleBufferedDrawData[2];
-		TObjectPtr<UTextureRenderTarget2D> m_ImGuiRT = nullptr;
+		TSharedPtr<ImGuiUtils::FWidgetDrawer> m_WidgetDrawers[2];
 		TWeakPtr<SImGuiWidgetBase> m_MainViewportWidget = nullptr;
 	};
 
@@ -721,7 +769,10 @@ namespace ImGuiUtils
 				MainViewportWidgetPtr = ParentViewportData->MainViewportWidget;
 			}
 		}
-		ensure(MainViewportWindowPtr.IsValid() && MainViewportWidgetPtr.IsValid());
+		if (!ensure(MainViewportWindowPtr.IsValid() && MainViewportWidgetPtr.IsValid()))
+		{
+			return;
+		}
 
 		TSharedPtr<ImGuiUtils::SImGuiViewportWidget> ViewportWidget = SNew(ImGuiUtils::SImGuiViewportWidget, MainViewportWidgetPtr, Viewport);
 		TSharedPtr<SWindow> ViewportWindow = 
@@ -768,18 +819,20 @@ namespace ImGuiUtils
 
 	static void UnrealPlatform_DestroyWindow(ImGuiViewport* Viewport)
 	{
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData;
-		if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			ViewportWindow->RequestDestroyWindow();
-		}
-		ViewportData->ViewportWindow = nullptr;
-		ViewportData->ViewportWidget = nullptr;
-		ViewportData->MainViewportWindow = nullptr;
-		ViewportData->MainViewportWidget = nullptr;
-		IM_DELETE(ViewportData);
+			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+			{
+				ViewportWindow->RequestDestroyWindow();
+			}
+			ViewportData->ViewportWindow = nullptr;
+			ViewportData->ViewportWidget = nullptr;
+			ViewportData->MainViewportWindow = nullptr;
+			ViewportData->MainViewportWidget = nullptr;
+			IM_DELETE(ViewportData);
 
-		Viewport->PlatformUserData = nullptr;
+			Viewport->PlatformUserData = nullptr;
+		}
 	}
 
 	static void UnrealPlatform_SetWindowPosition(ImGuiViewport* Viewport, ImVec2 NewPosition)

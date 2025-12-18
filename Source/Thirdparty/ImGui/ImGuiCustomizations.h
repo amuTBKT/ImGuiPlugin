@@ -19,20 +19,18 @@ extern void GImAssertFunc(bool cond);
 //-------------------- Assert Customization --------------------//
 
 //-------------------- DrawCallback Customization --------------------//
-// NOTE: current setup assumes viewport is always (0, 0, ImGui::GetIO().DisplaySize),
-// Callers can store ViewportSize and ClipRects as UserData if needed.
-
 // TODO: it is unsafe to switch render targets/graphics stage (using compute shaders) in the callback.
 // Since the widget is rendered using RenderPass, would have to wrap the callback inside End/Begin render pass stages.
 
 /**
- * Callback which can be used to render directly into ImGui window/render-target
+ * Callback which can be used to render directly into the ImGui Slate window
  * 
- * @param immediate_command_list : FRHICommandListImmediate pointer used to render the ImGui widget.
- * @param user_data : User data passed to ImDrawList::AddCallback(...) function.
- * @param user_data_size : Size of user data, not used internally but can be used for validation.
+ * @param RHICmdList	: FRHICommandListImmediate used to render the ImGui widget.
+ * @param DrawRect		: Draw rect inside the Slate window.
+ * @param UserData		: User data passed to ImDrawList::AddCallback(...) function.
+ * @param UserDataSize	: Size of user data, not used internally but can be used for validation.
  */
-typedef void (*FImGuiDrawCallback)(void* immediate_command_list, void* user_data, size_t user_data_size);
+typedef void (*FImGuiDrawCallback)(class FRHICommandListImmediate& RHICmdList, const struct ImRect& DrawRect, void* UserData, size_t UserDataSize);
 
 // Override ImGui's callback to use the new type defined above.
 #define ImDrawCallback FImGuiDrawCallback

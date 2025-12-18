@@ -21,27 +21,19 @@ DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
 class FImGuiTextureResource
 {
 public:
-	FImGuiTextureResource() = default;
-	FImGuiTextureResource(const FImGuiTextureResource&) = default;
-	FImGuiTextureResource& operator=(const FImGuiTextureResource&) = default;
-	FImGuiTextureResource(FImGuiTextureResource&&) = default;
-	FImGuiTextureResource& operator=(FImGuiTextureResource&&) = default;
-	~FImGuiTextureResource() {}
-
 	explicit FImGuiTextureResource(FSlateShaderResource* InShaderResource)
+		: Storage(TInPlaceType<FSlateShaderResource*>(), InShaderResource)
 	{
-		UnderlyingResource.Set<FSlateShaderResource*>(InShaderResource);
 	}
-
 	explicit FImGuiTextureResource(const FSlateResourceHandle& InResourceHandle)
+		: Storage(TInPlaceType<FSlateResourceHandle>(), InResourceHandle)
 	{
-		UnderlyingResource.Set<FSlateResourceHandle>(InResourceHandle);
 	}
 
 	FSlateShaderResource* GetSlateShaderResource() const;
 
 private:
-	TVariant<FSlateResourceHandle, FSlateShaderResource*> UnderlyingResource;
+	TVariant<FSlateResourceHandle, FSlateShaderResource*> Storage;
 };
 
 UCLASS(MinimalAPI)

@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "UObject/GCObject.h"
 #include "Widgets/SLeafWidget.h"
 #include "ImGuiPluginDelegates.h"
 #include "Containers/AnsiString.h"
@@ -11,15 +10,14 @@
 struct ImGuiIO;
 struct ImGuiContext;
 struct FImGuiTickContext;
-struct ImDrawDataSnapshot;
-class UTextureRenderTarget2D;
 
 namespace ImGuiUtils
 {
+	class FWidgetDrawer;
 	class SImGuiViewportWidget;
 }
 
-class IMGUIRUNTIME_API SImGuiWidgetBase : public SLeafWidget, public FGCObject
+class IMGUIRUNTIME_API SImGuiWidgetBase : public SLeafWidget
 {
 	using Super = SLeafWidget;
 
@@ -34,23 +32,16 @@ public:
 	SLATE_BEGIN_ARGS(SImGuiWidgetBase)
 		: _MainViewportWindow(nullptr)
 		, _ConfigFileName(nullptr)
-		, _bUseOpaqueBackground(true)
 		, _bEnableViewports(true)
 		{
 		}
 		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
 		SLATE_ARGUMENT(const ANSICHAR*, ConfigFileName);
-		SLATE_ARGUMENT(bool, bUseOpaqueBackground);
 		SLATE_ARGUMENT(bool, bEnableViewports);
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
 	virtual ~SImGuiWidgetBase();
-
-	// GCObject interface 
-	virtual void AddReferencedObjects(FReferenceCollector& Collector) override;
-	virtual FString GetReferencerName() const override;
-	// GCObject interface END
 
 	virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D::ZeroVector; }
 
@@ -93,18 +84,12 @@ private:
 	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) = 0;
 
 protected:
-	FSlateBrush m_ImGuiSlateBrush;
-	TObjectPtr<UTextureRenderTarget2D> m_ImGuiRT = nullptr;
-
 	FAnsiString m_ConfigFilePath;
 	ImGuiContext* m_ImGuiContext = nullptr;
-	ImDrawDataSnapshot* m_DoubleBufferedDrawData[2] = { nullptr, nullptr };
+	TSharedPtr<ImGuiUtils::FWidgetDrawer> m_WidgetDrawers[2];
 
 	// TODO: initial zoom support, can we do better than this?
 	float m_WindowScale = 1.f;
-
-	// minor optimization to avoid texture clears when using opaque window.
-	bool m_ClearRenderTargetEveryFrame = false;
 
 	// widgets can often be ticked from input events, so keep track to avoid ticking them again during Tick event.
 	bool m_ImGuiTickedByInputProcessing = false;
@@ -138,14 +123,12 @@ public:
 		: _MainViewportWindow(nullptr)
 		, _OnTickDelegate()
 		, _ConfigFileName(nullptr)
-		, _bUseOpaqueBackground(true)
 		, _bEnableViewports(true)
 		{
 		}
 		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
 		SLATE_EVENT(FOnTickImGuiWidgetDelegate, OnTickDelegate);
 		SLATE_ARGUMENT(const ANSICHAR*, ConfigFileName);
-		SLATE_ARGUMENT(bool, bUseOpaqueBackground);
 		SLATE_ARGUMENT(bool, bEnableViewports);
 	SLATE_END_ARGS()
 	

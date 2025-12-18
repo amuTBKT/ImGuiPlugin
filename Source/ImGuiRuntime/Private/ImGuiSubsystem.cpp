@@ -22,15 +22,15 @@ static FAutoConsoleVariableRef CVarRenderCaptureNextImGuiFrame(
 
 FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
 {
-	if (UnderlyingResource.IsType<FSlateResourceHandle>())
+	if (Storage.IsType<FSlateResourceHandle>())
 	{
-		const FSlateResourceHandle& ResourceHandle = UnderlyingResource.Get<FSlateResourceHandle>();
+		const FSlateResourceHandle& ResourceHandle = Storage.Get<FSlateResourceHandle>();
 		const FSlateShaderResourceProxy* ResourcProxy = ResourceHandle.GetResourceProxy();
 		return ResourcProxy ? ResourcProxy->Resource : nullptr;
 	}
-	else if (UnderlyingResource.IsType<FSlateShaderResource*>())
+	else if (Storage.IsType<FSlateShaderResource*>())
 	{
-		return (FSlateShaderResource*)UnderlyingResource.Get<FSlateShaderResource*>();
+		return Storage.Get<FSlateShaderResource*>();
 	}
 	ensureAlwaysMsgf(false, TEXT("Resource type not handled!"));
 	return nullptr;
@@ -97,11 +97,11 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	FCoreDelegates::OnBeginFrame.AddUObject(this, &UImGuiSubsystem::OnBeginFrame);
 	
 	// Need to ensure shared font atlas is released after all slate windows have exited
-	// Note: subsystem is deinitialized before slate so copy the pointer for callback
-	FCoreDelegates::OnPreExit.AddLambda(
+	// Note: Subsystem is deinitialized before slate so copy the pointer for callback
+	FCoreDelegates::OnExit.AddLambda(
 		[FontAtlasToDestroy=m_SharedFontAtlas]() mutable
 		{
-			ensure(FontAtlasToDestroy->RefCount == 1);
+			check(FontAtlasToDestroy->RefCount == 1);
 			FontAtlasToDestroy->RefCount = 0;
 			FontAtlasToDestroy = nullptr;
 		});
@@ -149,12 +149,11 @@ TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, FVe
 		.SizingRule(ESizingRule::UserSized);
 	Window = FSlateApplication::Get().AddWindow(Window.ToSharedRef());
 
-	TSharedPtr<SImGuiWidget> ImGuiWindow = 
+	TSharedPtr<SImGuiWidget> ImGuiWindow =
 		SNew(SImGuiWidget)
 		.MainViewportWindow(Window)
 		.OnTickDelegate(TickDelegate)
-		.ConfigFileName(TCHAR_TO_ANSI(*WindowName))
-		.bUseOpaqueBackground(true);
+		.ConfigFileName(TCHAR_TO_ANSI(*WindowName));
 
 	Window->SetContent(ImGuiWindow.ToSharedRef());
 
@@ -249,7 +248,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 	uint32 ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([Proxy](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == Proxy->Resource; });
 	if (ResourceHandleIndex == INDEX_NONE)
 	{
-		ResourceHandleIndex = m_OneFrameResources.Add(FImGuiTextureResource(ResourceHandle));
+		ResourceHandleIndex = m_OneFrameResources.Emplace(ResourceHandle);
 	}
 
 	const FVector2f StartUV = Proxy->StartUV;
@@ -294,7 +293,11 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 		return {};
 	}
 
-	const uint32 ResourceHandleIndex = m_OneFrameResources.Add(FImGuiTextureResource(SlateShaderResource));
+	uint32 ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([&](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == SlateShaderResource; });
+	if (ResourceHandleIndex == INDEX_NONE)
+	{
+		ResourceHandleIndex = m_OneFrameResources.Emplace(SlateShaderResource);
+	}
 
 	FImGuiImageBindingParams Params = {};
 	Params.Size = ImVec2(SlateShaderResource->GetWidth(), SlateShaderResource->GetHeight());

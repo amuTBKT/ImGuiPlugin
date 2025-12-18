@@ -50,7 +50,6 @@ static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FS
 			.MainViewportWindow(SpawnTabArgs.GetOwnerWindow())
 			.OnTickDelegate(TickDelegate)
 			.ConfigFileName(RegisterParams.WidgetName)
-			.bUseOpaqueBackground(true)
 			.bEnableViewports(RegisterParams.bEnableViewports)
 		];
 }
