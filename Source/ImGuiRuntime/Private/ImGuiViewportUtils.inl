@@ -339,15 +339,16 @@ namespace ImGuiUtils
 				[this](FRHICommandListImmediate& RHICmdList)
 				{
 					const ImDrawData* DrawData = &m_DrawDataSnapshot.DrawData;
-					const ImVec2 DisplayPos = DrawData->DisplayPos;
-					const ImVec2 DisplaySize = DrawData->DisplaySize;
 
 					const ImRect DrawRect = ImRect(
 						ImVec2(m_DrawRectOffset.X, m_DrawRectOffset.Y),
-						ImVec2(m_DrawRectOffset.X, m_DrawRectOffset.Y) + DisplaySize);
+						ImVec2(m_DrawRectOffset.X, m_DrawRectOffset.Y) + DrawData->DisplaySize);
 					const ImRect ViewportRect = ImRect(
 						FMath::RoundToFloat(DrawRect.Min.x), FMath::RoundToFloat(DrawRect.Min.y),
 						FMath::RoundToFloat(DrawRect.Max.x), FMath::RoundToFloat(DrawRect.Max.y));
+
+					const ImVec2 DisplayPos = ImVec2(FMath::RoundToFloat(DrawData->DisplayPos.x), FMath::RoundToFloat(DrawData->DisplayPos.y));
+					const ImVec2 DisplaySize = ViewportRect.GetSize();
 
 #if ((ENGINE_MAJOR_VERSION * 100u + ENGINE_MINOR_VERSION) > 505) //(Version > 5.5)
 					FRHIBufferCreateDesc VertexBufferDesc =
@@ -600,8 +601,7 @@ namespace ImGuiUtils
 			TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
 			if (WidgetDrawer->HasDrawCommands())
 			{
-				const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
-				WidgetDrawer->SetDrawRectOffset(DrawRect.GetTopLeft2f());
+				WidgetDrawer->SetDrawRectOffset(ClippingRect.GetTopLeft2f());
 
 				OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
 				FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
@@ -857,8 +857,9 @@ namespace ImGuiUtils
 			}
 			else if (TSharedPtr<SImGuiWidgetBase> MainViewportWidget = ViewportData->MainViewportWidget.Pin())
 			{
+				// NOTE: Rounding is required to fix 1px-offset issues when drawing the widget
 				FVector2f Position = MainViewportWidget->GetCachedGeometry().GetAbsolutePosition();
-				return ImVec2{ Position.X, Position.Y };
+				return ImVec2{ FMath::RoundToFloat(Position.X), FMath::RoundToFloat(Position.Y) };
 			}
 		}
 		return ImVec2{ 0.f, 0.f };
