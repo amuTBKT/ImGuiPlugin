@@ -601,7 +601,8 @@ namespace ImGuiUtils
 			TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
 			if (WidgetDrawer->HasDrawCommands())
 			{
-				WidgetDrawer->SetDrawRectOffset(ClippingRect.GetTopLeft2f());
+				const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
+				WidgetDrawer->SetDrawRectOffset(DrawRect.GetTopLeft2f());
 
 				OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
 				FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);

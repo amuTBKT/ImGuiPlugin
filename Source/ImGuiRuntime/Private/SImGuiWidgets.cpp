@@ -176,8 +176,10 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 	ImGuiIO& IO = GetImGuiIO();
 	ImGui::Render();
 
+	const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
+
 	TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
-	if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetFrameCount(), ClippingRect.GetTopLeft2f()))
+	if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetFrameCount(), DrawRect.GetTopLeft2f()))
 	{
 		OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
 		FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
