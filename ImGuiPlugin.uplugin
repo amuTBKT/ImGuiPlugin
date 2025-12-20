@@ -18,18 +18,12 @@
 		{
 			"Name": "ImGuiShaders",
 			"Type": "Runtime",
-			"LoadingPhase": "PostConfigInit",
-			"TargetDenyList": [ "Server", "Program" ],
-			"TargetConfigurationDenyList": [ "Shipping" ],
-			"PlatformAllowList": [ "Win64" ]
+			"LoadingPhase": "PostConfigInit"
 		},
 		{
 			"Name": "ImGuiRuntime",
 			"Type": "Runtime",
-			"LoadingPhase": "PreDefault",
-			"TargetDenyList": [ "Server", "Program" ],
-			"TargetConfigurationDenyList": [ "Shipping" ],
-			"PlatformAllowList": [ "Win64" ]
+			"LoadingPhase": "PreDefault"
 		}
 	],
 	"Plugins": [

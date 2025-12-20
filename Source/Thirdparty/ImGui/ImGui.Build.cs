@@ -9,28 +9,22 @@ public class ImGui : ModuleRules
 	{
 		Type = ModuleType.External;
 
-		// disabled on Shipping and Server configs
-		bool bIsConfigurationSupported = (Target.Configuration != UnrealTargetConfiguration.Shipping);
-		bool bIsTargetTypeSupported = ((Target.Type != TargetType.Server) && (Target.Type != TargetType.Program));
-		if (bIsConfigurationSupported && bIsTargetTypeSupported)
+		PublicDefinitions.Add("WITH_IMGUI=1");
+
+		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui"));
+
+		if (Target.Configuration == UnrealTargetConfiguration.Debug)
 		{
-			PublicDefinitions.Add("WITH_IMGUI=1");
-
-			PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui"));
-
-			if (Target.Configuration == UnrealTargetConfiguration.Debug)
+			if (Target.Platform == UnrealTargetPlatform.Win64)
 			{
-				if (Target.Platform == UnrealTargetPlatform.Win64)
-				{
-					PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Debug/Win64/ImGui.lib"));
-				}
+				PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Debug/Win64/ImGui.lib"));
 			}
-			else
+		}
+		else
+		{
+			if (Target.Platform == UnrealTargetPlatform.Win64)
 			{
-				if (Target.Platform == UnrealTargetPlatform.Win64)
-				{
-					PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Release/Win64/ImGui.lib"));
-				}
+				PublicAdditionalLibraries.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Release/Win64/ImGui.lib"));
 			}
 		}
 	}
