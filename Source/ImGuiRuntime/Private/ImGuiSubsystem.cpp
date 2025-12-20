@@ -141,7 +141,6 @@ TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, FVe
 {	
 	TSharedPtr<SWindow> Window = SNew(SWindow)
 		.Title(FText::FromString(WindowName))
-		.IsTopmostWindow(true)
 		.ClientSize(WindowSize)
 		.AutoCenter(EAutoCenter::None)
 		.SupportsMaximize(false)
