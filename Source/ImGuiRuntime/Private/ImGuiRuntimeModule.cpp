@@ -97,6 +97,49 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FStaticWidgetRegist
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/* Main window widget, only one instance active at a time */
+class SImGuiMainWindowWidget : public SImGuiWidgetBase
+{
+	using Super = SImGuiWidgetBase;
+public:
+	SLATE_BEGIN_ARGS(SImGuiMainWindowWidget)
+		: _MainViewportWindow(nullptr)
+		{
+		}
+		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
+	SLATE_END_ARGS()
+
+	void Construct(const FArguments& InArgs)
+	{
+		Super::Construct(
+			Super::FArguments()
+			.MainViewportWindow(InArgs._MainViewportWindow));
+	}
+
+private:
+	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override
+	{
+		UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
+		if (ImGuiSubsystem->GetMainWindowTickDelegate().IsBound())
+		{
+			ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+			ImGuiSubsystem->GetMainWindowTickDelegate().Broadcast(TickContext);
+		}
+		else
+		{
+			const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+			ImGui::SetNextWindowDockID(MainDockSpaceID);
+			if (ImGui::Begin("Empty", nullptr))
+			{
+				ImGui::Text("Nothing to display...");
+			}
+			ImGui::End();
+		}
+	}
+};
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
 class FImGuiRuntimeModule : public IModuleInterface
 {
 private:

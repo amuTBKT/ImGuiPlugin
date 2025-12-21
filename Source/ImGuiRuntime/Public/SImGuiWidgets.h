@@ -96,24 +96,6 @@ protected:
 	bool m_IsDragOverActive = false;
 };
 
-/* Main window widget, only one instance active at a time */
-class SImGuiMainWindowWidget : public SImGuiWidgetBase
-{
-	using Super = SImGuiWidgetBase;
-public:
-	SLATE_BEGIN_ARGS(SImGuiMainWindowWidget)
-		: _MainViewportWindow(nullptr)
-		{
-		}
-		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
-	SLATE_END_ARGS()
-
-	void Construct(const FArguments& InArgs);
-
-private:
-	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override;
-};
-
 /* Dynamic widgets (ColorPicker etc..) */
 class IMGUIRUNTIME_API SImGuiWidget : public SImGuiWidgetBase
 {

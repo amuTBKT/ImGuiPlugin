@@ -424,33 +424,6 @@ FReply SImGuiWidgetBase::OnDrop(const FGeometry& WidgetGeometry, const FDragDrop
 }
 #pragma endregion SLATE_INPUT
 
-void SImGuiMainWindowWidget::Construct(const FArguments& InArgs)
-{
-	Super::Construct(
-		Super::FArguments()
-		.MainViewportWindow(InArgs._MainViewportWindow));
-}
-
-void SImGuiMainWindowWidget::TickImGuiInternal(FImGuiTickContext* TickContext)
-{
-	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
-	if (ImGuiSubsystem->GetMainWindowTickDelegate().IsBound())
-	{
-		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
-		ImGuiSubsystem->GetMainWindowTickDelegate().Broadcast(TickContext);
-	}
-	else
-	{
-		const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
-		ImGui::SetNextWindowDockID(MainDockSpaceID);
-		if (ImGui::Begin("Empty", nullptr))
-		{
-			ImGui::Text("Nothing to display...");
-		}
-		ImGui::End();
-	}
-}
-
 void SImGuiWidget::Construct(const FArguments& InArgs)
 {
 	Super::Construct(
