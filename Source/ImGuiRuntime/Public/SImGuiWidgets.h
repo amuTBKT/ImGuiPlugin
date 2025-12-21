@@ -23,7 +23,7 @@ class IMGUIRUNTIME_API SImGuiWidgetBase : public SLeafWidget
 
 	struct FImGuiTickResult
 	{
-		bool bWasDragOperationHandled = false;
+		bool bWasDragDropOperationConsumed = false;
 	};
 
 	friend class ImGuiUtils::SImGuiViewportWidget;

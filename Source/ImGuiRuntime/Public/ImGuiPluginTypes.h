@@ -29,17 +29,17 @@ struct FImGuiTickContext
 
 	// inputs
 	TSharedPtr<FDragDropOperation> DragDropOperation = nullptr;
-	bool bApplyDragDropOperation = false;
+	bool bDragDropOperationReleasedThisFrame = false;
 
 	// outputs
-	bool bWasDragDropOperationHandled = false;
+	bool bWasDragDropOperationConsumed = false;
 
-	TSharedPtr<FDragDropOperation> ConsumeDragDropOperation()
+	TSharedPtr<FDragDropOperation> TryConsumeDragDropOperation()
 	{
 		TSharedPtr<FDragDropOperation> DragDropOp;
-		if (bApplyDragDropOperation && DragDropOperation.IsValid())
+		if (bDragDropOperationReleasedThisFrame && DragDropOperation.IsValid())
 		{
-			bWasDragDropOperationHandled = true;			
+			bWasDragDropOperationConsumed = true;
 			Swap(DragDropOp, DragDropOperation);
 		}
 		return DragDropOp;
@@ -59,26 +59,26 @@ struct FImGuiTickScope : FNoncopyable
 	}
 };
 
-// scope to resolve widget label/name collisions
-struct FImGuiNamedWidgetScope final : FNoncopyable
+// scope to resolve label/name conflicts
+struct FImGuiNamedScope final : FNoncopyable
 {
-	explicit FImGuiNamedWidgetScope(const char* ScopeName)
-	{
-		ImGui::PushID(ScopeName);
-	}
-	explicit FImGuiNamedWidgetScope(int32 ScopeId)
+	explicit FImGuiNamedScope(int32 ScopeId)
 	{
 		ImGui::PushID(ScopeId);
 	}
-	explicit FImGuiNamedWidgetScope(const TCHAR* ScopeName)
-		: FImGuiNamedWidgetScope(FCrc::StrCrc32(ScopeName))
+	explicit FImGuiNamedScope(uint32 ScopeId)
 	{
+		ImGui::PushID(static_cast<int32>(ScopeId));
 	}
-	explicit FImGuiNamedWidgetScope(uint32 ScopeId)
-		: FImGuiNamedWidgetScope(static_cast<int32>(ScopeId))
+	explicit FImGuiNamedScope(const char* ScopeName)
 	{
+		ImGui::PushID(ScopeName);
 	}
-	~FImGuiNamedWidgetScope()
+	explicit FImGuiNamedScope(const TCHAR* ScopeName)
+	{
+		ImGui::PushID(static_cast<int32>(FCrc::StrCrc32(ScopeName)));
+	}
+	~FImGuiNamedScope()
 	{
 		ImGui::PopID();
 	}

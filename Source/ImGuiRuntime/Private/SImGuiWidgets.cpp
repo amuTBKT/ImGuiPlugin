@@ -234,7 +234,7 @@ SImGuiWidgetBase::FImGuiTickResult SImGuiWidgetBase::TickImGui(const FGeometry* 
 	TickImGuiInternal(TickContext);
 	
 	FImGuiTickResult TickResult{};
-	TickResult.bWasDragOperationHandled = (TickContext->bApplyDragDropOperation && TickContext->bWasDragDropOperationHandled);
+	TickResult.bWasDragDropOperationConsumed = (TickContext->bDragDropOperationReleasedThisFrame && TickContext->bWasDragDropOperationConsumed);
 	return TickResult;
 }
 
@@ -415,12 +415,12 @@ FReply SImGuiWidgetBase::OnDrop(const FGeometry& WidgetGeometry, const FDragDrop
 	FImGuiTickContext TickContext{};
 	TickContext.ImGuiContext = m_ImGuiContext;
 	TickContext.DragDropOperation = DragDropEvent.GetOperation();
-	TickContext.bApplyDragDropOperation = TickContext.DragDropOperation.IsValid();
+	TickContext.bDragDropOperationReleasedThisFrame = TickContext.DragDropOperation.IsValid();
 	FImGuiTickResult TickResult = TickImGui(&WidgetGeometry, &TickContext);
 
 	m_ImGuiTickedByInputProcessing = true;
 
-	return TickResult.bWasDragOperationHandled ? FReply::Handled() : FReply::Unhandled();
+	return TickResult.bWasDragDropOperationConsumed ? FReply::Handled() : FReply::Unhandled();
 }
 #pragma endregion SLATE_INPUT
 
