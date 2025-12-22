@@ -521,10 +521,15 @@ namespace ImGuiUtils
 
 	struct FImGuiViewportData
 	{
+		// only initialized for backend viewports
 		TWeakPtr<SWindow> ViewportWindow = nullptr;
 		TSharedPtr<SImGuiViewportWidget> ViewportWidget = nullptr;
 
-		TWeakPtr<SWindow> MainViewportWindow = nullptr;
+		// For main viewport this window owns the widget
+		// For backend viewports this window owns the viewport windows
+		TWeakPtr<SWindow> ParentWindow = nullptr;
+
+		// widget owning the ImGui context
 		TWeakPtr<SImGuiWidgetBase> MainViewportWidget = nullptr;
 
 		// to request viewport window recreation (for patching slate window references etc.)
@@ -571,7 +576,7 @@ namespace ImGuiUtils
 		{
 			// slate doesn't update visibility for child windows, so a little workaround for it...
 			// Probably only need to worry about this in editor, if needed for packaged game we cannot rely on `slate debugging` logic
-			const ImGuiUtils::FImGuiViewportData* ViewportData = (const ImGuiUtils::FImGuiViewportData*)m_ImGuiViewport->PlatformUserData;
+			const FImGuiViewportData* ViewportData = (FImGuiViewportData*)m_ImGuiViewport->PlatformUserData;
 			if (ViewportData && ViewportData->ViewportWidget.IsValid())
 			{
 				TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin();
@@ -751,7 +756,7 @@ namespace ImGuiUtils
 
 	static void UnrealPlatform_CreateWindow(ImGuiViewport* Viewport)
 	{
-		TWeakPtr<SWindow> MainViewportWindowPtr = nullptr;
+		TWeakPtr<SWindow> ParentWindowPtr = nullptr;
 		TWeakPtr<SImGuiWidgetBase> MainViewportWidgetPtr = nullptr;
 		{
 			ImGuiViewport* ParentViewport = ImGui::FindViewportByID(Viewport->ParentViewportId);
@@ -761,45 +766,52 @@ namespace ImGuiUtils
 			}
 			if (ParentViewport)
 			{
-				ImGuiUtils::FImGuiViewportData* ParentViewportData = (ImGuiUtils::FImGuiViewportData*)ParentViewport->PlatformUserData;
-				if (!ParentViewportData->MainViewportWindow.IsValid()) //can become invalid when moving dock tabs
-				{
-					ParentViewportData->MainViewportWindow = FSlateApplication::Get().FindWidgetWindow(ParentViewportData->MainViewportWidget.Pin().ToSharedRef());
-				}
-				MainViewportWindowPtr = ParentViewportData->MainViewportWindow;
+				FImGuiViewportData* ParentViewportData = (FImGuiViewportData*)ParentViewport->PlatformUserData;
 				MainViewportWidgetPtr = ParentViewportData->MainViewportWidget;
+				
+				// prefer viewport window if available (otherwise we fallback to the main viewport widget window)
+				if (ParentViewportData->ViewportWindow.IsValid())
+				{
+					ParentWindowPtr = ParentViewportData->ViewportWindow;
+				}
+				else
+				{
+					ParentWindowPtr = ParentViewportData->ParentWindow;
+				}
 			}
 		}
-		if (!ensure(MainViewportWindowPtr.IsValid() && MainViewportWidgetPtr.IsValid()))
+		if (!ensure(ParentWindowPtr.IsValid() && MainViewportWidgetPtr.IsValid()))
 		{
 			return;
 		}
 
+		const bool bTooltipWindow = (Viewport->Flags & ImGuiViewportFlags_TopMost);
+		const bool bPopupWindow = (Viewport->Flags & ImGuiViewportFlags_NoTaskBarIcon);
+		// don't activate the window as we would like to keep the focus at MainViewport window
+		const bool bFocusOnAppearing = false;// ((Viewport->Flags & ImGuiViewportFlags_NoFocusOnAppearing) == 0);
+
 		TSharedPtr<ImGuiUtils::SImGuiViewportWidget> ViewportWidget = SNew(ImGuiUtils::SImGuiViewportWidget, MainViewportWidgetPtr, Viewport);
 		TSharedPtr<SWindow> ViewportWindow = 
 			SNew(SWindow)
-			// window size/layout
 			.MinWidth(0.f)
 			.MinHeight(0.f)
 			.LayoutBorder({ 0 })
 			.SizingRule(ESizingRule::FixedSize)
 			.UserResizeBorder(FMargin(0))
-			// window styling
 			.HasCloseButton(false)
 			.CreateTitleBar(false)
-			.IsPopupWindow(true)
-			.IsTopmostWindow(false)
-			.Type(EWindowType::Menu)
+			.IsPopupWindow(bPopupWindow)
+			.IsTopmostWindow(bTooltipWindow)
+			.Type(bTooltipWindow ? EWindowType::ToolTip : (bPopupWindow ? EWindowType::Menu : EWindowType::Normal))
 			.UseOSWindowBorder(false)
-			// don't activate the window as we would like to keep the focus at MainViewport window
-			.FocusWhenFirstShown(false)
-			.ActivationPolicy(EWindowActivationPolicy::Never)
+			.FocusWhenFirstShown(bFocusOnAppearing)
+			.ActivationPolicy(bFocusOnAppearing ? EWindowActivationPolicy::Always : EWindowActivationPolicy::Never)
 			.Content()
 			[
 				ViewportWidget.ToSharedRef()
 			];
 
-		if (TSharedPtr<SWindow> ParentWindow = MainViewportWindowPtr.Pin())
+		if (TSharedPtr<SWindow> ParentWindow = ParentWindowPtr.Pin())
 		{
 			FSlateApplication::Get().AddWindowAsNativeChild(ViewportWindow.ToSharedRef(), ParentWindow.ToSharedRef(), /*bShowImmediately=*/true);
 		}
@@ -808,10 +820,10 @@ namespace ImGuiUtils
 			FSlateApplication::Get().AddWindow(ViewportWindow.ToSharedRef(), /*bShowImmediately=*/true);
 		}
 
-		ImGuiUtils::FImGuiViewportData* ViewportData = IM_NEW(ImGuiUtils::FImGuiViewportData)();
+		FImGuiViewportData* ViewportData = IM_NEW(FImGuiViewportData)();
 		ViewportData->ViewportWindow = ViewportWindow;
 		ViewportData->ViewportWidget = ViewportWidget;
-		ViewportData->MainViewportWindow = MainViewportWindowPtr;
+		ViewportData->ParentWindow = ParentWindowPtr;
 		ViewportData->MainViewportWidget = MainViewportWidgetPtr;
 
 		Viewport->PlatformRequestResize = false;
@@ -820,7 +832,7 @@ namespace ImGuiUtils
 
 	static void UnrealPlatform_DestroyWindow(ImGuiViewport* Viewport)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
@@ -828,7 +840,7 @@ namespace ImGuiUtils
 			}
 			ViewportData->ViewportWindow = nullptr;
 			ViewportData->ViewportWidget = nullptr;
-			ViewportData->MainViewportWindow = nullptr;
+			ViewportData->ParentWindow = nullptr;
 			ViewportData->MainViewportWidget = nullptr;
 			IM_DELETE(ViewportData);
 
@@ -838,7 +850,7 @@ namespace ImGuiUtils
 
 	static void UnrealPlatform_SetWindowPosition(ImGuiViewport* Viewport, ImVec2 NewPosition)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
@@ -849,7 +861,7 @@ namespace ImGuiUtils
 
 	static ImVec2 UnrealPlatform_GetWindowPosition(ImGuiViewport* Viewport)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
 			if (ViewportData->ViewportWidget.IsValid())
 			{
@@ -868,7 +880,7 @@ namespace ImGuiUtils
 
 	static void UnrealPlatform_SetWindowSize(ImGuiViewport* Viewport, ImVec2 NewSize)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
@@ -879,7 +891,7 @@ namespace ImGuiUtils
 	
 	static ImVec2 UnrealPlatform_GetWindowSize(ImGuiViewport* Viewport)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
@@ -892,7 +904,7 @@ namespace ImGuiUtils
 
 	static void UnrealPlatform_SetWindowTitle(ImGuiViewport* Viewport, const char* Title)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
@@ -903,38 +915,50 @@ namespace ImGuiUtils
 
 	static void UnrealPlatform_ShowWindow(ImGuiViewport* Viewport)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
 				ViewportWindow->ShowWindow();
-				if (!(Viewport->Flags & ImGuiViewportFlags_NoFocusOnAppearing) && ViewportData->ViewportWindow.IsValid())
-				{
-					ViewportWindow->GetNativeWindow()->SetWindowFocus();
-				}
-
 			}
 		}
 	}
 
 	static void UnrealPlatform_SetWindowFocus(ImGuiViewport* Viewport)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+			TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin();
+			TSharedPtr<FGenericWindow> NativeWindow = ViewportWindow ? ViewportWindow->GetNativeWindow() : nullptr;
+			if (NativeWindow)
 			{
-				ViewportWindow->GetNativeWindow()->SetWindowFocus();
+				NativeWindow->SetWindowFocus();
 			}
 		}
 	}
 
 	static bool UnrealPlatform_GetWindowFocus(ImGuiViewport* Viewport)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
+			// Special handling for the main viewport
+			if ((Viewport->Flags & ImGuiViewportFlags_OwnedByApp) > 0)
 			{
-				return ViewportWindow->HasAnyUserFocusOrFocusedDescendants();
+				TSharedPtr<SWindow> ViewportWindow = ViewportData->ParentWindow.Pin();
+				TSharedPtr<FGenericWindow> NativeWindow = ViewportWindow ? ViewportWindow->GetNativeWindow() : nullptr;
+				if (NativeWindow)
+				{
+					return NativeWindow->IsForegroundWindow();
+				}
+			}
+			else
+			{
+				TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin();
+				TSharedPtr<FGenericWindow> NativeWindow = ViewportWindow ? ViewportWindow->GetNativeWindow() : nullptr;
+				if (NativeWindow)
+				{
+					return NativeWindow->IsForegroundWindow();
+				}
 			}
 		}
 		return false;
@@ -942,7 +966,7 @@ namespace ImGuiUtils
 
 	static bool UnrealPlatform_GetWindowMinimized(ImGuiViewport* Viewport)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
@@ -954,7 +978,7 @@ namespace ImGuiUtils
 
 	static void UnrealPlatform_SetWindowAlpha(ImGuiViewport* Viewport, float Alpha)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
@@ -965,7 +989,7 @@ namespace ImGuiUtils
 
 	static void UnrealPlatform_UpdateWindow(ImGuiViewport* Viewport)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
 			if (ViewportData->ViewportWidget.IsValid())
 			{
@@ -976,7 +1000,11 @@ namespace ImGuiUtils
 				// recreate window if parent viewport requested it, needed for patching parent slate window reference after docking/undocking tabs
 				if (ImGuiViewport* ParentViewport = ImGui::FindViewportByID(Viewport->ParentViewportId))
 				{
-					bInvalidateWindow |= ParentViewport->PlatformUserData ? ((ImGuiUtils::FImGuiViewportData*)ParentViewport->PlatformUserData)->bInvalidateManagedViewportWindows : false;
+					FImGuiViewportData* ParentViewportData = (FImGuiViewportData*)ParentViewport->PlatformUserData;
+					if (ParentViewportData && ParentViewportData->bInvalidateManagedViewportWindows)
+					{
+						bInvalidateWindow = true;
+					}
 				}
 #endif
 
@@ -991,7 +1019,7 @@ namespace ImGuiUtils
 
 	static void UnrealPlatform_RenderWindow(ImGuiViewport* Viewport, void*)
 	{
-		if (ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)Viewport->PlatformUserData)
+		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
 			if (Viewport->DrawData && ViewportData->ViewportWidget.IsValid())
 			{

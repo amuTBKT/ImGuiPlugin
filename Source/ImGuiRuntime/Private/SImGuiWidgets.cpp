@@ -108,7 +108,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 		ImGuiUtils::FImGuiViewportData* MainViewportData = IM_NEW(ImGuiUtils::FImGuiViewportData)();
 		MainViewportData->ViewportWindow = nullptr;
 		MainViewportData->ViewportWidget = nullptr;
-		MainViewportData->MainViewportWindow = InArgs._MainViewportWindow;
+		MainViewportData->ParentWindow = InArgs._MainViewportWindow;
 		MainViewportData->MainViewportWidget = StaticCastWeakPtr<SImGuiWidgetBase>(AsShared().ToWeakPtr());
 
 		ImGuiViewport* MainViewport = ImGui::GetMainViewport();
@@ -192,11 +192,11 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)MainViewport->PlatformUserData;
 
 		// TODO: maybe find a better way to detect window docking operations? This is not expensive, just a bit ugly!
-		TSharedPtr<SWindow> PreviousParentWindow = ViewportData->MainViewportWindow.Pin();
+		TSharedPtr<SWindow> PreviousParentWindow = ViewportData->ParentWindow.Pin();
 		TSharedPtr<SWindow> CurrentParentWindow = FSlateApplication::Get().FindWidgetWindow(AsShared());
 		if (ViewportData && (!PreviousParentWindow || (PreviousParentWindow != CurrentParentWindow)))
 		{
-			ViewportData->MainViewportWindow = CurrentParentWindow;
+			ViewportData->ParentWindow = CurrentParentWindow;
 			ViewportData->bInvalidateManagedViewportWindows = true;
 		}
 
