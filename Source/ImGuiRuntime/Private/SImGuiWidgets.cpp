@@ -126,6 +126,7 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 		// cleanup references to this widget
 		{
 			ImGuiIO& IO = GetImGuiIO();
+			check(IO.UserData == nullptr);
 
 			// duplicate of context shutdown operation as we clear the IniFilename here
 			if (m_ImGuiContext->SettingsLoaded && IO.IniFilename)
@@ -155,17 +156,39 @@ void SImGuiWidgetBase::Tick(const FGeometry& WidgetGeometry, const double Curren
 
 	Super::Tick(WidgetGeometry, CurrentTime, DeltaTime);
 	
-	if (!m_ImGuiTickedByInputProcessing)
+	FImGuiTickContext TickContext{};
+	TickContext.ImGuiContext = m_ImGuiContext;
+	TickContext.bDragDropOperationReleasedThisFrame = LastDragDropOperation.IsValid() && !FSlateApplication::Get().IsDragDropping();
+	if (TickContext.bDragDropOperationReleasedThisFrame)
 	{
-		FImGuiTickContext TickContext{};
-		TickContext.ImGuiContext = m_ImGuiContext;
-		if (FSlateApplication::Get().IsDragDropping())
-		{
-			TickContext.DragDropOperation = FSlateApplication::Get().GetDragDroppingContent();
-		}
-		/*FImGuiTickResult TickResult = */TickImGui(&WidgetGeometry, &TickContext);
+		TickContext.DragDropOperation = LastDragDropOperation;
 	}
-	m_ImGuiTickedByInputProcessing = false;
+	else if (FSlateApplication::Get().IsDragDropping())
+	{
+		TickContext.DragDropOperation = FSlateApplication::Get().GetDragDroppingContent();
+	}
+
+	{
+		ImGuiIO& IO = GetImGuiIO();
+
+		FVector2f WidgetSize = WidgetGeometry.GetAbsoluteSize();
+		IO.DisplaySize = ImVec2(WidgetSize.X, WidgetSize.Y);
+		IO.DeltaTime = FSlateApplication::Get().GetDeltaTime();
+
+		ImGui::NewFrame();
+
+		if (TickContext.DragDropOperation.IsValid() && m_IsDragOverActive)
+		{
+			// disable widgets from reacting to mouse events (hover/tooltips etc)
+			ImGui::SetActiveID(-1, nullptr);
+		}
+
+		IO.UserData = &TickContext;
+		TickImGuiInternal(&TickContext);
+		IO.UserData = nullptr;
+	}
+
+	LastDragDropOperation.Reset();
 }
 
 int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetGeometry, const FSlateRect& ClippingRect,
@@ -210,32 +233,6 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 	}
 	
 	return LayerId;
-}
-
-SImGuiWidgetBase::FImGuiTickResult SImGuiWidgetBase::TickImGui(const FGeometry* WidgetGeometry, FImGuiTickContext* TickContext)
-{
-	ImGuiIO& IO = GetImGuiIO();
-
-	if (WidgetGeometry)
-	{
-		FVector2f WidgetSize = WidgetGeometry->GetAbsoluteSize();
-		IO.DisplaySize = ImVec2(WidgetSize.X, WidgetSize.Y);
-	}
-	IO.DeltaTime = FSlateApplication::Get().GetDeltaTime();
-
-	ImGui::NewFrame();
-
-	if (TickContext->DragDropOperation.IsValid() && m_IsDragOverActive)
-	{
-		// disable widgets from reacting to mouse events (hover/tooltips etc)
-		ImGui::SetActiveID(-1, nullptr);
-	}
-
-	TickImGuiInternal(TickContext);
-	
-	FImGuiTickResult TickResult{};
-	TickResult.bWasDragDropOperationConsumed = (TickContext->bDragDropOperationReleasedThisFrame && TickContext->bWasDragDropOperationConsumed);
-	return TickResult;
 }
 
 #pragma region SLATE_INPUT
@@ -370,16 +367,6 @@ FReply SImGuiWidgetBase::OnDragOver(const FGeometry& WidgetGeometry, const FDrag
 {
 	m_IsDragOverActive = true;
 
-	if (m_ImGuiTickedByInputProcessing)
-	{
-		// dummy ImGui render in case slate widget was throttled
-		ImGuiIO& IO = GetImGuiIO();
-		ImGui::EndFrame();
-		ImGui::UpdatePlatformWindows();
-
-		m_ImGuiTickedByInputProcessing = false;
-	}
-
 	ImGuiIO& IO = GetImGuiIO();
 	FVector2f MousePosition = DragDropEvent.GetScreenSpacePosition();
 	if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) == 0)
@@ -388,39 +375,15 @@ FReply SImGuiWidgetBase::OnDragOver(const FGeometry& WidgetGeometry, const FDrag
 	}
 	IO.AddMousePosEvent(MousePosition.X, MousePosition.Y);
 
-	FImGuiTickContext TickContext{};
-	TickContext.ImGuiContext = m_ImGuiContext;
-	TickContext.DragDropOperation = DragDropEvent.GetOperation();
-	FImGuiTickResult TickResult = TickImGui(&WidgetGeometry, &TickContext);
-
-	m_ImGuiTickedByInputProcessing = true;
-
+	// NOTE: this is incorrect but needed to receive the OnDrop event :(
 	return FReply::Handled();
 }
 
 FReply SImGuiWidgetBase::OnDrop(const FGeometry& WidgetGeometry, const FDragDropEvent& DragDropEvent)
 {
 	m_IsDragOverActive = false;
-
-	if (m_ImGuiTickedByInputProcessing)
-	{
-		// dummy ImGui render in case slate widget was throttled
-		ImGuiIO& IO = GetImGuiIO();
-		ImGui::EndFrame();
-		ImGui::UpdatePlatformWindows();
-
-		m_ImGuiTickedByInputProcessing = false;
-	}
-
-	FImGuiTickContext TickContext{};
-	TickContext.ImGuiContext = m_ImGuiContext;
-	TickContext.DragDropOperation = DragDropEvent.GetOperation();
-	TickContext.bDragDropOperationReleasedThisFrame = TickContext.DragDropOperation.IsValid();
-	FImGuiTickResult TickResult = TickImGui(&WidgetGeometry, &TickContext);
-
-	m_ImGuiTickedByInputProcessing = true;
-
-	return TickResult.bWasDragDropOperationConsumed ? FReply::Handled() : FReply::Unhandled();
+	LastDragDropOperation = DragDropEvent.GetOperation();
+	return FReply::Unhandled();
 }
 #pragma endregion SLATE_INPUT
 

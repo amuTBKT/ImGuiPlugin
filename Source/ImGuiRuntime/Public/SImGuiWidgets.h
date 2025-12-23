@@ -21,11 +21,6 @@ class IMGUIRUNTIME_API SImGuiWidgetBase : public SLeafWidget
 {
 	using Super = SLeafWidget;
 
-	struct FImGuiTickResult
-	{
-		bool bWasDragDropOperationConsumed = false;
-	};
-
 	friend class ImGuiUtils::SImGuiViewportWidget;
 
 public:
@@ -80,7 +75,6 @@ private:
 	FORCEINLINE ImGuiIO& GetImGuiIO() const;
 	FORCEINLINE void AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown);
 
-	FImGuiTickResult TickImGui(const FGeometry* WidgetGeometry, FImGuiTickContext* TickContext);
 	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) = 0;
 
 protected:
@@ -91,9 +85,8 @@ protected:
 	// TODO: initial zoom support, can we do better than this?
 	float m_WindowScale = 1.f;
 
-	// widgets can often be ticked from input events, so keep track to avoid ticking them again during Tick event.
-	bool m_ImGuiTickedByInputProcessing = false;
 	bool m_IsDragOverActive = false;
+	TSharedPtr<class FDragDropOperation> LastDragDropOperation;
 };
 
 /* Dynamic widgets (ColorPicker etc..) */
