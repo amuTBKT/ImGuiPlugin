@@ -31,6 +31,9 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	m_WidgetDrawers[0] = MakeShared<ImGuiUtils::FWidgetDrawer>();
 	m_WidgetDrawers[1] = MakeShared<ImGuiUtils::FWidgetDrawer>();
 
+	m_TickContext = MakeUnique<FImGuiTickContext>();
+	m_TickContext->ImGuiContext = m_ImGuiContext;
+
 	if (InArgs._ConfigFileName && FCStringAnsi::Strlen(InArgs._ConfigFileName) > 2)
 	{
 		// sanitize filename
@@ -45,6 +48,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	}
 
 	ImGuiIO& IO = GetImGuiIO();
+	IO.UserData = m_TickContext.Get();
 	IO.IniFilename = *m_ConfigFilePath;
 
 	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -121,25 +125,22 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 
 SImGuiWidgetBase::~SImGuiWidgetBase()
 {
-	if (m_ImGuiContext)
+	// cleanup references to this widget
 	{
-		// cleanup references to this widget
+		ImGuiIO& IO = GetImGuiIO();
+		IO.UserData = nullptr;
+
+		// duplicate of context shutdown operation as we clear the IniFilename here
+		if (m_ImGuiContext->SettingsLoaded && IO.IniFilename)
 		{
-			ImGuiIO& IO = GetImGuiIO();
-			check(IO.UserData == nullptr);
-
-			// duplicate of context shutdown operation as we clear the IniFilename here
-			if (m_ImGuiContext->SettingsLoaded && IO.IniFilename)
-			{
-				ImGui::SaveIniSettingsToDisk(IO.IniFilename);
-			}
-			IO.IniFilename = nullptr;
+			ImGui::SaveIniSettingsToDisk(IO.IniFilename);
 		}
-
-		// NOTE: widget drawers should be queued before context
-		ImGuiUtils::DeferredDeletionQueue.DeferredDeleteObjects(MoveTemp(m_WidgetDrawers[0]), MoveTemp(m_WidgetDrawers[1]), m_ImGuiContext);
-		m_ImGuiContext = nullptr;
+		IO.IniFilename = nullptr;
 	}
+
+	// NOTE: widget drawers should be queued before context
+	ImGuiUtils::DeferredDeletionQueue.DeferredDeleteObjects(MoveTemp(m_WidgetDrawers[0]), MoveTemp(m_WidgetDrawers[1]), m_ImGuiContext);
+	m_ImGuiContext = nullptr;
 }
 
 ImGuiIO& SImGuiWidgetBase::GetImGuiIO() const
@@ -150,51 +151,76 @@ ImGuiIO& SImGuiWidgetBase::GetImGuiIO() const
 	return ImGui::GetIO();
 }
 
-void SImGuiWidgetBase::Tick(const FGeometry& WidgetGeometry, const double CurrentTime, const float DeltaTime)
+void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry, float DeltaTime)
 {
-	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Tick Widget"), STAT_ImGui_TickWidget, STATGROUP_ImGui);
+	if (m_ImGuiContext->WithinFrameScope)
+	{
+		return;
+	}
 
-	Super::Tick(WidgetGeometry, CurrentTime, DeltaTime);
-	
-	FImGuiTickContext TickContext{};
-	TickContext.ImGuiContext = m_ImGuiContext;
-	TickContext.bDragDropOperationReleasedThisFrame = LastDragDropOperation.IsValid() && !FSlateApplication::Get().IsDragDropping();
-	if (TickContext.bDragDropOperationReleasedThisFrame)
+	TSharedPtr<FDragDropOperation> CurrentDragDropOperation = FSlateApplication::Get().GetDragDroppingContent();
+	if (LastDragDropOperation.IsValid() && !CurrentDragDropOperation.IsValid())
 	{
-		TickContext.DragDropOperation = LastDragDropOperation;
+		m_TickContext->bDragDropOperationReleasedThisFrame = true;
+		m_TickContext->DragDropOperation = LastDragDropOperation;
 	}
-	else if (FSlateApplication::Get().IsDragDropping())
+	else
 	{
-		TickContext.DragDropOperation = FSlateApplication::Get().GetDragDroppingContent();
+		m_TickContext->bDragDropOperationReleasedThisFrame = false;
+		m_TickContext->DragDropOperation = MoveTemp(CurrentDragDropOperation);
 	}
+	LastDragDropOperation.Reset();
 
 	{
 		ImGuiIO& IO = GetImGuiIO();
 
 		FVector2f WidgetSize = WidgetGeometry.GetAbsoluteSize();
 		IO.DisplaySize = ImVec2(WidgetSize.X, WidgetSize.Y);
-		IO.DeltaTime = FSlateApplication::Get().GetDeltaTime();
+		IO.DeltaTime = DeltaTime;
 
 		ImGui::NewFrame();
 
-		if (TickContext.DragDropOperation.IsValid() && m_IsDragOverActive)
+		if (m_TickContext->DragDropOperation.IsValid() && m_IsDragOverActive)
 		{
 			// disable widgets from reacting to mouse events (hover/tooltips etc)
 			ImGui::SetActiveID(-1, nullptr);
 		}
+	}
+}
 
-		IO.UserData = &TickContext;
-		TickImGuiInternal(&TickContext);
-		IO.UserData = nullptr;
+void SImGuiWidgetBase::EndImGuiFrame()
+{
+	if (!m_ImGuiContext->WithinFrameScope)
+	{
+		return;
 	}
 
-	LastDragDropOperation.Reset();
+	// the widget was not rendered this frame
+	ImGui::SetCurrentContext(m_ImGuiContext);
+	ImGui::EndFrame();
+	ImGui::UpdatePlatformWindows();
+}
+
+void SImGuiWidgetBase::Tick(const FGeometry& WidgetGeometry, const double CurrentTime, const float DeltaTime)
+{
+	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Tick Widget"), STAT_ImGui_TickWidget, STATGROUP_ImGui);
+
+	Super::Tick(WidgetGeometry, CurrentTime, DeltaTime);
+
+	BeginImGuiFrame(WidgetGeometry, DeltaTime);
+
+	TickImGuiInternal(m_TickContext.Get());
 }
 
 int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetGeometry, const FSlateRect& ClippingRect,
 	FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const
 {
 	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [GT]"), STAT_ImGui_RenderWidget_GT, STATGROUP_ImGui);
+
+	if (!m_ImGuiContext->WithinFrameScope)
+	{
+		return LayerId;
+	}
 
 	ImGuiIO& IO = GetImGuiIO();
 	ImGui::Render();
@@ -231,6 +257,10 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 			ViewportData->bInvalidateManagedViewportWindows = false;
 		}
 	}
+
+#if WITH_EDITOR
+	m_LastPaintFrameCounter = GFrameCounter;
+#endif
 	
 	return LayerId;
 }

@@ -31,15 +31,11 @@ struct FImGuiTickContext
 	TSharedPtr<FDragDropOperation> DragDropOperation = nullptr;
 	bool bDragDropOperationReleasedThisFrame = false;
 
-	// outputs
-	bool bWasDragDropOperationConsumed = false;
-
 	TSharedPtr<FDragDropOperation> TryConsumeDragDropOperation()
 	{
 		TSharedPtr<FDragDropOperation> DragDropOp;
 		if (bDragDropOperationReleasedThisFrame && DragDropOperation.IsValid())
 		{
-			bWasDragDropOperationConsumed = true;
 			Swap(DragDropOp, DragDropOperation);
 		}
 		return DragDropOp;
@@ -51,9 +47,18 @@ struct FImGuiTickScope : FNoncopyable
 {
 	explicit FImGuiTickScope(FImGuiTickContext* Context)
 	{
-		ImGui::SetCurrentContext(Context->ImGuiContext);
+		BeginContext(Context);
 	}
 	~FImGuiTickScope()
+	{
+		EndContext();
+	}
+
+	FORCEINLINE static void BeginContext(FImGuiTickContext* Context)
+	{
+		ImGui::SetCurrentContext(Context->ImGuiContext);
+	}
+	FORCEINLINE static void EndContext()
 	{
 		ImGui::SetCurrentContext(nullptr);
 	}

@@ -553,7 +553,7 @@ namespace ImGuiUtils
 			m_WidgetDrawers[0] = MakeShared<ImGuiUtils::FWidgetDrawer>();
 			m_WidgetDrawers[1] = MakeShared<ImGuiUtils::FWidgetDrawer>();
 
-#if WITH_SLATE_DEBUGGING
+#if WITH_EDITOR
 			FCoreDelegates::OnEndFrame.AddRaw(this, &SImGuiViewportWidget::UpdateWindowVisibility);
 #endif
 		}
@@ -564,25 +564,24 @@ namespace ImGuiUtils
 			// Lets us clear the widget drawers without worrying about pending render work.
 			m_WidgetDrawers[0] = m_WidgetDrawers[1] = nullptr;
 
-#if WITH_SLATE_DEBUGGING
+#if WITH_EDITOR
 			FCoreDelegates::OnEndFrame.RemoveAll(this);
 #endif
 		}
 
 		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D::ZeroVector; }
 
-#if WITH_SLATE_DEBUGGING
+#if WITH_EDITOR
 		void UpdateWindowVisibility()
 		{
 			// slate doesn't update visibility for child windows, so a little workaround for it...
-			// Probably only need to worry about this in editor, if needed for packaged game we cannot rely on `slate debugging` logic
 			const FImGuiViewportData* ViewportData = (FImGuiViewportData*)m_ImGuiViewport->PlatformUserData;
 			if (ViewportData && ViewportData->ViewportWidget.IsValid())
 			{
 				TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin();
 				TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 
-				const bool bNewVisibility = RootWidget.IsValid() ? (RootWidget->Debug_GetLastPaintFrame() >= GFrameNumber) : false;
+				const bool bNewVisibility = RootWidget.IsValid() ? (RootWidget->m_LastPaintFrameCounter >= GFrameCounter) : false;
 				if (ViewportWindow && (bNewVisibility != ViewportWindow->IsVisible()))
 				{
 					if (bNewVisibility)
@@ -596,10 +595,10 @@ namespace ImGuiUtils
 				}
 			}
 		}
-#endif //#if WITH_SLATE_DEBUGGING
+#endif //#if WITH_EDITOR
 
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& WidgetGeometry, const FSlateRect& ClippingRect,
-			FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const override final
+			FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& WidgetStyle, bool bParentEnabled) const override
 		{
 			DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [GT]"), STAT_ImGui_RenderWidget_GT, STATGROUP_ImGui);
 

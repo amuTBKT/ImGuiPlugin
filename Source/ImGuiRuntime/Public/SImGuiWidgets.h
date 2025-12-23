@@ -71,6 +71,15 @@ public:
 	virtual FReply OnDragOver(const FGeometry& WidgetGeometry, const FDragDropEvent& DragDropEvent) override;
 	virtual FReply OnDrop(const FGeometry& WidgetGeometry, const FDragDropEvent& DragDropEvent) override;
 
+	ImGuiContext* GetImGuiContext() const { return m_ImGuiContext; }
+
+protected:
+	// Helper functions for manually ticking ImGui logic
+	// setup work for ImGui::NewFrame
+	void BeginImGuiFrame(const FGeometry& WidgetGeometry, float DeltaTime);
+	// to ensure ImGui::EndFrame is called (for cases when widget is not rendered)
+	void EndImGuiFrame();
+
 private:
 	FORCEINLINE ImGuiIO& GetImGuiIO() const;
 	FORCEINLINE void AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown);
@@ -78,8 +87,11 @@ private:
 	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) = 0;
 
 protected:
-	FAnsiString m_ConfigFilePath;
 	ImGuiContext* m_ImGuiContext = nullptr;
+
+private:
+	FAnsiString m_ConfigFilePath;
+	TUniquePtr<FImGuiTickContext> m_TickContext;
 	TSharedPtr<ImGuiUtils::FWidgetDrawer> m_WidgetDrawers[2];
 
 	// TODO: initial zoom support, can we do better than this?
@@ -87,6 +99,10 @@ protected:
 
 	bool m_IsDragOverActive = false;
 	TSharedPtr<class FDragDropOperation> LastDragDropOperation;
+
+#if WITH_EDITOR
+	mutable uint64 m_LastPaintFrameCounter = 0u;
+#endif
 };
 
 /* Dynamic widgets (ColorPicker etc..) */
