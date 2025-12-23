@@ -113,7 +113,8 @@ public:
 	{
 		Super::Construct(
 			Super::FArguments()
-			.MainViewportWindow(InArgs._MainViewportWindow));
+			.MainViewportWindow(InArgs._MainViewportWindow)
+			.ConfigFileName("ImGui"));
 	}
 
 private:

@@ -42,14 +42,10 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 
 		m_ConfigFilePath = FAnsiString::Printf("%s/%s.ini", ImGuiSubsystem->GetIniDirectoryPath(), *FileName);
 	}
-	else
-	{
-		m_ConfigFilePath = ImGuiSubsystem->GetIniFilePath();
-	}
 
 	ImGuiIO& IO = GetImGuiIO();
 	IO.UserData = m_TickContext.Get();
-	IO.IniFilename = *m_ConfigFilePath;
+	IO.IniFilename = m_ConfigFilePath.IsEmpty() ? nullptr : *m_ConfigFilePath;
 
 	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
