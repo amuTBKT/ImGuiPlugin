@@ -412,7 +412,7 @@ FReply SImGuiWidgetBase::OnDrop(const FGeometry& WidgetGeometry, const FDragDrop
 
 	// NOTE: this is incorrect but better than having drag drop events pass through to the viewpport.
 	// probably only an issue when the widget is placed directly on the viewport (have to fix input events for that at some point...)
-	return FReply::Unhandled();
+	return FReply::Handled();
 }
 #pragma endregion SLATE_INPUT
 
