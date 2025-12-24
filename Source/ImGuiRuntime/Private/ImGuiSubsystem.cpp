@@ -65,7 +65,7 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	// NOTE: Add reference to make sure ImGuiContext destructor cannot release font atlas
 	m_SharedFontAtlas = MakeShared<ImFontAtlas, ESPMode::NotThreadSafe>();
 	m_SharedFontAtlas->RefCount = 1;
-	m_SharedFontAtlas->AddFontDefault();
+	m_SharedFontAtlas->AddFontDefaultBitmap();
 
 	// shared font texture
 	m_SharedFontTexture = NewObject<UTextureRenderTarget2D>(this, FName("ImGui_SharedFontTexture"));
