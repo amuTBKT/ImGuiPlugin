@@ -12,6 +12,8 @@ public class ImGui : ModuleRules
 		PublicDefinitions.Add("WITH_IMGUI=1");
 
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui"));
+		// NOTE: some imgui files prefer "imgui.h" include instead of "imgui/imgui.h"
+		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/imgui"));
 
 		if (Target.Configuration == UnrealTargetConfiguration.Debug)
 		{

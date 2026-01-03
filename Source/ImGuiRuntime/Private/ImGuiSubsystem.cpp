@@ -18,6 +18,16 @@ static FAutoConsoleVariableRef CVarRenderCaptureNextImGuiFrame(
 	GCaptureNextGpuFrames,
 	TEXT("Enable capturing of ImGui rendering for the next N draws"));
 
+#if WITH_FREETYPE
+#include "imgui/misc/freetype/imgui_freetype.cpp"
+
+static TAutoConsoleVariable<bool> CVarEnableFreeType(
+	TEXT("imgui.EnableFreeType"),
+	true,
+	TEXT("Enable FreeType font loader."),
+	ECVF_ReadOnly);
+#endif
+
 /*--------------------------------------------------------------------------------------------------------------------------*/
 
 FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
@@ -62,9 +72,15 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		IFileManager::Get().MakeDirectory(ANSI_TO_TCHAR(*m_IniDirectoryPath), true);
 	}
 
-	// NOTE: Add reference to make sure ImGuiContext destructor cannot release font atlas
+	// NOTE: Add reference to make sure ImGuiContext destructor cannot release the font atlas
 	m_SharedFontAtlas = MakeShared<ImFontAtlas, ESPMode::NotThreadSafe>();
 	m_SharedFontAtlas->RefCount = 1;
+#if WITH_FREETYPE
+	if (CVarEnableFreeType.GetValueOnAnyThread())
+	{
+		m_SharedFontAtlas->SetFontLoader(ImGuiFreeType::GetFontLoader());
+	}
+#endif
 	m_SharedFontAtlas->AddFontDefaultBitmap();
 
 	// shared font texture

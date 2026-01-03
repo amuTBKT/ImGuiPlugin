@@ -22,7 +22,7 @@
 
 // FIXME: Could store an ID in ImDrawList to make this easier for user.
 #pragma once
-#include "imgui/imgui_internal.h" // ImPool<>, ImHashData
+#include "imgui_internal.h" // ImPool<>, ImHashData
 
 //-----------------------------------------------------------------------------
 // ImDrawDataSnapshot - HEADERS

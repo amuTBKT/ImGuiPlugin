@@ -25,6 +25,10 @@ public class ImGuiRuntime : ModuleRules
 			}
 		);
 
+		if ((Target.Type != TargetType.Server) && Target.bCompileFreeType)
+		{
+			AddEngineThirdPartyPrivateStaticDependencies(Target, "FreeType2", "UElibPNG", "zlib");
+		}
 		PublicDependencyModuleNames.Add("ImGui");
 
 		// need to include private header files for accessing slate resource
