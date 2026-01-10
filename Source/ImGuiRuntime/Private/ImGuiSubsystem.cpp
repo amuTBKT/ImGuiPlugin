@@ -83,13 +83,9 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 #endif
 	m_SharedFontAtlas->AddFontDefaultBitmap();
 
-	// shared font texture
-	m_SharedFontTexture = NewObject<UTextureRenderTarget2D>(this, FName("ImGui_SharedFontTexture"));
-	m_SharedFontTexture->Filter = TextureFilter::TF_Bilinear;
-	m_SharedFontTexture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
-	m_SharedFontTexture->ClearColor = FLinearColor(0.f, 0.f, 0.f, 0.f);
-	m_SharedFontTexture->InitAutoFormat(1, 1);
-	m_SharedFontTexture->UpdateResourceImmediate(true);
+	// upto 8 shared font textures at a time (to account for repacking)
+	// when spammed ImGui can cycle through a lot of atlases (most I encountered was 5)
+	m_SharedFontAtlasTextures.SetNum(8);
 
 	// 1x1 magenta texture
 	const uint32 MissingPixelData = FColor::Magenta.DWColor();
@@ -106,9 +102,8 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		m_MissingImageTexture->GetPlatformData()->Mips[0].BulkData.Unlock();
 	}
 	m_MissingImageTexture->UpdateResource();
-	
-	m_SharedFontSlateBrush.SetResourceObject(m_SharedFontTexture);
 	m_MissingImageSlateBrush.SetResourceObject(m_MissingImageTexture);
+	static_assert(ImTextureID_Invalid == MissingImageTextureIndex);
 
 	FCoreDelegates::OnBeginFrame.AddUObject(this, &UImGuiSubsystem::OnBeginFrame);
 	
@@ -178,66 +173,125 @@ TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, FVe
 void UImGuiSubsystem::OnBeginFrame()
 {
 	m_OneFrameResources.Reset();
-	m_CreatedSlateBrushes.Reset();
+	m_OneFrameSlateBrushes.Reset();
 
 	// queue font updates
 	ImFontAtlasUpdateNewFrame(m_SharedFontAtlas.Get(), m_FontAtlasBuilderFrameCount++, true);
 
 	m_MissingImageParams = RegisterOneFrameResource(&m_MissingImageSlateBrush);
-	m_SharedFontImageParams = RegisterOneFrameResource(&m_SharedFontSlateBrush);
-	check(MissingImageTexID == m_MissingImageParams.Id);
-	check(SharedFontTexID == m_SharedFontImageParams.Id);
+	check(MissingImageTextureIndex == ImGuiIDToIndex(m_MissingImageParams.Id));
+
+	// register all font altases
+	for (const FImGuiFontTextureEntry& TextureEntry : m_SharedFontAtlasTextures)
+	{
+		if (TextureEntry.Texture)
+		{
+			RegisterOneFrameResource(&TextureEntry.SlateBrush);
+		}
+		else
+		{
+			// queue an empty slot which may get populated by UpdateFontAtlasTexture
+			m_OneFrameResources.Add(FImGuiTextureResource{nullptr});
+		}
+	}
 
 	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);
 }
 
-void UImGuiSubsystem::UpdateTextureData(ImTextureData* TexData) const
+ImTextureRef UImGuiSubsystem::GetSharedFontTextureID() const
 {
-	// TODO: this function really only cares about the shared font texture atm
-	if (TexData->Status == ImTextureStatus_WantDestroy && TexData->UnusedFrames > 2)
-	{
-		// latest shared font texture data should never be destroyed!
-		check(TexData != m_SharedFontAtlas->TexData);
+	return m_SharedFontAtlas->TexRef;
+}
 
-		TexData->SetStatus(ImTextureStatus_Destroyed);
-		TexData->SetTexID(ImTextureID_Invalid);
+int32 UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
+{
+	static const FName FontTextureName = TEXT("ImGui_SharedFontTexture");
+
+	for (int32 TextureIndex = 0; TextureIndex < m_SharedFontAtlasTextures.Num(); ++TextureIndex)
+	{
+		if (!m_SharedFontAtlasTextures[TextureIndex].bInUse)
+		{
+			UTextureRenderTarget2D* Texture = m_SharedFontAtlasTextures[TextureIndex].Texture;
+			if (!Texture)
+			{
+				Texture = NewObject<UTextureRenderTarget2D>(this, FName(FontTextureName, TextureIndex + 1));
+				Texture->Filter = TextureFilter::TF_Bilinear;
+				Texture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
+				Texture->ClearColor = FLinearColor(0, 0, 0, 0);
+				Texture->bNoFastClear = true;
+				Texture->InitAutoFormat(SizeX, SizeY);
+				Texture->UpdateResourceImmediate(/*bClearRenderTarget=*/false);
+
+				m_SharedFontAtlasTextures[TextureIndex].Texture = Texture;
+				m_SharedFontAtlasTextures[TextureIndex].SlateBrush.SetResourceObject(Texture);
+				
+				m_OneFrameResources[FontAtlasTextureStartIndex + TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].SlateBrush.GetRenderingResource() };
+			}
+			m_SharedFontAtlasTextures[TextureIndex].bInUse = true;
+
+			return TextureIndex;
+		}
 	}
-	else if (TexData == m_SharedFontAtlas->TexData)
-	{
-		check(IsValid(m_SharedFontTexture));
+	// TODO: add logic to flush render thread and recycle textures here.
+	checkNoEntry();
+	return INDEX_NONE;
+}
 
+void UImGuiSubsystem::ReleaseFontAtlasTexture(int32 Index)
+{
+	// TODO: maybe add some logic to release unused textures after a few frames
+	//m_SharedFontAtlasTextures[Index].Texture = nullptr;
+	//m_SharedFontAtlasTextures[Index].SlateBrush = {};
+	m_SharedFontAtlasTextures[Index].bInUse = false;
+}
+
+void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
+{
+	if (TexData->Status == ImTextureStatus_WantCreate || TexData->Status == ImTextureStatus_WantUpdates)
+	{
 		const int32 FontAtlasWidth = TexData->Width;
 		const int32 FontAtlasHeight = TexData->Height;
 		const int32 BytesPerPixel = TexData->BytesPerPixel;
 		check(BytesPerPixel == GPixelFormats[PF_R8G8B8A8].BlockBytes);
 
-		if (TexData->Status == ImTextureStatus_WantCreate || TexData->Status == ImTextureStatus_WantUpdates)
+		if (TexData->Status == ImTextureStatus_WantCreate)
 		{
-			bool bReuploadTexture = (TexData->Status == ImTextureStatus_WantCreate);
-			if (m_SharedFontTexture->SizeX != FontAtlasWidth || m_SharedFontTexture->SizeY != FontAtlasHeight)
+			TexData->SetTexID(AllocateFontAtlasTexture(FontAtlasWidth, FontAtlasHeight) + FontAtlasTextureStartIndex);
+		}
+
+		UTextureRenderTarget2D* AtlasTexture = m_SharedFontAtlasTextures[ImGuiIDToIndex(TexData->GetTexID()) - FontAtlasTextureStartIndex].Texture;
+
+		bool bReuploadTexture = (TexData->Status == ImTextureStatus_WantCreate);
+		if (AtlasTexture->SizeX != FontAtlasWidth || AtlasTexture->SizeY != FontAtlasHeight)
+		{
+			AtlasTexture->ResizeTarget(FontAtlasWidth, FontAtlasHeight);
+			bReuploadTexture = true;
+		}
+
+		const ImTextureRect UpdateRect = bReuploadTexture ? ImTextureRect(0, 0, FontAtlasWidth, FontAtlasHeight) : TexData->UpdateRect;
+		ENQUEUE_RENDER_COMMAND(UpdateFontTexture)(
+			[this,
+			SrcPitch=TexData->GetPitch(),
+			SrcData=(uint8*)TexData->GetPixelsAt(UpdateRect.x, UpdateRect.y),
+			UpdateRegion=FUpdateTextureRegion2D(UpdateRect.x, UpdateRect.y, 0, 0, UpdateRect.w, UpdateRect.h),
+			TexResource=AtlasTexture->GameThread_GetRenderTargetResource()](FRHICommandListImmediate& RHICmdList)
 			{
-				m_SharedFontTexture->ResizeTarget(FontAtlasWidth, FontAtlasHeight);
-				bReuploadTexture = true;
-			}
+				RHICmdList.Transition(FRHITransitionInfo(TexResource->GetTexture2DRHI(), ERHIAccess::Unknown, ERHIAccess::CopyDest));
+				RHICmdList.UpdateTexture2D(TexResource->GetTexture2DRHI(), 0, UpdateRegion, SrcPitch, SrcData);
+				RHICmdList.Transition(FRHITransitionInfo(TexResource->GetTexture2DRHI(), ERHIAccess::CopyDest, ERHIAccess::SRVMask));
+			});
 
-			const ImTextureRect UpdateRect = bReuploadTexture ? ImTextureRect(0, 0, TexData->Width, TexData->Height) : TexData->UpdateRect;
-			ENQUEUE_RENDER_COMMAND(UpdateFontTexture)(
-				[this,
-				SrcPitch=TexData->GetPitch(),
-				SrcData=(uint8*)TexData->GetPixelsAt(UpdateRect.x, UpdateRect.y),
-				UpdateRegion=FUpdateTextureRegion2D(UpdateRect.x, UpdateRect.y, 0, 0, UpdateRect.w, UpdateRect.h),
-				TexResource=m_SharedFontTexture->GameThread_GetRenderTargetResource()](FRHICommandListImmediate& RHICmdList)
-				{
-					RHICmdList.UpdateTexture2D(TexResource->GetTexture2DRHI(), 0, UpdateRegion, SrcPitch, SrcData);
-				});
+		TexData->SetStatus(ImTextureStatus_OK);
+	}
+	else if (TexData->Status == ImTextureStatus_WantDestroy && TexData->UnusedFrames > 1)
+	{
+		// latest shared font texture data should never be destroyed!
+		check(TexData != m_SharedFontAtlas->TexData);
 
-			TexData->SetStatus(ImTextureStatus_OK);
-			TexData->SetTexID(SharedFontTexID);
-		}
-		else
-		{
-			check(TexData->Status == ImTextureStatus_OK);
-		}
+		ReleaseFontAtlasTexture(ImGuiIDToIndex(TexData->GetTexID()) - FontAtlasTextureStartIndex);
+
+		TexData->SetStatus(ImTextureStatus_Destroyed);
+		TexData->SetTexID(ImTextureID_Invalid);
 	}
 }
 
@@ -295,7 +349,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(UTexture2D* T
 		return {};
 	}
 
-	FSlateBrush& NewBrush = m_CreatedSlateBrushes.AddDefaulted_GetRef();
+	FSlateBrush& NewBrush = m_OneFrameSlateBrushes.AddDefaulted_GetRef();
 	NewBrush.SetResourceObject(Texture);
 
 	return RegisterOneFrameResource(&NewBrush);

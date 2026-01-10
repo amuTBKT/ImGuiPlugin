@@ -251,6 +251,7 @@ namespace ImGuiUtils
 		{
 			m_BoundTextures.Reset();
 			m_DrawDataSnapshot.Clear();
+			m_BoundRenderResources.Reset();
 		}
 
 		bool SetDrawData(ImDrawData* DrawData, int32 FrameCount, FVector2f DrawRectOffset)
@@ -263,9 +264,12 @@ namespace ImGuiUtils
 			UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 			for (ImTextureData* TexData : *DrawData->Textures)
 			{
-				ImGuiSubsystem->UpdateTextureData(TexData);
+				if (TexData->Status != ImTextureStatus_OK)
+				{
+					ImGuiSubsystem->UpdateFontAtlasTexture(TexData);
+				}
 			}
-			m_BoundTextures.Reset(ImGuiSubsystem->GetOneFrameResources().Num());
+			m_BoundRenderResources.Reset(ImGuiSubsystem->GetOneFrameResources().Num());
 
 			m_bHasDrawCommands = DrawData->TotalVtxCount > 0 &&
 								 DrawData->TotalIdxCount > 0 &&
@@ -278,7 +282,14 @@ namespace ImGuiUtils
 
 			for (const FImGuiTextureResource& TextureResource : ImGuiSubsystem->GetOneFrameResources())
 			{
-				auto& TextureInfo = m_BoundTextures.AddDefaulted_GetRef();
+				bool bAdded = false;
+				ON_SCOPE_EXIT
+				{
+					if (!bAdded)
+					{
+						m_BoundRenderResources.Emplace(TInPlaceType<FTextureResource*>(), nullptr);
+					}
+				};
 
 				FSlateShaderResource* ShaderResource = TextureResource.GetSlateShaderResource();
 				if (ShaderResource)
@@ -290,28 +301,15 @@ namespace ImGuiUtils
 						FSlateBaseUTextureResource* TextureObjectResource = static_cast<FSlateBaseUTextureResource*>(ShaderResource);
 						if (FTextureResource* Resource = TextureObjectResource->GetTextureObject()->GetResource())
 						{
-							TextureInfo.TextureRHI = Resource->TextureRHI;
-							TextureInfo.SamplerRHI = Resource->SamplerStateRHI;
-							TextureInfo.IsSRGB = Resource->bSRGB;
+							bAdded = true;
+							m_BoundRenderResources.Emplace(TInPlaceType<FTextureResource*>(), Resource);
 						}
 					}
 					else if (ResourceType == ESlateShaderResource::Type::NativeTexture)
 					{
-						if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTextureRHIRef>*)ShaderResource)->GetTypedResource())
-						{
-							TextureInfo.TextureRHI = NativeTextureRHI;
-							TextureInfo.IsSRGB = EnumHasAnyFlags(NativeTextureRHI->GetFlags(), ETextureCreateFlags::SRGB);
-						}
+						bAdded = true;
+						m_BoundRenderResources.Emplace(TInPlaceType<FSlateShaderResource*>(), ShaderResource);
 					}
-				}
-
-				if (TextureInfo.TextureRHI == nullptr)
-				{
-					TextureInfo.TextureRHI = GBlackTexture->TextureRHI;
-				}
-				if (TextureInfo.SamplerRHI == nullptr)
-				{
-					TextureInfo.SamplerRHI = TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
 				}
 			}
 
@@ -349,6 +347,39 @@ namespace ImGuiUtils
 
 					const ImVec2 DisplayPos = ImVec2(FMath::RoundToFloat(DrawData->DisplayPos.x), FMath::RoundToFloat(DrawData->DisplayPos.y));
 					const ImVec2 DisplaySize = ViewportRect.GetSize();
+
+					m_BoundTextures.Reset(m_BoundRenderResources.Num());
+					for (const auto& RenderResource : m_BoundRenderResources)
+					{
+						auto& TextureInfo = m_BoundTextures.AddDefaulted_GetRef();
+						if (RenderResource.IsType<FTextureResource*>())
+						{
+							if (const FTextureResource* TextureResource = RenderResource.Get<FTextureResource*>())
+							{
+								TextureInfo.TextureRHI = TextureResource->TextureRHI;
+								TextureInfo.SamplerRHI = TextureResource->SamplerStateRHI;
+								TextureInfo.IsSRGB = TextureResource->bSRGB;
+							}
+						}
+						else if (RenderResource.IsType<FSlateShaderResource*>())
+						{
+							const FSlateShaderResource* ShaderResource = RenderResource.Get<FSlateShaderResource*>();
+							if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTextureRHIRef>*)ShaderResource)->GetTypedResource())
+							{
+								TextureInfo.TextureRHI = NativeTextureRHI;
+								TextureInfo.IsSRGB = EnumHasAnyFlags(NativeTextureRHI->GetFlags(), ETextureCreateFlags::SRGB);
+							}
+						}
+
+						if (TextureInfo.TextureRHI == nullptr)
+						{
+							TextureInfo.TextureRHI = GBlackTexture->TextureRHI;
+						}
+						if (TextureInfo.SamplerRHI == nullptr)
+						{
+							TextureInfo.SamplerRHI = TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
+						}
+					}
 
 #if ((ENGINE_MAJOR_VERSION * 100u + ENGINE_MINOR_VERSION) > 505) //(Version > 5.5)
 					FRHIBufferCreateDesc VertexBufferDesc =
@@ -514,6 +545,7 @@ namespace ImGuiUtils
 			bool IsSRGB = false;
 		};
 		TArray<FTextureInfo> m_BoundTextures;
+		TArray<TVariant<FTextureResource*, FSlateShaderResource*>> m_BoundRenderResources;
 		FVector2f m_DrawRectOffset = FVector2f::ZeroVector;
 		ImDrawDataSnapshot m_DrawDataSnapshot;
 		bool m_bHasDrawCommands = false;

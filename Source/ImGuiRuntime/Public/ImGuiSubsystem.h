@@ -36,6 +36,21 @@ private:
 	TVariant<FSlateResourceHandle, FSlateShaderResource*> Storage;
 };
 
+USTRUCT()
+struct FImGuiFontTextureEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Transient)
+	UTextureRenderTarget2D* Texture = nullptr;
+
+	UPROPERTY(Transient)
+	FSlateBrush SlateBrush;
+
+	UPROPERTY(Transient)
+	bool bInUse = false;
+};
+
 UCLASS(MinimalAPI)
 class UImGuiSubsystem : public UEngineSubsystem
 {
@@ -70,23 +85,25 @@ public:
 	IMGUIRUNTIME_API TSharedPtr<SWindow> CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
 	IMGUIRUNTIME_API FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() { return m_ImGuiMainWindowTickDelegate; }
 
-	static ImTextureID  IndexToImGuiID(uint32 Index)	{ return static_cast<ImTextureID>(Index); }
-	static uint32		ImGuiIDToIndex(ImTextureID ID)  { return static_cast<uint32>(ID); }
+	ImFontAtlas* GetSharedFontAtlas() const { return m_SharedFontAtlas.Get(); }
+	IMGUIRUNTIME_API ImTextureRef GetSharedFontTextureID() const;
 
-	ImFontAtlas*		 GetSharedFontAtlas()			{ return m_SharedFontAtlas.Get(); }
-	static ImTextureID   GetSharedFontTextureID()		{ return SharedFontTexID; }
-	static ImTextureID   GetMissingImageTextureID()		{ return MissingImageTexID; }
-	static uint32		 GetSharedFontTextureIndex()	{ return ImGuiIDToIndex(SharedFontTexID); }
-	static uint32		 GetMissingImageTextureIndex()	{ return ImGuiIDToIndex(MissingImageTexID); }
-	
+	static ImTextureID	IndexToImGuiID(uint32 Index)	{ return static_cast<ImTextureID>(Index); }
+	static uint32		ImGuiIDToIndex(ImTextureID ID)  { return static_cast<uint32>(ID); }
+	static ImTextureID	GetMissingImageTextureID()		{ return MissingImageTextureIndex; }
+	static uint32		GetMissingImageTextureIndex()	{ return ImGuiIDToIndex(MissingImageTextureIndex); }
+
 	const TArray<FImGuiTextureResource>& GetOneFrameResources() const { return m_OneFrameResources; }
 
-	void UpdateTextureData(ImTextureData* TexData) const;
+	void UpdateFontAtlasTexture(ImTextureData* TexData);
 
 	bool CaptureGpuFrame() const;
 
 private:
 	void OnBeginFrame();
+
+	int32 AllocateFontAtlasTexture(int32 SizeX, int32 SizeY);
+	void ReleaseFontAtlasTexture(int32 Index);
 
 private:
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnSubsystemInitialized, UImGuiSubsystem* /*Subsystem*/)
@@ -98,20 +115,19 @@ private:
 	FAnsiString m_IniFilePath;
 
 	UPROPERTY()
-	UTextureRenderTarget2D* m_SharedFontTexture = nullptr;
+	TArray<FImGuiFontTextureEntry> m_SharedFontAtlasTextures;
 	
 	UPROPERTY()
 	UTexture2D* m_MissingImageTexture = nullptr;
 
 	int32 m_FontAtlasBuilderFrameCount = 0;
 	TSharedPtr<ImFontAtlas, ESPMode::NotThreadSafe> m_SharedFontAtlas;
-	FSlateBrush m_MissingImageSlateBrush = {};
-	FSlateBrush m_SharedFontSlateBrush = {};
-	FImGuiImageBindingParams m_MissingImageParams = {};
-	FImGuiImageBindingParams m_SharedFontImageParams = {};
-	static inline const ImTextureID MissingImageTexID = IndexToImGuiID(0u);
-	static inline const ImTextureID SharedFontTexID = IndexToImGuiID(1u);
 
-	TArray<FSlateBrush> m_CreatedSlateBrushes;
+	FSlateBrush m_MissingImageSlateBrush = {};
+	FImGuiImageBindingParams m_MissingImageParams = {};
+	static constexpr uint32 MissingImageTextureIndex = 0u;
+	static constexpr uint32 FontAtlasTextureStartIndex = MissingImageTextureIndex + 1u;
+
+	TArray<FSlateBrush> m_OneFrameSlateBrushes;
 	TArray<FImGuiTextureResource> m_OneFrameResources;
 };
