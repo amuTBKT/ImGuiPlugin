@@ -1,9 +1,11 @@
 // Copyright 2024-25 Amit Kumar Mehar. All Rights Reserved.
 
 #include "/Engine/Private/Common.ush"
+#include "/Engine/Private/PackUnpack.ush"
 #include "/Engine/Private/GammaCorrectionCommon.ush"
 
 float4x4 ProjectionMatrix;
+uint2 TexCoordOverrideMode;
 
 void MainVS(
 	in float2 InPosition : ATTRIBUTE0,
@@ -16,11 +18,17 @@ void MainVS(
 	ClipPosition = mul(float4(InPosition.xy, 0.f, 1.f), ProjectionMatrix);
 	OutUV = InUV;
 	OutColor = InColor.bgra;
+
+	if (any(TexCoordOverrideMode.xy != 0))
+	{
+		const float2 StartUV = UnpackFloat2FromUInt(TexCoordOverrideMode.x);
+		const float2 SizeUV = UnpackFloat2FromUInt(TexCoordOverrideMode.y);
+		OutUV = StartUV + OutUV * SizeUV;
+	}
 }
 
 Texture2D Texture;
 SamplerState TextureSampler;
-int IsTextureSrgb;
 uint ShaderStateOverrides;
 
 void MainPS(
@@ -30,12 +38,13 @@ void MainPS(
 	out float4 OutColor : SV_Target0)
 {
 	// read overrides (should match EImGuiShaderState)
-	const bool bDisableAlphaBlending = ((ShaderStateOverrides & 0x1) > 0);
+	const bool bOutputInSRGB		 = ((ShaderStateOverrides & 0x1) > 0);
+	const bool bDisableAlphaBlending = ((ShaderStateOverrides & 0x2) > 0);
 
 	float4 TextureColor = Texture2DSample(Texture, TextureSampler, InUV);
 
 	// source texture is SRGB, need to handle the conversion inside shader
-	if (IsTextureSrgb > 0)
+	if (bOutputInSRGB)
 	{
 		TextureColor.xyz = LinearToSrgb(saturate(TextureColor.rgb));
 	}

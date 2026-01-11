@@ -15,6 +15,7 @@ class SWindow;
 class UTexture2D;
 class FSlateShaderResource;
 class UTextureRenderTarget2D;
+class FSlateShaderResourceProxy;
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
 
@@ -30,7 +31,11 @@ public:
 	{
 	}
 
+	const FSlateShaderResourceProxy* GetSlateShaderResourceProxy() const;
 	FSlateShaderResource* GetSlateShaderResource() const;
+
+	bool UsesResourceHandle() const { return Storage.IsType<FSlateResourceHandle>(); }
+	bool UsesRawResource() const { return Storage.IsType<FSlateShaderResource*>(); }
 
 private:
 	TVariant<FSlateResourceHandle, FSlateShaderResource*> Storage;

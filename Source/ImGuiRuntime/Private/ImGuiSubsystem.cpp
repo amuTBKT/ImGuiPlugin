@@ -30,6 +30,14 @@ static TAutoConsoleVariable<bool> CVarEnableFreeType(
 
 /*--------------------------------------------------------------------------------------------------------------------------*/
 
+const FSlateShaderResourceProxy* FImGuiTextureResource::GetSlateShaderResourceProxy() const
+{
+	check(Storage.IsType<FSlateResourceHandle>());
+
+	const FSlateResourceHandle& ResourceHandle = Storage.Get<FSlateResourceHandle>();
+	return ResourceHandle.GetResourceProxy();
+}
+
 FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
 {
 	if (Storage.IsType<FSlateResourceHandle>())
@@ -314,7 +322,18 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 		return {};
 	}
 	
-	uint32 ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([Proxy](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == Proxy->Resource; });
+	uint32 ResourceHandleIndex;
+	// NOTE: when updating slate atlases `Proxy->Resource` can return null which gets patched later in the frame.
+	// So make sure we get a unique `ResourceHandleIndex` here in order to allow shader to override the UV data.
+	if (Proxy->Resource)
+	{
+		ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([Proxy](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == Proxy->Resource; });
+	}
+	else
+	{
+		ResourceHandleIndex = INDEX_NONE;
+	}
+
 	if (ResourceHandleIndex == INDEX_NONE)
 	{
 		ResourceHandleIndex = m_OneFrameResources.Emplace(ResourceHandle);

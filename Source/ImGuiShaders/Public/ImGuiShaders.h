@@ -16,6 +16,7 @@ public:
 		: FGlobalShader(Initializer)
 	{
 		ProjectionMatrixParam.Bind(Initializer.ParameterMap, TEXT("ProjectionMatrix"));
+		TexCoordOverrideModeParam.Bind(Initializer.ParameterMap, TEXT("TexCoordOverrideMode"));
 	}
 	FImGuiVS() {}
 
@@ -26,13 +27,16 @@ public:
 
 	void SetParameters(
 		FRHIBatchedShaderParameters& BatchedParameters,
-		const FMatrix44f& ProjectionMatrix)
+		const FMatrix44f& ProjectionMatrix,
+		const FUintVector2& TexCoordOverrideMode)
 	{
 		SetShaderValue(BatchedParameters, ProjectionMatrixParam, ProjectionMatrix);
+		SetShaderValue(BatchedParameters, TexCoordOverrideModeParam, TexCoordOverrideMode);
 	}
 
 private:
 	LAYOUT_FIELD(FShaderParameter, ProjectionMatrixParam);
+	LAYOUT_FIELD(FShaderParameter, TexCoordOverrideModeParam);
 };
 
 class IMGUISHADERS_API FImGuiPS : public FGlobalShader
@@ -45,7 +49,6 @@ public:
 	{
 		TextureParam.Bind(Initializer.ParameterMap, TEXT("Texture"));
 		TextureSamplerParam.Bind(Initializer.ParameterMap, TEXT("TextureSampler"));
-		SrgbParam.Bind(Initializer.ParameterMap, TEXT("IsTextureSrgb"));
 		ShaderStateOverridesParam.Bind(Initializer.ParameterMap, TEXT("ShaderStateOverrides"));
 	}
 	FImGuiPS() {}
@@ -59,18 +62,15 @@ public:
 		FRHIBatchedShaderParameters& BatchedParameters,
 		FRHITexture* Texture,
 		FRHISamplerState* SamplerState,
-		bool EnableSrgb,
 		uint32 ShaderStateOverrides)
 	{
 		SetTextureParameter(BatchedParameters, TextureParam, Texture);
 		SetSamplerParameter(BatchedParameters, TextureSamplerParam, SamplerState);
-		SetShaderValue(BatchedParameters, SrgbParam, EnableSrgb ? 1 : 0);
 		SetShaderValue(BatchedParameters, ShaderStateOverridesParam, ShaderStateOverrides);
 	}
 
 private:
 	LAYOUT_FIELD(FShaderResourceParameter, TextureParam);
 	LAYOUT_FIELD(FShaderResourceParameter, TextureSamplerParam);
-	LAYOUT_FIELD(FShaderParameter, SrgbParam);
 	LAYOUT_FIELD(FShaderParameter, ShaderStateOverridesParam);
 };

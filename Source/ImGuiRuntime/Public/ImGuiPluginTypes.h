@@ -106,7 +106,8 @@ using FImGuiShaderState = void*;
 enum class EImGuiShaderState : uint32
 {
 	Default				 = 0u,
-	DisableAlphaBlending = 1u << 0,  // disable alpha writes from shader (outputs Color.a=1)
+	OutputInSRGB		 = 1u << 0,	 // source texture is in sRGB format (internal use only)
+	DisableAlphaBlending = 1u << 1,  // disable alpha writes from shader (outputs Color.a=1)
 };
 ENUM_CLASS_FLAGS(EImGuiShaderState);
 

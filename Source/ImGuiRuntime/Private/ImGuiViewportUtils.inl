@@ -2,6 +2,11 @@
 
 namespace ImGuiUtils
 {
+	static inline uint32 PackF16ToU32(const FVector2f& Value)
+	{
+		return uint32(FFloat16(Value.X).Encoded) | (uint32(FFloat16(Value.Y).Encoded) << 16);
+	}
+
 	class FWidgetDrawer;
 	struct FDeferredDeletionQueue
 	{
@@ -251,7 +256,7 @@ namespace ImGuiUtils
 		{
 			m_BoundTextures.Reset();
 			m_DrawDataSnapshot.Clear();
-			m_BoundRenderResources.Reset();
+			m_BoundTextureResources.Reset();
 		}
 
 		bool SetDrawData(ImDrawData* DrawData, int32 FrameCount, FVector2f DrawRectOffset)
@@ -269,7 +274,7 @@ namespace ImGuiUtils
 					ImGuiSubsystem->UpdateFontAtlasTexture(TexData);
 				}
 			}
-			m_BoundRenderResources.Reset(ImGuiSubsystem->GetOneFrameResources().Num());
+			m_BoundTextureResources.Reset(ImGuiSubsystem->GetOneFrameResources().Num());
 
 			m_bHasDrawCommands = DrawData->TotalVtxCount > 0 &&
 								 DrawData->TotalIdxCount > 0 &&
@@ -282,35 +287,7 @@ namespace ImGuiUtils
 
 			for (const FImGuiTextureResource& TextureResource : ImGuiSubsystem->GetOneFrameResources())
 			{
-				bool bAdded = false;
-				ON_SCOPE_EXIT
-				{
-					if (!bAdded)
-					{
-						m_BoundRenderResources.Emplace(TInPlaceType<FTextureResource*>(), nullptr);
-					}
-				};
-
-				FSlateShaderResource* ShaderResource = TextureResource.GetSlateShaderResource();
-				if (ShaderResource)
-				{
-					ESlateShaderResource::Type ResourceType = ShaderResource->GetType();
-
-					if (ResourceType == ESlateShaderResource::Type::TextureObject)
-					{
-						FSlateBaseUTextureResource* TextureObjectResource = static_cast<FSlateBaseUTextureResource*>(ShaderResource);
-						if (FTextureResource* Resource = TextureObjectResource->GetTextureObject()->GetResource())
-						{
-							bAdded = true;
-							m_BoundRenderResources.Emplace(TInPlaceType<FTextureResource*>(), Resource);
-						}
-					}
-					else if (ResourceType == ESlateShaderResource::Type::NativeTexture)
-					{
-						bAdded = true;
-						m_BoundRenderResources.Emplace(TInPlaceType<FSlateShaderResource*>(), ShaderResource);
-					}
-				}
+				m_BoundTextureResources.Emplace(TextureResource, TextureResource.GetSlateShaderResource());
 			}
 
 			return true;
@@ -348,36 +325,70 @@ namespace ImGuiUtils
 					const ImVec2 DisplayPos = ImVec2(FMath::RoundToFloat(DrawData->DisplayPos.x), FMath::RoundToFloat(DrawData->DisplayPos.y));
 					const ImVec2 DisplaySize = ViewportRect.GetSize();
 
-					m_BoundTextures.Reset(m_BoundRenderResources.Num());
-					for (const auto& RenderResource : m_BoundRenderResources)
+					m_BoundTextures.Reset(m_BoundTextureResources.Num());
+					for (const auto& TextureResourceInfo : m_BoundTextureResources)
 					{
-						auto& TextureInfo = m_BoundTextures.AddDefaulted_GetRef();
-						if (RenderResource.IsType<FTextureResource*>())
+						auto& BoundTexture = m_BoundTextures.AddDefaulted_GetRef();
+
+						FSlateShaderResource* ShaderResource = TextureResourceInfo.ExpectedSlateResource;
+
+						// validate resource against handle, this is needed when spamming slate atlas resizes/repacking
+						if (TextureResourceInfo.TextureResource.UsesResourceHandle())
 						{
-							if (const FTextureResource* TextureResource = RenderResource.Get<FTextureResource*>())
+							const FSlateShaderResourceProxy* SlateResourceProxy = TextureResourceInfo.TextureResource.GetSlateShaderResourceProxy();
+							FSlateShaderResource* ActualResource = SlateResourceProxy ? SlateResourceProxy->Resource : nullptr;
+
+							if (ShaderResource != ActualResource)
 							{
-								TextureInfo.TextureRHI = TextureResource->TextureRHI;
-								TextureInfo.SamplerRHI = TextureResource->SamplerStateRHI;
-								TextureInfo.IsSRGB = TextureResource->bSRGB;
-							}
-						}
-						else if (RenderResource.IsType<FSlateShaderResource*>())
-						{
-							const FSlateShaderResource* ShaderResource = RenderResource.Get<FSlateShaderResource*>();
-							if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTextureRHIRef>*)ShaderResource)->GetTypedResource())
-							{
-								TextureInfo.TextureRHI = NativeTextureRHI;
-								TextureInfo.IsSRGB = EnumHasAnyFlags(NativeTextureRHI->GetFlags(), ETextureCreateFlags::SRGB);
+								if (ActualResource)
+								{
+									ShaderResource = ActualResource;
+									// adjust UVs, this is not 100% correct
+									// since UV is also written to ImGui vertices, this will only work if the draw call is a 0-1 UV quad (not merged with other slate brushes)
+									BoundTexture.TexCoordOverrideMode = FUintVector2(PackF16ToU32(SlateResourceProxy->StartUV), PackF16ToU32(SlateResourceProxy->SizeUV));
+								}
+								else
+								{
+									// under heavy load/repacking (multiple render thread flushes) we don't get the resource at all
+									// TODO: is there a better way to handle this? I have encountered non ImGui related editor slate crashes too (so maybe its a limitation?)
+									ShaderResource = nullptr;
+								}
 							}
 						}
 
-						if (TextureInfo.TextureRHI == nullptr)
+						if (ShaderResource)
 						{
-							TextureInfo.TextureRHI = GBlackTexture->TextureRHI;
+							const ESlateShaderResource::Type ResourceType = ShaderResource->GetType();
+							if (ResourceType == ESlateShaderResource::Type::TextureObject)
+							{
+								// NOTE: not too happy about accessing TextureObject here (reading UObject on render thread)
+								// but that is how slate is using these resources atm, so might be safe-ish
+								// alternative would be to resolve the texture resource when updating `m_BoundTextureResources` (on game thread)
+								FSlateBaseUTextureResource* TextureObjectResource = static_cast<FSlateBaseUTextureResource*>(ShaderResource);
+								if (FTextureResource* TextureResource = TextureObjectResource->GetTextureObject()->GetResource())
+								{
+									BoundTexture.TextureRHI = TextureObjectResource->AccessRHIResource();
+									BoundTexture.SamplerRHI = TextureResource->SamplerStateRHI;
+									BoundTexture.IsSRGB = TextureResource->bSRGB;
+								}
+							}
+							else if (ResourceType == ESlateShaderResource::Type::NativeTexture)
+							{
+								if (FRHITexture* NativeTextureRHI = ((TSlateTexture<FTextureRHIRef>*)ShaderResource)->GetTypedResource())
+								{
+									BoundTexture.TextureRHI = NativeTextureRHI;
+									BoundTexture.IsSRGB = EnumHasAnyFlags(NativeTextureRHI->GetFlags(), ETextureCreateFlags::SRGB);
+								}
+							}
 						}
-						if (TextureInfo.SamplerRHI == nullptr)
+
+						if (BoundTexture.TextureRHI == nullptr)
 						{
-							TextureInfo.SamplerRHI = TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
+							BoundTexture.TextureRHI = GBlackTexture->TextureRHI;
+						}
+						if (BoundTexture.SamplerRHI == nullptr)
+						{
+							BoundTexture.SamplerRHI = TStaticSamplerState<SF_Bilinear, AM_Wrap, AM_Wrap, AM_Wrap>::GetRHI();
 						}
 					}
 
@@ -440,7 +451,7 @@ namespace ImGuiUtils
 
 						RHICmdList.SetStreamSource(0, VertexBuffer, 0);
 
-						auto UpdateVertexShaderParameters = [&]()
+						auto CalculateProjectionMatrix = [&]()
 							{
 								const float L = DisplayPos.x;
 								const float R = DisplayPos.x + DisplaySize.x;
@@ -453,19 +464,14 @@ namespace ImGuiUtils
 									{ 0.0f				, 0.0f			   , 0.5f, 0.0f },
 									{ (R + L) / (L - R)	, (T + B) / (B - T), 0.5f, 1.0f },
 								};
-
-								SetShaderParametersLegacyVS(
-									RHICmdList,
-									VertexShader,
-									ProjectionMatrix);
+								return ProjectionMatrix;
 							};
 
+						FMatrix44f ProjectionMatrixParam = CalculateProjectionMatrix();
 						uint32_t ShaderStateOverrides = 0;
 
 						RHICmdList.SetViewport(ViewportRect.Min.x, ViewportRect.Min.y, 0.f, ViewportRect.Max.x, ViewportRect.Max.y, 1.f);
 						RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
-
-						UpdateVertexShaderParameters();
 
 						uint32 GlobalVertexOffset = 0;
 						uint32 GlobalIndexOffset = 0;
@@ -480,13 +486,13 @@ namespace ImGuiUtils
 										RHICmdList.SetViewport(ViewportRect.Min.x, ViewportRect.Min.y, 0.f, ViewportRect.Max.x, ViewportRect.Max.y, 1.f);
 										RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
 
-										UpdateVertexShaderParameters();
+										ProjectionMatrixParam = CalculateProjectionMatrix();
 									}
 									else if (DrawCmd.UserCallback == ImDrawCallback_SetShaderState)
 									{
 										ShaderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
 
-										//UpdateVertexShaderParameters(); No VS state exposed atm.
+										// No VS state exposed atm.
 									}
 									else
 									{
@@ -500,7 +506,7 @@ namespace ImGuiUtils
 											RHICmdList.SetViewport(ViewportRect.Min.x, ViewportRect.Min.y, 0.f, ViewportRect.Max.x, ViewportRect.Max.y, 1.f);
 											RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
 
-											UpdateVertexShaderParameters();
+											ProjectionMatrixParam = CalculateProjectionMatrix();
 										}
 									}
 								}
@@ -520,13 +526,18 @@ namespace ImGuiUtils
 										TextureIndex = UImGuiSubsystem::GetMissingImageTextureIndex();
 									}
 
+									SetShaderParametersLegacyVS(
+										RHICmdList,
+										VertexShader,
+										ProjectionMatrixParam,
+										m_BoundTextures[TextureIndex].TexCoordOverrideMode);
+
 									SetShaderParametersLegacyPS(
 										RHICmdList,
 										PixelShader,
 										m_BoundTextures[TextureIndex].TextureRHI,
 										m_BoundTextures[TextureIndex].SamplerRHI,
-										m_BoundTextures[TextureIndex].IsSRGB,
-										ShaderStateOverrides);
+										ShaderStateOverrides | (m_BoundTextures[TextureIndex].IsSRGB ? (uint32)EImGuiShaderState::OutputInSRGB : 0));
 
 									RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);
 								}
@@ -538,14 +549,22 @@ namespace ImGuiUtils
 				});
 		}
 	private:
-		struct FTextureInfo
+		struct FTextureResourceInfo
+		{
+			FImGuiTextureResource TextureResource;
+			// slate resource can update when resizing atlases, keep track of what the gamethread thinks the resource is
+			// if it changes, we override the texture coordinates (not 100% correct, but works for most cases)
+			FSlateShaderResource* ExpectedSlateResource = nullptr;
+		};
+		struct FBoundTexture
 		{
 			FTextureRHIRef TextureRHI = nullptr;
 			FSamplerStateRHIRef SamplerRHI = nullptr;
 			bool IsSRGB = false;
+			FUintVector2 TexCoordOverrideMode = FUintVector2::ZeroValue;
 		};
-		TArray<FTextureInfo> m_BoundTextures;
-		TArray<TVariant<FTextureResource*, FSlateShaderResource*>> m_BoundRenderResources;
+		TArray<FBoundTexture> m_BoundTextures;
+		TArray<FTextureResourceInfo> m_BoundTextureResources;
 		FVector2f m_DrawRectOffset = FVector2f::ZeroVector;
 		ImDrawDataSnapshot m_DrawDataSnapshot;
 		bool m_bHasDrawCommands = false;
