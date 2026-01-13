@@ -32,7 +32,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	m_WidgetDrawers[1] = MakeShared<ImGuiUtils::FWidgetDrawer>();
 
 	m_TickContext = MakeUnique<FImGuiTickContext>();
-	m_TickContext->ImGuiContext = m_ImGuiContext;
+	m_TickContext->ImguiContext = m_ImGuiContext;
 
 	if (InArgs._ConfigFileName && FCStringAnsi::Strlen(InArgs._ConfigFileName) > 2)
 	{

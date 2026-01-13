@@ -25,7 +25,7 @@
 class FDragDropOperation;
 struct FImGuiTickContext
 {
-	ImGuiContext* ImGuiContext = nullptr;
+	ImGuiContext* ImguiContext = nullptr;
 
 	// inputs
 	TSharedPtr<FDragDropOperation> DragDropOperation = nullptr;
@@ -56,7 +56,7 @@ struct FImGuiTickScope : FNoncopyable
 
 	FORCEINLINE static void BeginContext(FImGuiTickContext* Context)
 	{
-		ImGui::SetCurrentContext(Context->ImGuiContext);
+		ImGui::SetCurrentContext(Context->ImguiContext);
 	}
 	FORCEINLINE static void EndContext()
 	{
