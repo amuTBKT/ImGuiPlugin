@@ -17,6 +17,10 @@
 #include "Editor/WorkspaceMenuStructure/Public/WorkspaceMenuStructureModule.h"
 #endif
 
+#ifndef WITH_IMGUI_STATIC_LIB
+#include "ImGuiLib.cpp"
+#endif
+
 #define LOCTEXT_NAMESPACE "ImGuiPlugin"
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////

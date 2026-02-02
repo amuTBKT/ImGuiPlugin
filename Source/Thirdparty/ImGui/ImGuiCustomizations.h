@@ -9,15 +9,6 @@
 #define IMGUI_DISABLE_DEMO_WINDOWS			1
 //-------------------- Config Customization --------------------//
 
-//-------------------- Assert Customization --------------------//
-#if 0
-// imported functions, defined in Unreal module 
-extern void GImAssertFunc(bool cond);
-
-#define IM_ASSERT(_EXPR)	GImAssertFunc((bool)(_EXPR))
-#endif
-//-------------------- Assert Customization --------------------//
-
 //-------------------- DrawCallback Customization --------------------//
 // TODO: it is unsafe to switch render targets/graphics stage (using compute shaders) in the callback.
 // Since the widget is rendered using RenderPass, would have to wrap the callback inside End/Begin render pass stages.
