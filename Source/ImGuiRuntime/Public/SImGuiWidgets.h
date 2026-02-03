@@ -100,6 +100,8 @@ private:
 	bool m_IsDragOverActive = false;
 	TSharedPtr<class FDragDropOperation> LastDragDropOperation;
 
+	FAnsiString ClipboardText;
+
 #if WITH_EDITOR
 	mutable uint64 m_LastPaintFrameCounter = 0u;
 #endif

@@ -1077,4 +1077,30 @@ namespace ImGuiUtils
 			}
 		}
 	}
+
+	static const char* UnrealPlatform_GetClipboardText(ImGuiContext* Context)
+	{
+		FAnsiString* ClipboardText = static_cast<FAnsiString*>(Context->PlatformIO.Platform_ClipboardUserData);
+		if (ClipboardText)
+		{
+			FString Content;
+			FPlatformApplicationMisc::ClipboardPaste(Content);
+
+			*ClipboardText = TCHAR_TO_UTF8(*Content);
+
+			return ClipboardText->GetCharArray().GetData();
+		}
+
+		return nullptr;
+	}
+
+	static void UnrealPlatform_SetClipboardText(ImGuiContext* Context, const char* ClipboardText)
+	{
+		FPlatformApplicationMisc::ClipboardCopy(UTF8_TO_TCHAR(ClipboardText));
+	}
+
+	static bool UnrealPlatform_OpenInShell(ImGuiContext* Context, const char* Path)
+	{
+		return FPlatformProcess::LaunchFileInDefaultExternalApplication(UTF8_TO_TCHAR(Path));
+	}
 }

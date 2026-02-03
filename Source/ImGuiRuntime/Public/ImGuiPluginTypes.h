@@ -4,11 +4,7 @@
 
 #include "Textures/SlateIcon.h"
 
-#ifndef WITH_IMGUI_STATIC_LIB
-#define IMGUI_API IMGUIRUNTIME_API
-#define IM_ASSERT(expr) ensure(expr)
-#endif
-
+#define IMGUI_UNREAL_API IMGUIRUNTIME_API
 #include "ImGuiCustomizations.h"
 
 // Not ideal but we include internal header here as some files do need access to it and we would like all includes to be directed through "ImGuiPluginTypes.h"

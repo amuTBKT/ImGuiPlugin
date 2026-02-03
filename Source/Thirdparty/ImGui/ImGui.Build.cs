@@ -15,7 +15,7 @@ public class ImGui : ModuleRules
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui"));
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/imgui"));
 
-		string LibPath = null;
+		string StaticLibPath = null;
 		// static and dynamic lib have similar performance in non editor builds so prefer dynamic linking
 		if (Target.Type == TargetType.Editor)
 		{
@@ -23,21 +23,21 @@ public class ImGui : ModuleRules
 			{
 				if (Target.Platform == UnrealTargetPlatform.Win64)
 				{
-					LibPath = Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Debug/Win64/ImGui.lib");
+					StaticLibPath = Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Debug/Win64/ImGui.lib");
 				}
 			}
 			else
 			{
 				if (Target.Platform == UnrealTargetPlatform.Win64)
 				{
-					LibPath = Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Release/Win64/ImGui.lib");
+					StaticLibPath = Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/Binaries/Release/Win64/ImGui.lib");
 				}
 			}
 		}
-		if (File.Exists(LibPath))
+		if (File.Exists(StaticLibPath))
 		{
 			PublicDefinitions.Add("WITH_IMGUI_STATIC_LIB=1");
-			PublicAdditionalLibraries.Add(LibPath);
+			PublicAdditionalLibraries.Add(StaticLibPath);
 		}
 	}
 }

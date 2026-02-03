@@ -171,7 +171,7 @@ TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, FVe
 		SNew(SImGuiWidget)
 		.MainViewportWindow(Window)
 		.OnTickDelegate(TickDelegate)
-		.ConfigFileName(TCHAR_TO_ANSI(*WindowName));
+		.ConfigFileName(TCHAR_TO_UTF8(*WindowName));
 
 	Window->SetContent(ImGuiWindow.ToSharedRef());
 

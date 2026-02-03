@@ -14,6 +14,7 @@
 #include "Input/Events.h"
 #include "InputCoreTypes.h"
 #include "Widgets/SWindow.h"
+#include "HAL/PlatformApplicationMisc.h"
 #include "Application/ThrottleManager.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "Framework/Application/SlateApplication.h"
@@ -61,10 +62,21 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 		IO.BackendFlags |= ImGuiBackendFlags_PlatformHasViewports;
 	}
 
+	ImGuiPlatformIO& PlatformIO = ImGui::GetPlatformIO();
+
+#ifdef IMGUI_DISABLE_WIN32_DEFAULT_CLIPBOARD_FUNCTIONS
+	PlatformIO.Platform_ClipboardUserData = &ClipboardText;
+	PlatformIO.Platform_GetClipboardTextFn = ImGuiUtils::UnrealPlatform_GetClipboardText;
+	PlatformIO.Platform_SetClipboardTextFn = ImGuiUtils::UnrealPlatform_SetClipboardText;
+#endif
+
+#ifdef IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS
+	PlatformIO.Platform_OpenInShellFn = ImGuiUtils::UnrealPlatform_OpenInShell;
+#endif
+
 	// viewport setup
 	if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
 	{
-		ImGuiPlatformIO& PlatformIO = ImGui::GetPlatformIO();
 		PlatformIO.Platform_CreateWindow		= ImGuiUtils::UnrealPlatform_CreateWindow;
 		PlatformIO.Platform_DestroyWindow		= ImGuiUtils::UnrealPlatform_DestroyWindow;
 		PlatformIO.Platform_SetWindowPos		= ImGuiUtils::UnrealPlatform_SetWindowPosition;
@@ -132,6 +144,9 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 			ImGui::SaveIniSettingsToDisk(IO.IniFilename);
 		}
 		IO.IniFilename = nullptr;
+
+		ImGuiPlatformIO& PlatformIO = ImGui::GetPlatformIO();
+		PlatformIO.Platform_ClipboardUserData = nullptr;
 	}
 
 	// NOTE: widget drawers should be queued before context

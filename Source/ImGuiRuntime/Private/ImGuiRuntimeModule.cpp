@@ -7,6 +7,7 @@
 #include "SImGuiWidgets.h"
 #include "ImGuiSubsystem.h"
 #include "HAL/IConsoleManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Framework/Application/SlateApplication.h"
 
 #if WITH_EDITOR
@@ -17,11 +18,121 @@
 #include "Editor/WorkspaceMenuStructure/Public/WorkspaceMenuStructureModule.h"
 #endif
 
-#ifndef WITH_IMGUI_STATIC_LIB
+#define LOCTEXT_NAMESPACE "ImGuiPlugin"
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#ifdef WITH_IMGUI_STATIC_LIB
+void ImGuiAssertHook(bool bCondition, const char* Expression, const char* File, uint32 Line)
+{
+	if (bCondition)
+	{
+		return;
+	}
+
+	static TSet<uint32> EncounteredAsserts;
+	uint32 Key = HashCombine(PointerHash(File), GetTypeHash(Line));
+	if (!EncounteredAsserts.Contains(Key)) // fire once, similar to `ensure(expr)`
+	{
+		EncounteredAsserts.Add(Key);
+
+		FPlatformMisc::LowLevelOutputDebugString(*FString::Printf(TEXT("Ensure condition failed: %hs [File: %hs] [Line: %u]\n"), Expression, File, Line));
+		if (FPlatformMisc::IsDebuggerPresent())
+		{
+			PLATFORM_BREAK();
+		}
+	}
+}
+#else
 #include "ImGuiLib.cpp"
 #endif
 
-#define LOCTEXT_NAMESPACE "ImGuiPlugin"
+#ifdef IMGUI_DISABLE_DEFAULT_FILE_FUNCTIONS
+ImFileHandle ImFileOpen(const char* FileName, const char* Mode)
+{	
+	bool bRead = false;
+	bool bWrite = false;
+	bool bAppend = false;
+	bool bExtended = false;
+
+	for (; *Mode; ++Mode)
+	{
+		if (*Mode == 'r')
+		{
+			bRead = true;
+		}
+		else if (*Mode == 'w')
+		{
+			bWrite = true;
+		}
+		else if (*Mode == 'a')
+		{
+			bAppend = true;
+		}
+		else if (*Mode == '+')
+		{
+			bExtended = true;
+		}
+	}
+
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+
+	if (bWrite || bAppend || bExtended)
+	{
+		return PlatformFile.OpenWrite(UTF8_TO_TCHAR(FileName), bAppend, bExtended);
+	}
+
+	if (bRead)
+	{
+		return PlatformFile.OpenRead(UTF8_TO_TCHAR(FileName), true);
+	}
+
+	return nullptr;
+}
+
+bool ImFileClose(ImFileHandle File)
+{
+	if (File)
+	{
+		delete File;
+		return true;
+	}
+	return false;
+}
+
+uint64 ImFileGetSize(ImFileHandle File)
+{
+	return File ? File->Size() : MAX_uint64;
+}
+
+uint64 ImFileRead(void* Data, uint64 Size, uint64 Count, ImFileHandle File)
+{
+	if (!File)
+	{
+		return 0;
+	}
+
+	const int64 StartPos = File->Tell();
+	File->Read(static_cast<uint8*>(Data), Size * Count);
+
+	const uint64 ReadSize = File->Tell() - StartPos;
+	return ReadSize;
+}
+
+uint64 ImFileWrite(const void* Data, uint64 Size, uint64 Count, ImFileHandle File)
+{
+	if (!File)
+	{
+		return 0;
+	}
+
+	const int64 StartPos = File->Tell();
+	File->Write(static_cast<const uint8*>(Data), Size * Count);
+
+	const uint64 WriteSize = File->Tell() - StartPos;
+	return WriteSize;
+}
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
