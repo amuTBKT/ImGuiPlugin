@@ -225,6 +225,7 @@ int32 UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
 				Texture = NewObject<UTextureRenderTarget2D>(this, FName(FontTextureName, TextureIndex + 1));
 				Texture->Filter = TextureFilter::TF_Bilinear;
 				Texture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
+				Texture->OverrideFormat = PF_R8G8B8A8;
 				Texture->ClearColor = FLinearColor(0, 0, 0, 0);
 				Texture->bNoFastClear = true;
 				Texture->InitAutoFormat(SizeX, SizeY);
