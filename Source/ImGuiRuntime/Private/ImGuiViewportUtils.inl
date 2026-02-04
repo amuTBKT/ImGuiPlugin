@@ -290,6 +290,8 @@ namespace ImGuiUtils
 				m_BoundTextureResources.Emplace(TextureResource, TextureResource.GetSlateShaderResource());
 			}
 
+			m_bCaptureGpuFrame = ImGuiSubsystem->CaptureGpuFrame();
+
 			return true;
 		}
 
@@ -313,6 +315,8 @@ namespace ImGuiUtils
 			GraphBuilder.AddPass(RDG_EVENT_NAME("RenderImGui"), PassParameters, ERDGPassFlags::Raster | ERDGPassFlags::NeverCull,
 				[this](FRHICommandListImmediate& RHICmdList)
 				{
+					RenderCaptureInterface::FScopedCapture Capture{ m_bCaptureGpuFrame, &RHICmdList, TEXT("ImGui") };
+
 					const ImDrawData* DrawData = &m_DrawDataSnapshot.DrawData;
 
 					const ImRect DrawRect = ImRect(
@@ -568,6 +572,7 @@ namespace ImGuiUtils
 		FVector2f m_DrawRectOffset = FVector2f::ZeroVector;
 		ImDrawDataSnapshot m_DrawDataSnapshot;
 		bool m_bHasDrawCommands = false;
+		bool m_bCaptureGpuFrame = false;
 	};
 
 	struct FImGuiViewportData
