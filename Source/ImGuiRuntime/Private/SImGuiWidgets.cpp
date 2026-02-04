@@ -21,7 +21,7 @@
 
 #include "ImGuiShaders.h"
 #include "ImGuiSubsystem.h"
-#include "imgui_threaded_rendering.h"
+#include "imgui/misc/imgui_threaded_rendering.h"
 #include "ImGuiViewportUtils.inl"
 
 void SImGuiWidgetBase::Construct(const FArguments& InArgs)
