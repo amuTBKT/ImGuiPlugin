@@ -13,6 +13,10 @@
 		#define IMGUI_API IMGUI_UNREAL_API
 		#define IM_ASSERT(expr) ensure(expr)
 	#endif
+
+	#if WITH_FREETYPE
+		#define IMGUI_ENABLE_FREETYPE 1
+	#endif
 #else
 	// not compiling with unreal, define common types
 	#define IMGUI_UNREAL_API
