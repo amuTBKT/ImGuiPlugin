@@ -396,6 +396,18 @@ FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& WidgetGeometry, co
 	return (MouseCursor == ImGuiMouseCursor_None) ? FCursorReply::Unhandled() : FCursorReply::Cursor(ImGuiUtils::ImGuiToUnrealCursor(MouseCursor));
 }
 
+static bool AllowDragDropOperation(const FDragDropOperation* Operation)
+{
+	static const FString DockingDragOperationTypeId = TEXT("FDockingDragOperation");
+
+	if (!Operation)
+	{
+		return false;
+	}
+
+	return !Operation->IsOfTypeImpl(DockingDragOperationTypeId);
+}
+
 void SImGuiWidgetBase::OnDragLeave(const FDragDropEvent& DragDropEvent)
 {
 	m_IsDragOverActive = false;
@@ -417,7 +429,7 @@ FReply SImGuiWidgetBase::OnDragOver(const FGeometry& WidgetGeometry, const FDrag
 	IO.AddMousePosEvent(MousePosition.X, MousePosition.Y);
 
 	// NOTE: this is incorrect but needed to receive the OnDrop event :(
-	return FReply::Handled();
+	return AllowDragDropOperation(DragDropEvent.GetOperation().Get()) ? FReply::Handled() : FReply::Unhandled();
 }
 
 FReply SImGuiWidgetBase::OnDrop(const FGeometry& WidgetGeometry, const FDragDropEvent& DragDropEvent)
@@ -427,7 +439,7 @@ FReply SImGuiWidgetBase::OnDrop(const FGeometry& WidgetGeometry, const FDragDrop
 
 	// NOTE: this is incorrect but better than having drag drop events pass through to the viewpport.
 	// probably only an issue when the widget is placed directly on the viewport (have to fix input events for that at some point...)
-	return FReply::Handled();
+	return AllowDragDropOperation(DragDropEvent.GetOperation().Get()) ? FReply::Handled() : FReply::Unhandled();
 }
 #pragma endregion SLATE_INPUT
 
