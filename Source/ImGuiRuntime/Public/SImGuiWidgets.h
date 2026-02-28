@@ -9,6 +9,7 @@
 
 struct ImGuiIO;
 struct ImGuiContext;
+struct ImPlotContext;
 struct FImGuiTickContext;
 
 namespace ImGuiUtils
@@ -72,6 +73,7 @@ public:
 	virtual FReply OnDrop(const FGeometry& WidgetGeometry, const FDragDropEvent& DragDropEvent) override;
 
 	ImGuiContext* GetImGuiContext() const { return m_ImGuiContext; }
+	ImPlotContext* GetImPlotContext() const { return m_ImPlotContext; }
 
 protected:
 	// Helper functions for manually ticking ImGui logic
@@ -88,6 +90,7 @@ private:
 
 protected:
 	ImGuiContext* m_ImGuiContext = nullptr;
+	ImPlotContext* m_ImPlotContext = nullptr;
 
 private:
 	FAnsiString m_ConfigFilePath;

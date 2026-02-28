@@ -11,6 +11,7 @@
 #ifdef IMGUI_UNREAL_API
 	#ifndef WITH_IMGUI_STATIC_LIB
 		#define IMGUI_API IMGUI_UNREAL_API
+		#define IMPLOT_API IMGUI_UNREAL_API
 		#define IM_ASSERT(expr) ensure(expr)
 	#endif
 

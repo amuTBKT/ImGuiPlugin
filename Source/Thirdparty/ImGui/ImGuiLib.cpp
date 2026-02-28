@@ -9,8 +9,7 @@
 #include "imgui/imgui_widgets.cpp"
 #include "imgui/imgui_demo.cpp"
 
-#if 0 // TODO: implot is not used atm
 // implot
 #include "implot/implot.cpp"
 #include "implot/implot_items.cpp"
-#endif
+#include "implot/implot_demo.cpp"

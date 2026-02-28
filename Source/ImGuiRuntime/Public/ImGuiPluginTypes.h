@@ -11,6 +11,8 @@
 // This is to ensure macros are consistent b/w static ImGui.lib and runtime code
 #include "imgui/imgui_internal.h"
 
+#include "implot/implot.h"
+
 // since the module is built as DLL, we need to register allocators for each module that makes ImGui calls, usually at module startup
 #define SETUP_DEFAULT_IMGUI_ALLOCATOR()                                                         \
 	ImGui::SetAllocatorFunctions(                                                               \
@@ -27,6 +29,7 @@ class FDragDropOperation;
 struct FImGuiTickContext
 {
 	ImGuiContext* ImguiContext = nullptr;
+	ImPlotContext* ImplotContext = nullptr;
 
 	// inputs
 	TSharedPtr<FDragDropOperation> DragDropOperation = nullptr;
@@ -58,10 +61,12 @@ struct FImGuiTickScope : FNoncopyable
 	FORCEINLINE static void BeginContext(FImGuiTickContext* Context)
 	{
 		ImGui::SetCurrentContext(Context->ImguiContext);
+		ImPlot::SetCurrentContext(Context->ImplotContext);
 	}
 	FORCEINLINE static void EndContext()
 	{
 		ImGui::SetCurrentContext(nullptr);
+		ImPlot::SetCurrentContext(nullptr);
 	}
 };
 

@@ -29,11 +29,13 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
 
 	m_ImGuiContext = ImGui::CreateContext(ImGuiSubsystem->GetSharedFontAtlas());
+	m_ImPlotContext = ImPlot::CreateContext();
 	m_WidgetDrawers[0] = MakeShared<ImGuiUtils::FWidgetDrawer>();
 	m_WidgetDrawers[1] = MakeShared<ImGuiUtils::FWidgetDrawer>();
 
 	m_TickContext = MakeUnique<FImGuiTickContext>();
 	m_TickContext->ImguiContext = m_ImGuiContext;
+	m_TickContext->ImplotContext = m_ImPlotContext;
 
 	if (InArgs._ConfigFileName && FCStringAnsi::Strlen(InArgs._ConfigFileName) > 2)
 	{
@@ -148,6 +150,10 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 		ImGuiPlatformIO& PlatformIO = ImGui::GetPlatformIO();
 		PlatformIO.Platform_ClipboardUserData = nullptr;
 	}
+
+	// probably don't need to defer delete this
+	ImPlot::DestroyContext(m_ImPlotContext);
+	m_ImPlotContext = nullptr;
 
 	// NOTE: widget drawers should be queued before context
 	ImGuiUtils::DeferredDeletionQueue.DeferredDeleteObjects(MoveTemp(m_WidgetDrawers[0]), MoveTemp(m_WidgetDrawers[1]), m_ImGuiContext);
@@ -279,7 +285,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 #pragma region SLATE_INPUT
 void SImGuiWidgetBase::AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown)
 {
-	const ImGuiKey ImGuiKey = ImGuiUtils::ImGuiToUnrealKey(KeyEvent.GetKey().GetFName());
+	const ImGuiKey ImGuiKey = ImGuiUtils::UnrealToImGuiKey(KeyEvent.GetKey().GetFName());
 	if (ImGuiKey != ImGuiKey_None)
 	{
 		IO.AddKeyEvent(ImGuiKey, IsDown);
