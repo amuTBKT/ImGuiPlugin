@@ -517,13 +517,16 @@ namespace ImGuiUtils
 								}
 								else
 								{
-									const ImVec2& ClipRectOffset = DisplayPos;
-									RHICmdList.SetScissorRect(
-										true,
-										FMath::Max(0.f, DrawCmd.ClipRect.x - ClipRectOffset.x) + ViewportRect.Min.x,
-										FMath::Max(0.f, DrawCmd.ClipRect.y - ClipRectOffset.y) + ViewportRect.Min.y,
-										FMath::Min(ViewportRect.Max.x, DrawCmd.ClipRect.z - ClipRectOffset.x + ViewportRect.Min.x),
-										FMath::Min(ViewportRect.Max.y, DrawCmd.ClipRect.w - ClipRectOffset.y + ViewportRect.Min.y));
+									const float ScissorRectLeft		= FMath::Clamp(DrawCmd.ClipRect.x - DisplayPos.x + ViewportRect.Min.x, ViewportRect.Min.x, ViewportRect.Max.x);
+									const float ScissorRectTop		= FMath::Clamp(DrawCmd.ClipRect.y - DisplayPos.y + ViewportRect.Min.y, ViewportRect.Min.y, ViewportRect.Max.y);
+									const float ScissorRectRight	= FMath::Clamp(DrawCmd.ClipRect.z - DisplayPos.x + ViewportRect.Min.x, ViewportRect.Min.x, ViewportRect.Max.x);
+									const float ScissorRectBottom	= FMath::Clamp(DrawCmd.ClipRect.w - DisplayPos.y + ViewportRect.Min.y, ViewportRect.Min.y, ViewportRect.Max.y);									
+									if (ScissorRectRight <= ScissorRectLeft || ScissorRectBottom <= ScissorRectTop)
+									{
+										continue;
+									}
+									
+									RHICmdList.SetScissorRect(true, ScissorRectLeft, ScissorRectTop, ScissorRectRight, ScissorRectBottom);
 
 									uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
 									if (!(m_BoundTextures.IsValidIndex(TextureIndex)/* && RenderData.BoundTextures[Index].IsValid()*/))
