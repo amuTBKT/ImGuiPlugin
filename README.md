@@ -2,14 +2,17 @@
 A simple plugin for integrating [Dear ImGui](https://github.com/ocornut/imgui) in Unreal Engine 5.
 
 ## Installation
-* Clone the repo in Project/Plugins folder along with submodule dependency<br>
-  `git clone --recurse-submodules git@github.com:amuTBKT/ImGuiPlugin.git`
-* ImGui and Implot binaries need to be compiled separately. The way unreal build setup works makes it difficult to include third party libraries, so they have to be compiled separately.<br>
-  Calling `Source/Thirdparty/ImGui/Build.bat` from MSVC command prompt should generate the required libs under "/ImGuiPlugin/Source/Thirdparty/ImGui/Binaries" directory.
+* Clone the repo in Project/Plugins folder `git clone git@github.com:amuTBKT/ImGuiPlugin.git` <br>
+  or download zip and extract under Project/Plugins folder.
 * Include the plugin in your own modules.
 * Feel free to use [ImGuiExamples](https://github.com/amuTBKT/ImGuiExamples) as reference.
 
-## :construction_worker:Usage
+### Static Lib
+For editor builds the plugin also supports linking ImGui as a static library. This can improve performance when widgets make signficant amount of ImGui calls. <br>
+Calling `Source/Thirdparty/ImGui/Build.bat` from MSVC command prompt (x64 Native Tools Command Prompt) should generate the required libs under "/ImGuiPlugin/Source/Thirdparty/ImGui/Binaries" directory. <br>
+Make sure to regenerate project files or touch `Source/Thirdparty/ImGui/ImGui.Build.cs` in order to update the library dependency.
+
+## Usage
 At it's core the plugin is just a Slate widget with ImGui renderer, yes it's that simple :) <br>
 The plugin manages a global widget/window which can be used to add global widgets (managers, stats visualizer etc.) <br>
 User can also create `SImGuiWidget` widget which works like any other Slate widget with an addition of Tick delegate which can be used to add ImGui widgets. <br>
