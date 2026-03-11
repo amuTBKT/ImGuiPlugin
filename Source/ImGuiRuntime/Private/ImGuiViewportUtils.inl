@@ -525,7 +525,7 @@ namespace ImGuiUtils
 									{
 										continue;
 									}
-									
+
 									RHICmdList.SetScissorRect(true, ScissorRectLeft, ScissorRectTop, ScissorRectRight, ScissorRectBottom);
 
 									uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
@@ -662,7 +662,7 @@ namespace ImGuiUtils
 		{
 			DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [GT]"), STAT_ImGui_RenderWidget_GT, STATGROUP_ImGui);
 
-			TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
+			TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[WidgetDrawerToRenderThisFrame];
 			if (WidgetDrawer->HasDrawCommands())
 			{
 				const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
@@ -679,7 +679,9 @@ namespace ImGuiUtils
 
 		void OnDrawDataGenerated(ImDrawData* DrawData)
 		{
-			m_WidgetDrawers[ImGui::GetFrameCount() & 0x1]->SetDrawData(DrawData, ImGui::GetFrameCount(), FVector2f::ZeroVector);
+			// it's unsafe to make ImGui calls during OnPaint() so cache the drawer index here
+			WidgetDrawerToRenderThisFrame = ImGui::GetFrameCount() & 0x1;
+			m_WidgetDrawers[WidgetDrawerToRenderThisFrame]->SetDrawData(DrawData, ImGui::GetFrameCount(), FVector2f::ZeroVector);
 		}
 
 		virtual FReply OnKeyChar(const FGeometry& WidgetGeometry, const FCharacterEvent& CharacterEvent) override
@@ -811,6 +813,7 @@ namespace ImGuiUtils
 		const ImGuiViewport* m_ImGuiViewport = nullptr;
 		TSharedPtr<ImGuiUtils::FWidgetDrawer> m_WidgetDrawers[2];
 		TWeakPtr<SImGuiWidgetBase> m_MainViewportWidget = nullptr;
+		int32 WidgetDrawerToRenderThisFrame = 0;
 	};
 
 	static void UnrealPlatform_CreateWindow(ImGuiViewport* Viewport)
