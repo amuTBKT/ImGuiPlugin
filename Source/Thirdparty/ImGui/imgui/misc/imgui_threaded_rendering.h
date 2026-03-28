@@ -12,13 +12,19 @@
 /*
     // Storage. Keep persistent as we reuse buffers across frames.
     ImDrawDataSnapshot g_Snapshots[2];
-    ImDrawDataSnapshot* snapshot = &g_Snapshots[g_FrameIndex % 1];
+    ImDrawDataSnapshot* snapshot = &g_Snapshots[g_FrameIndex % 2];
 
     // [Update thread] Take a snapshot of the ImDrawData
     snapshot->SnapUsingSwap(ImGui::GetDrawData(), ImGui::GetTime());
 
     // [Render thread] Render later
     ImGui_ImplDX11_RenderDrawData(&snapshot->DrawData);
+
+    // [Shutdown]
+    for (ImDrawDataSnapshot& snapshot : g_Snapshots)
+        snapshot.Clear(); // otherwise context will assert since 1.92.0
+    ImGui::DestroyContext();
+}
 */
 
 // FIXME: Could store an ID in ImDrawList to make this easier for user.
