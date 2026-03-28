@@ -260,9 +260,9 @@ namespace ImGuiUtils
 			m_BoundTextureResources.Reset();
 		}
 
-		bool SetDrawData(ImDrawData* DrawData, int32 FrameCount, FVector2f DrawRectOffset)
+		bool SetDrawData(ImDrawData* DrawData, double CurrentTime, FVector2f DrawRectOffset)
 		{
-			m_DrawDataSnapshot.SnapUsingSwap(DrawData, FrameCount);
+			m_DrawDataSnapshot.SnapUsingSwap(DrawData, CurrentTime);
 			DrawData = &m_DrawDataSnapshot.DrawData;
 
 			m_DrawRectOffset = DrawRectOffset;
@@ -681,7 +681,7 @@ namespace ImGuiUtils
 		{
 			// it's unsafe to make ImGui calls during OnPaint() so cache the drawer index here
 			WidgetDrawerToRenderThisFrame = ImGui::GetFrameCount() & 0x1;
-			m_WidgetDrawers[WidgetDrawerToRenderThisFrame]->SetDrawData(DrawData, ImGui::GetFrameCount(), FVector2f::ZeroVector);
+			m_WidgetDrawers[WidgetDrawerToRenderThisFrame]->SetDrawData(DrawData, ImGui::GetTime(), FVector2f::ZeroVector);
 		}
 
 		virtual FReply OnKeyChar(const FGeometry& WidgetGeometry, const FCharacterEvent& CharacterEvent) override

@@ -168,7 +168,7 @@ ImGuiIO& SImGuiWidgetBase::GetImGuiIO() const
 	return ImGui::GetIO();
 }
 
-void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry, float DeltaTime)
+void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry)
 {
 	if (m_ImGuiContext->WithinFrameScope)
 	{
@@ -193,7 +193,7 @@ void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry, float De
 
 		FVector2f WidgetSize = WidgetGeometry.GetAbsoluteSize();
 		IO.DisplaySize = ImVec2(WidgetSize.X, WidgetSize.Y);
-		IO.DeltaTime = DeltaTime;
+		IO.DeltaTime = FApp::GetDeltaTime();
 
 		ImGui::NewFrame();
 
@@ -224,7 +224,7 @@ void SImGuiWidgetBase::Tick(const FGeometry& WidgetGeometry, const double Curren
 
 	Super::Tick(WidgetGeometry, CurrentTime, DeltaTime);
 
-	BeginImGuiFrame(WidgetGeometry, DeltaTime);
+	BeginImGuiFrame(WidgetGeometry);
 
 	TickImGuiInternal(m_TickContext.Get());
 }
@@ -245,7 +245,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 	const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
 
 	TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
-	if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetFrameCount(), DrawRect.GetTopLeft2f()))
+	if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetTime(), DrawRect.GetTopLeft2f()))
 	{
 		OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
 		FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);

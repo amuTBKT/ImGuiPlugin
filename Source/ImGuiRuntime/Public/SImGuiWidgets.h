@@ -78,7 +78,7 @@ public:
 protected:
 	// Helper functions for manually ticking ImGui logic
 	// setup work for ImGui::NewFrame
-	void BeginImGuiFrame(const FGeometry& WidgetGeometry, float DeltaTime);
+	void BeginImGuiFrame(const FGeometry& WidgetGeometry);
 	// to ensure ImGui::EndFrame is called (for cases when widget is not rendered)
 	void EndImGuiFrame();
 
