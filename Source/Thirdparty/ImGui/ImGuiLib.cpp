@@ -7,9 +7,13 @@
 #include "imgui/imgui_draw.cpp"
 #include "imgui/imgui_tables.cpp"
 #include "imgui/imgui_widgets.cpp"
-#include "imgui/imgui_demo.cpp"
 
 // implot
 #include "implot/implot.cpp"
 #include "implot/implot_items.cpp"
+
+// widget demos (optional)
+#include "imgui/imgui_demo.cpp"
+#undef IMGUI_DEMO_MARKER
 #include "implot/implot_demo.cpp"
+#undef IMGUI_DEMO_MARKER
