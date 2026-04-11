@@ -1,4 +1,4 @@
-// dear imgui, v1.92.7 WIP
+// dear imgui, v1.92.8 WIP
 // (main code and documentation)
 
 // Help:
@@ -1165,10 +1165,10 @@ IMPLEMENTING SUPPORT for ImGuiBackendFlags_RendererHasTextures:
  ----------
 
  Q: About the ID Stack system..
-   - Why is my widget not reacting when I click on it?
-   - How can I have widgets with an empty label?
-   - How can I have multiple widgets with the same label?
-   - How can I have multiple windows with the same label?
+   - How can I have multiple widgets with the same label? (using ## or PushID)
+   - How can I have widgets with an empty label? (using ##)
+   - How can I make a label dynamic? (using ###)
+   - General description of the label and ID Stack system.
  Q: How can I display an image? What is ImTextureID, how does it work?
  Q: How can I use my own math types instead of ImVec2?
  Q: How can I interact with standard C++ types (such as std::string and std::vector)?
@@ -3337,8 +3337,7 @@ ImGuiListClipper::~ImGuiListClipper()
 
 void ImGuiListClipper::Begin(int items_count, float items_height)
 {
-    if (Ctx == NULL)
-        Ctx = ImGui::GetCurrentContext();
+    Ctx = ImGui::GetCurrentContext();
 
     ImGuiContext& g = *Ctx;
     ImGuiWindow* window = g.CurrentWindow;
@@ -3455,9 +3454,6 @@ static bool ImGuiListClipper_StepInternal(ImGuiListClipper* clipper)
     if (clipper->ItemsHeight <= 0.0f)
     {
         IM_ASSERT(data->StepNo == 1);
-        if (table)
-            IM_ASSERT(table->RowPosY1 == clipper->StartPosY && table->RowPosY2 == window->DC.CursorPos.y);
-
         bool affected_by_floating_point_precision = ImIsFloatAboveGuaranteedIntegerPrecision((float)clipper->StartPosY) || ImIsFloatAboveGuaranteedIntegerPrecision(window->DC.CursorPos.y);
         if (affected_by_floating_point_precision)
         {
@@ -3471,7 +3467,14 @@ static bool ImGuiListClipper_StepInternal(ImGuiListClipper* clipper)
         }
         if (clipper->ItemsHeight == 0.0f && clipper->ItemsCount == INT_MAX) // Accept that no item have been submitted if in indeterminate mode.
             return false;
-        IM_ASSERT(clipper->ItemsHeight > 0.0f && "Unable to calculate item height! First item hasn't moved the cursor vertically!");
+        if (clipper->ItemsHeight <= 0.0f)
+        {
+            IM_ASSERT_USER_ERROR(clipper->ItemsHeight > 0.0f, "ImGuiListClipper: Failed to calculate item height! First item hasn't been submitted by user code, or has not moved the cursor vertically!");
+            return false;
+        }
+        if (table)
+            IM_ASSERT(table->RowPosY1 == clipper->StartPosY && table->RowPosY2 == window->DC.CursorPos.y);
+
         calc_clipping = true;   // If item height had to be calculated, calculate clipping afterwards.
     }
 
@@ -4230,7 +4233,7 @@ ImGuiContext::ImGuiContext(ImFontAtlas* shared_font_atlas)
     IO.Fonts = shared_font_atlas ? shared_font_atlas : IM_NEW(ImFontAtlas)();
     if (shared_font_atlas == NULL)
         IO.Fonts->OwnerContext = this;
-    WithinEndChildID = 0;
+    WithinEndChildID = WithinEndPopupID = 0;
     TestEngine = NULL;
 
     InputEventsNextMouseSource = ImGuiMouseSource_Mouse;
@@ -7051,8 +7054,8 @@ static ImVec2 CalcWindowAutoFitSize(ImGuiWindow* window, const ImVec2& size_cont
     const float decoration_h_without_scrollbars = window->DecoOuterSizeY1 + window->DecoOuterSizeY2 - window->ScrollbarSizes.y;
     ImVec2 size_pad = window->WindowPadding * 2.0f;
     ImVec2 size_desired;
-    size_desired[ImGuiAxis_X] = (axis_mask & 1) ? size_contents.x + size_pad.x + decoration_w_without_scrollbars : window->Size.x;
-    size_desired[ImGuiAxis_Y] = (axis_mask & 2) ? size_contents.y + size_pad.y + decoration_h_without_scrollbars : window->Size.y;
+    size_desired.x = (axis_mask & 1) ? size_contents.x + size_pad.x + decoration_w_without_scrollbars : window->Size.x;
+    size_desired.y = (axis_mask & 2) ? size_contents.y + size_pad.y + decoration_h_without_scrollbars : window->Size.y;
 
     // Determine maximum window size
     // Child windows are laid within their parent (unless they are also popups/menus) and thus have no restriction
@@ -7079,8 +7082,10 @@ static ImVec2 CalcWindowAutoFitSize(ImGuiWindow* window, const ImVec2& size_cont
         // When the window cannot fit all contents (either because of constraints, either because screen is too small),
         // we are growing the size on the other axis to compensate for expected scrollbar. FIXME: Might turn bigger than ViewportSize-WindowPadding.
         ImVec2 size_auto_fit_after_constraint = CalcWindowSizeAfterConstraint(window, size_auto_fit);
-        bool will_have_scrollbar_x = (size_auto_fit_after_constraint.x - size_pad.x - decoration_w_without_scrollbars < size_contents.x && !(window->Flags & ImGuiWindowFlags_NoScrollbar) && (window->Flags & ImGuiWindowFlags_HorizontalScrollbar)) || (window->Flags & ImGuiWindowFlags_AlwaysHorizontalScrollbar);
-        bool will_have_scrollbar_y = (size_auto_fit_after_constraint.y - size_pad.y - decoration_h_without_scrollbars < size_contents.y && !(window->Flags & ImGuiWindowFlags_NoScrollbar)) || (window->Flags & ImGuiWindowFlags_AlwaysVerticalScrollbar);
+        float size_contents_for_scrollbar_x = (axis_mask & 1) ? size_contents.x : window->ContentSize.x; // See #9352. In theory this should use same logic as `window->ScrollbarY = ...` codepath in Begin(). Needs some plumbling.
+        float size_contents_for_scrollbar_y = (axis_mask & 2) ? size_contents.y : window->ContentSize.y;
+        bool will_have_scrollbar_x = (size_auto_fit_after_constraint.x < size_contents_for_scrollbar_x + size_pad.x + decoration_w_without_scrollbars && !(window->Flags & ImGuiWindowFlags_NoScrollbar) && (window->Flags & ImGuiWindowFlags_HorizontalScrollbar)) || (window->Flags & ImGuiWindowFlags_AlwaysHorizontalScrollbar);
+        bool will_have_scrollbar_y = (size_auto_fit_after_constraint.y < size_contents_for_scrollbar_y + size_pad.y + decoration_h_without_scrollbars && !(window->Flags & ImGuiWindowFlags_NoScrollbar)) || (window->Flags & ImGuiWindowFlags_AlwaysVerticalScrollbar);
         if (will_have_scrollbar_x)
             size_auto_fit.y += style.ScrollbarSize;
         if (will_have_scrollbar_y)
@@ -8358,12 +8363,12 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
             ImVec2 avail_size_from_current_frame = ImVec2(window->SizeFull.x, window->SizeFull.y - (window->DecoOuterSizeY1 + window->DecoOuterSizeY2));
             ImVec2 avail_size_from_last_frame = window->InnerRect.GetSize() + scrollbar_sizes_from_last_frame;
             ImVec2 needed_size_from_last_frame = window_just_created ? ImVec2(0, 0) : window->ContentSize + window->WindowPadding * 2.0f;
-            float size_x_for_scrollbars = use_current_size_for_scrollbar_x ? avail_size_from_current_frame.x : avail_size_from_last_frame.x;
-            float size_y_for_scrollbars = use_current_size_for_scrollbar_y ? avail_size_from_current_frame.y : avail_size_from_last_frame.y;
+            float size_for_scrollbars_x = use_current_size_for_scrollbar_x ? avail_size_from_current_frame.x : avail_size_from_last_frame.x;
+            float size_for_scrollbars_y = use_current_size_for_scrollbar_y ? avail_size_from_current_frame.y : avail_size_from_last_frame.y;
             bool scrollbar_x_prev = window->ScrollbarX;
             //bool scrollbar_y_from_last_frame = window->ScrollbarY; // FIXME: May want to use that in the ScrollbarX expression? How many pros vs cons?
-            window->ScrollbarY = (flags & ImGuiWindowFlags_AlwaysVerticalScrollbar) || ((needed_size_from_last_frame.y > size_y_for_scrollbars) && !(flags & ImGuiWindowFlags_NoScrollbar));
-            window->ScrollbarX = (flags & ImGuiWindowFlags_AlwaysHorizontalScrollbar) || ((needed_size_from_last_frame.x > size_x_for_scrollbars - (window->ScrollbarY ? style.ScrollbarSize : 0.0f)) && !(flags & ImGuiWindowFlags_NoScrollbar) && (flags & ImGuiWindowFlags_HorizontalScrollbar));
+            window->ScrollbarY = (flags & ImGuiWindowFlags_AlwaysVerticalScrollbar) || ((needed_size_from_last_frame.y > size_for_scrollbars_y) && !(flags & ImGuiWindowFlags_NoScrollbar));
+            window->ScrollbarX = (flags & ImGuiWindowFlags_AlwaysHorizontalScrollbar) || ((needed_size_from_last_frame.x > size_for_scrollbars_x - (window->ScrollbarY ? style.ScrollbarSize : 0.0f)) && !(flags & ImGuiWindowFlags_NoScrollbar) && (flags & ImGuiWindowFlags_HorizontalScrollbar));
 
             // Track when ScrollbarX visibility keeps toggling, which is a sign of a feedback loop, and stabilize by enforcing visibility (#3285, #8488)
             // (Feedback loops of this sort can manifest in various situations, but combining horizontal + vertical scrollbar + using a clipper with varying width items is one frequent cause.
@@ -8378,7 +8383,7 @@ bool ImGui::Begin(const char* name, bool* p_open, ImGuiWindowFlags flags)
             window->ScrollbarXStabilizeEnabled = scrollbar_x_stabilize;
 
             if (window->ScrollbarX && !window->ScrollbarY)
-                window->ScrollbarY = (needed_size_from_last_frame.y > size_y_for_scrollbars - style.ScrollbarSize) && !(flags & ImGuiWindowFlags_NoScrollbar);
+                window->ScrollbarY = (needed_size_from_last_frame.y > size_for_scrollbars_y - style.ScrollbarSize) && !(flags & ImGuiWindowFlags_NoScrollbar);
             window->ScrollbarSizes = ImVec2(window->ScrollbarY ? style.ScrollbarSize : 0.0f, window->ScrollbarX ? style.ScrollbarSize : 0.0f);
 
             // Amend the partially filled window->DecorationXXX values.
@@ -8771,6 +8776,8 @@ void ImGui::End()
     ImGuiWindowStackData& window_stack_data = g.CurrentWindowStack.back();
 
     // Error checking: verify that user doesn't directly call End() on a child window.
+    if (window->Flags & ImGuiWindowFlags_Popup)
+        IM_ASSERT_USER_ERROR(g.WithinEndPopupID == window->ID, "Must call EndPopup() and not End()!");
     if ((window->Flags & ImGuiWindowFlags_ChildWindow) && !(window->Flags & ImGuiWindowFlags_DockNodeHost) && !window->DockIsActive)
         IM_ASSERT_USER_ERROR(g.WithinEndChildID == window->ID, "Must call EndChild() and not End()!");
 
@@ -10709,11 +10716,12 @@ static void UpdateAliasKey(ImGuiKey key, bool v, float analog_value)
 // [Internal] Do not use directly
 static ImGuiKeyChord GetMergedModsFromKeys()
 {
+    // Bypass IsKeyDown() for the unlikely case where user used a ImGuiInputFlags_LockXXXX on those.
     ImGuiKeyChord mods = 0;
-    if (ImGui::IsKeyDown(ImGuiMod_Ctrl))     { mods |= ImGuiMod_Ctrl; }
-    if (ImGui::IsKeyDown(ImGuiMod_Shift))    { mods |= ImGuiMod_Shift; }
-    if (ImGui::IsKeyDown(ImGuiMod_Alt))      { mods |= ImGuiMod_Alt; }
-    if (ImGui::IsKeyDown(ImGuiMod_Super))    { mods |= ImGuiMod_Super; }
+    if (ImGui::GetKeyData(ImGuiMod_Ctrl)->Down)     { mods |= ImGuiMod_Ctrl; }
+    if (ImGui::GetKeyData(ImGuiMod_Shift)->Down)    { mods |= ImGuiMod_Shift; }
+    if (ImGui::GetKeyData(ImGuiMod_Alt)->Down)      { mods |= ImGuiMod_Alt; }
+    if (ImGui::GetKeyData(ImGuiMod_Super)->Down)    { mods |= ImGuiMod_Super; }
     return mods;
 }
 
@@ -11796,6 +11804,8 @@ bool    ImGui::ErrorLog(const char* msg)
     return g.IO.ConfigErrorRecoveryEnableAssert;
 }
 
+// Display an error tooltip when same ID as HoveredId was submitted multiple times.
+// See code in ItemHoverable() for an explanation of why we associate this error to HoveredId + code drawing of rectangles over individual items instances.
 void ImGui::ErrorCheckEndFrameFinalizeErrorTooltip()
 {
 #ifndef IMGUI_DISABLE_DEBUG_TOOLS
@@ -13172,10 +13182,13 @@ void ImGui::EndPopup()
         NavMoveRequestTryWrapping(window, ImGuiNavMoveFlags_LoopY);
 
     // Child-popups don't need to be laid out
+    const ImGuiID backup_within_end_popup_id = g.WithinEndPopupID;
     const ImGuiID backup_within_end_child_id = g.WithinEndChildID;
+    g.WithinEndPopupID = window->ID;
     if (window->Flags & ImGuiWindowFlags_ChildWindow)
         g.WithinEndChildID = window->ID;
     End();
+    g.WithinEndPopupID = backup_within_end_popup_id;
     g.WithinEndChildID = backup_within_end_child_id;
 }
 
