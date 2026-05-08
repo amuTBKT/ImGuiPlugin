@@ -89,6 +89,10 @@ struct FImGuiNamedScope final : FNoncopyable
 	{
 		ImGui::PushID(static_cast<int32>(FCrc::StrCrc32(ScopeName)));
 	}
+	explicit FImGuiNamedScope(const FName& ScopeName)
+	{
+		ImGui::PushID(static_cast<int32>(GetTypeHash(ScopeName)));
+	}
 	~FImGuiNamedScope()
 	{
 		ImGui::PopID();
