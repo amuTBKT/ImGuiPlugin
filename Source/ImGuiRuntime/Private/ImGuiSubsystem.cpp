@@ -89,7 +89,10 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		m_SharedFontAtlas->SetFontLoader(ImGuiFreeType::GetFontLoader());
 	}
 #endif
-	m_SharedFontAtlas->AddFontDefaultBitmap();
+	if (!m_SharedFontAtlas->AddFontFromFileTTF(TCHAR_TO_ANSI(*(FPaths::EngineContentDir() / TEXT("Slate/Fonts/Roboto-Regular.ttf"))), 15.f))
+	{
+		m_SharedFontAtlas->AddFontDefaultBitmap();
+	}
 
 	// upto 8 shared font textures at a time (to account for repacking)
 	// when spammed ImGui can cycle through a lot of atlases (most I encountered was 5)
