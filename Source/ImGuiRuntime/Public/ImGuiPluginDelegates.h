@@ -4,8 +4,4 @@
 
 #include "CoreMinimal.h"
 
-struct FImGuiTickContext;
-
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnTickImGuiMainWindowDelegate, FImGuiTickContext* /* Context */);
-
-DECLARE_DELEGATE_OneParam(FOnTickImGuiWidgetDelegate, FImGuiTickContext* /* Context */);
+DECLARE_DELEGATE_OneParam(FOnTickImGuiWidgetDelegate, struct FImGuiTickContext* /*Context*/);

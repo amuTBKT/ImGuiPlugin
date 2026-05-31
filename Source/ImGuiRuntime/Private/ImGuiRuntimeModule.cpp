@@ -6,8 +6,11 @@
 #include "Engine/World.h"
 #include "SImGuiWidgets.h"
 #include "ImGuiSubsystem.h"
+#include "UObject/Package.h"
 #include "HAL/IConsoleManager.h"
+#include "Misc/ConfigCacheIni.h"
 #include "HAL/PlatformFileManager.h"
+#include "Engine/GameViewportClient.h"
 #include "Framework/Application/SlateApplication.h"
 
 #if WITH_EDITOR
@@ -136,7 +139,285 @@ uint64 ImFileWrite(const void* Data, uint64 Size, uint64 Count, ImFileHandle Fil
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-FAutoRegisterMainWindowWidget::FAutoRegisterMainWindowWidget(FStaticWidgetRegisterParams RegisterParams)
+struct FImGuiMenuContainer
+{
+	struct FWidgetSlot
+	{
+		struct FPathIterator
+		{
+			FPathIterator(FAnsiStringView InPath)
+				: Path(InPath)
+				, ItrOffset(0)
+			{}
+
+			FAnsiStringView operator++()
+			{
+				int32 DelimitedIndex;
+				if (Path.Mid(ItrOffset).FindChar('.', DelimitedIndex))
+				{
+					ItrOffset += DelimitedIndex + 1;
+					return Path.Mid(0, ItrOffset - 1);
+				}
+				return {};
+			}
+
+			operator bool() const
+			{
+				return ItrOffset < Path.Len();
+			}
+
+			FAnsiStringView Path;
+			int32 ItrOffset;
+		};
+
+		explicit FWidgetSlot(FAnsiString InPath)
+			: Path(MoveTemp(InPath))
+			, Storage(TInPlaceType<TArray<FWidgetSlot>>(), TArray<FWidgetSlot>{})
+			, SlotNameOffset(Path.FindLastChar('.', SlotNameOffset) ? SlotNameOffset + 1 : 0)
+		{}
+
+		explicit FWidgetSlot(FAnsiString InPath, FAnsiString InToolTip, const FSlateBrush* InIcon, FOnTickImGuiWidgetDelegate InTickDelegate, bool bInTickInMenuBar)
+			: Path(MoveTemp(InPath))
+			, ToolTip(MoveTemp(InToolTip))
+			, Icon(InIcon)
+			, Storage(TInPlaceType<FOnTickImGuiWidgetDelegate>(), MoveTemp(InTickDelegate))
+			, SlotNameOffset(Path.FindLastChar('.', SlotNameOffset) ? SlotNameOffset + 1 : 0)
+			, bTickInMenuBar(bInTickInMenuBar)
+		{}
+
+		const char*							GetName()			const { return *Path + SlotNameOffset; };
+		bool								IsMenuItem()		const { return Storage.IsType<FOnTickImGuiWidgetDelegate>(); }
+		const FOnTickImGuiWidgetDelegate&	GetTickDelegate()	const { check(IsMenuItem());  return Storage.Get<FOnTickImGuiWidgetDelegate>(); }
+		TArray<FWidgetSlot>&				GetChildren()			  { check(!IsMenuItem()); return Storage.Get<TArray<FWidgetSlot>>(); }
+		const TArray<FWidgetSlot>&			GetChildren()		const { check(!IsMenuItem()); return Storage.Get<TArray<FWidgetSlot>>(); }
+
+		bool operator==(const FAnsiStringView& Other)	const { return Other.Equals(*Path, ESearchCase::IgnoreCase); }
+		bool operator==(const FWidgetSlot& Other)		const { return FCStringAnsi::Stricmp(*Path, *Other.Path) == 0; }
+
+		FAnsiString Path;
+		FAnsiString ToolTip;
+		const FSlateBrush* Icon;
+		TVariant<FOnTickImGuiWidgetDelegate, TArray<FWidgetSlot>> Storage;
+		int32 SlotNameOffset = 0;
+		// is the menu item active and drawing the widget window
+		bool bIsActive = false;
+		// use TickDelegate for drawing menu item instead of a widget window
+		bool bTickInMenuBar = false;
+	};
+
+	struct FQueuedWidgetSlot
+	{
+		FAnsiString					WidgetPath;
+		FAnsiString					WidgetToolTip;
+		const FSlateBrush* WidgetIcon;
+		FOnTickImGuiWidgetDelegate	TickDelegate;
+		bool						bTickInMenuBar;
+
+		bool operator==(const FAnsiStringView& Other) const
+		{
+			return Other.Equals(*WidgetPath, ESearchCase::IgnoreCase);
+		}
+		bool operator==(const FQueuedWidgetSlot& Other) const
+		{
+			return FCStringAnsi::Stricmp(*WidgetPath, *Other.WidgetPath) == 0;
+		}
+	};
+
+	FWidgetSlot* FindSlot(FAnsiStringView Path)
+	{
+		FWidgetSlot::FPathIterator PathItr{ Path };
+
+		FAnsiStringView SubPath = ++PathItr;
+		FWidgetSlot* ParentSlot = SubPath.IsEmpty() ? nullptr : WidgetSlots.FindByKey(SubPath);
+		if (!ParentSlot)
+		{
+			return nullptr;
+		}
+
+		while (PathItr)
+		{
+			SubPath = ++PathItr;
+			if (SubPath.IsEmpty())
+			{
+				break;
+			}
+
+			FWidgetSlot* NextSlot = ParentSlot->GetChildren().FindByKey(SubPath);
+			if (!NextSlot)
+			{
+				break;
+			}
+			else if (NextSlot->IsMenuItem())
+			{
+				ensureAlwaysMsgf(false, TEXT("Path points to an active menu item!"));
+				ParentSlot = nullptr;
+				break;
+			}
+			ParentSlot = NextSlot;
+		}
+
+		return ParentSlot;
+	}
+	FWidgetSlot* InitializeSlotHierarchy(FAnsiStringView Path)
+	{
+		FWidgetSlot::FPathIterator PathItr{ Path };
+
+		FAnsiStringView SubPath = ++PathItr;
+		FWidgetSlot* ParentSlot = SubPath.IsEmpty() ? nullptr : WidgetSlots.FindByKey(SubPath);
+		if (!ParentSlot)
+		{
+			ParentSlot = &WidgetSlots.Emplace_GetRef(FAnsiString(SubPath));
+		}
+
+		while (PathItr)
+		{
+			SubPath = ++PathItr;
+			if (SubPath.IsEmpty())
+			{
+				break;
+			}
+
+			FWidgetSlot* NextSlot = ParentSlot->GetChildren().FindByKey(SubPath);
+			if (!NextSlot)
+			{
+				NextSlot = &ParentSlot->GetChildren().Emplace_GetRef(FAnsiString(SubPath));
+			}
+			else if (NextSlot->IsMenuItem())
+			{
+				ensureAlwaysMsgf(false, TEXT("Path points to an active menu item!"));
+				ParentSlot = nullptr;
+				break;
+			}
+			ParentSlot = NextSlot;
+		}
+
+		return ParentSlot;
+	}
+	
+	void ProcessQueuedMainWidgetSlots()
+	{
+		check(!QueueWidgetSlotChanges);
+
+		for (const auto& Item : WidgetSlotsToAdd)
+		{
+			RegisterWidget(*Item.WidgetPath, *Item.WidgetToolTip, Item.WidgetIcon, Item.TickDelegate, Item.bTickInMenuBar);
+		}
+		WidgetSlotsToAdd.Reset();
+
+		for (const auto& Item : WidgetSlotsToRemove)
+		{
+			UnregisterWidget(*Item.WidgetPath);
+		}
+		WidgetSlotsToRemove.Reset();
+	}
+
+	void RegisterWidget(
+		const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
+		FOnTickImGuiWidgetDelegate TickDelegate, bool bTickInMenuBar)
+	{
+		if (QueueWidgetSlotChanges)
+		{
+			WidgetSlotsToAdd.Emplace(WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, bTickInMenuBar);
+			WidgetSlotsToRemove.Remove(WidgetSlotsToAdd.Last());
+			return;
+		}
+
+		FWidgetSlot* ParentSlot = InitializeSlotHierarchy(WidgetPath);
+		if (ensureAlways(ParentSlot))
+		{
+			if (ParentSlot->GetChildren().Contains(WidgetPath))
+			{
+				ensureAlwaysMsgf(false, TEXT("Widget slot (Path=%hs) already registered"), WidgetPath);
+			}
+			else
+			{
+				ParentSlot->GetChildren().Add(FWidgetSlot{ FAnsiString(WidgetPath), FAnsiString(WidgetToolTip), WidgetIcon, TickDelegate, bTickInMenuBar });
+				LoadSlotState(ParentSlot->GetChildren().Last());
+			}
+		}
+	}
+	void UnregisterWidget(const char* WidgetPath)
+	{
+		if (QueueWidgetSlotChanges)
+		{
+			WidgetSlotsToRemove.Emplace(WidgetPath);
+			WidgetSlotsToAdd.Remove(WidgetSlotsToRemove.Last());
+			return;
+		}
+
+		FWidgetSlot* ParentSlot = FindSlot(WidgetPath);
+		if (ParentSlot)
+		{
+			ParentSlot->GetChildren().RemoveAll([&](const auto& Entry) { return Entry == WidgetPath; });
+		}
+	}
+
+	void LoadSlotState(FWidgetSlot& Slot)
+	{
+		if (FConfigFile* WidgetSettings = UImGuiSubsystem::Get()->GetSaveDataConfigFile())
+		{
+			WidgetSettings->GetBool(*SaveDataSectionName, UTF8_TO_TCHAR(*Slot.Path), Slot.bIsActive);
+		}
+	}
+	void SaveSlotState(const FWidgetSlot& Slot)
+	{
+		if (FConfigFile* WidgetSettings = UImGuiSubsystem::Get()->GetSaveDataConfigFile())
+		{
+			WidgetSettings->SetBool(*SaveDataSectionName, UTF8_TO_TCHAR(*Slot.Path), Slot.bIsActive);
+			UImGuiSubsystem::Get()->SaveConfigToDisk();
+		}
+	}
+
+	TArray<FWidgetSlot>& StartIterationOverMainMenuWidgetSlots() { QueueWidgetSlotChanges = true; return WidgetSlots; }
+	void				 EndIterationOverMainMenuWidgetSlots()	 { QueueWidgetSlotChanges = false; ProcessQueuedMainWidgetSlots(); }
+
+#if WITH_EDITOR
+	void SetWorld(const UWorld* World)
+	{
+		OwningWorld = World;
+		if (World)
+		{
+			int32 PIEInstanceId = World->GetOutermost()->GetPIEInstanceID();
+			if (PIEInstanceId != INDEX_NONE)
+			{
+				SaveDataSectionName = FString::Printf(TEXT("MainMenuBar_%i"), PIEInstanceId);
+			}
+		}
+	}
+	const UWorld* GetWorld() const { return OwningWorld.Get(); }
+	TWeakObjectPtr<const UWorld> OwningWorld;
+#endif
+
+#if WITH_EDITOR
+	FString						 SaveDataSectionName = TEXT("MainMenuBar_Editor");
+#else
+	FString						 SaveDataSectionName = TEXT("MainMenuBar_Game");
+#endif
+	TArray<FQueuedWidgetSlot>	 WidgetSlotsToAdd;
+	TArray<FQueuedWidgetSlot>	 WidgetSlotsToRemove;
+	TArray<FWidgetSlot>			 WidgetSlots;
+	bool						 QueueWidgetSlotChanges = false;
+};
+
+FImGuiMenuContainer& GetMenuContainerForWorld(const UWorld* World);
+
+void RegisterMainMenuWidgetForWorld(
+	const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
+	FOnTickImGuiWidgetDelegate TickDelegate, bool bTickInMenuBar)
+{
+	FImGuiMenuContainer& MenuContainer = GetMenuContainerForWorld(World);
+	MenuContainer.RegisterWidget(WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, bTickInMenuBar);
+}
+
+void UnregisterMainMenuWidgetForWorld(const UWorld* World, const char* WidgetPath)
+{
+	FImGuiMenuContainer& MenuContainer = GetMenuContainerForWorld(World);
+	MenuContainer.UnregisterWidget(WidgetPath);
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+FAutoRegisterMainMenuWidget::FAutoRegisterMainMenuWidget(FImGuiWidgetRegisterParams RegisterParams)
 {
 	if (!ensureAlways(RegisterParams.IsValid()))
 	{
@@ -146,7 +427,9 @@ FAutoRegisterMainWindowWidget::FAutoRegisterMainWindowWidget(FStaticWidgetRegist
 	if (UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get())
 	{
 		RegisterParams.InitFunction();
-		ImGuiSubsystem->GetMainWindowTickDelegate().AddStatic(RegisterParams.TickFunction);
+		GetMenuContainerForWorld(nullptr).RegisterWidget(
+			RegisterParams.WidgetPath, RegisterParams.WidgetDescription, RegisterParams.WidgetIcon.GetOptionalIcon(),
+			FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction), RegisterParams.bTickInMenuBar);
 	}
 	else
 	{
@@ -154,43 +437,46 @@ FAutoRegisterMainWindowWidget::FAutoRegisterMainWindowWidget(FStaticWidgetRegist
 			[RegisterParams](UImGuiSubsystem* ImGuiSubsystem)
 			{
 				RegisterParams.InitFunction();
-				ImGuiSubsystem->GetMainWindowTickDelegate().AddStatic(RegisterParams.TickFunction);
+				GetMenuContainerForWorld(nullptr).RegisterWidget(
+					RegisterParams.WidgetPath, RegisterParams.WidgetDescription, RegisterParams.WidgetIcon.GetOptionalIcon(),
+					FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction), RegisterParams.bTickInMenuBar);
 			});
 	}
 }
 
 #if WITH_EDITOR
-TSharedRef<FWorkspaceItem> GetImGuiTabGroup();
-
-static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FStaticWidgetRegisterParams RegisterParams)
+static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FImGuiWidgetRegisterParams RegisterParams)
 {
-	FOnTickImGuiWidgetDelegate TickDelegate;
-	TickDelegate.BindStatic(RegisterParams.TickFunction);
-
 	return SNew(SDockTab)
 		.TabRole(ETabRole::NomadTab)
 		[
 			SNew(SImGuiWidget)
 			.MainViewportWindow(SpawnTabArgs.GetOwnerWindow())
-			.OnTickDelegate(TickDelegate)
-			.ConfigFileName(RegisterParams.WidgetName)
+			.OnTickDelegate(FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction))
+			.ConfigFileName(RegisterParams.GetWidetName())
 			.bEnableViewports(RegisterParams.bEnableViewports)
 		];
 }
 
-FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FStaticWidgetRegisterParams RegisterParams)
+FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegisterParams RegisterParams)
 {
+	extern TSharedRef<FWorkspaceItem> GetImGuiTabGroup();
+
 	if (!ensureAlways(RegisterParams.IsValid()))
 	{
 		return;
 	}
-
+	if (!ensureAlwaysMsgf(!RegisterParams.bTickInMenuBar, TEXT("Standalone widgets should not be using `bTickInMenuBar` option")))
+	{
+		return;
+	}
+	
 	if (UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get())
 	{
 		RegisterParams.InitFunction();
-		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.WidgetName), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
+		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.GetWidetName()), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
 			.SetGroup(GetImGuiTabGroup())
-			.SetDisplayName(FText::FromString(ANSI_TO_TCHAR(RegisterParams.WidgetName)))
+			.SetDisplayName(FText::FromString(ANSI_TO_TCHAR(RegisterParams.GetWidetName())))
 			.SetTooltipText(FText::FromString(ANSI_TO_TCHAR(RegisterParams.WidgetDescription)))
 			.SetIcon(RegisterParams.WidgetIcon);
 	}
@@ -200,9 +486,9 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FStaticWidgetRegist
 			[RegisterParams](UImGuiSubsystem* ImGuiSubsystem)
 			{
 				RegisterParams.InitFunction();
-				FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.WidgetName), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
+				FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.GetWidetName()), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
 					.SetGroup(GetImGuiTabGroup())
-					.SetDisplayName(FText::FromString(ANSI_TO_TCHAR(RegisterParams.WidgetName)))
+					.SetDisplayName(FText::FromString(ANSI_TO_TCHAR(RegisterParams.GetWidetName())))
 					.SetTooltipText(FText::FromString(ANSI_TO_TCHAR(RegisterParams.WidgetDescription)))
 					.SetIcon(RegisterParams.WidgetIcon);
 			});
@@ -212,45 +498,223 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FStaticWidgetRegist
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-/* Main window widget, only one instance active at a time */
-class SImGuiMainWindowWidget : public SImGuiWidgetBase
+/* main menu widget, only one instance per world */
+class SImGuiMainMenuWidget : public SImGuiWidgetBase
 {
 	using Super = SImGuiWidgetBase;
 public:
-	SLATE_BEGIN_ARGS(SImGuiMainWindowWidget)
+	SLATE_BEGIN_ARGS(SImGuiMainMenuWidget)
 		: _MainViewportWindow(nullptr)
+		, _OwningWorld(nullptr)
 		{
 		}
 		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
+		SLATE_ARGUMENT(const UWorld*, OwningWorld);
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs)
 	{
+		FAnsiString ConfigFileName = "ImGui";
+		if (InArgs._OwningWorld)
+		{
+			int32 PIEInstanceId = InArgs._OwningWorld->GetOutermost()->GetPIEInstanceID();
+			if (PIEInstanceId != INDEX_NONE)
+			{
+				ConfigFileName = FAnsiString::Printf("ImGui_%i", PIEInstanceId);
+			}
+		}
+
 		Super::Construct(
 			Super::FArguments()
 			.MainViewportWindow(InArgs._MainViewportWindow)
-			.ConfigFileName("ImGui"));
+			.ConfigFileName(*ConfigFileName));
+		OwningWorld = InArgs._OwningWorld;
+
+		FCoreDelegates::OnBeginFrame.AddRaw(this, &SImGuiMainMenuWidget::BeginFrame);
+		FCoreDelegates::OnEndFrame.AddRaw(this, &SImGuiMainMenuWidget::EndFrame);
+
+		// first frame setup
+		BeginFrame();
+	}
+
+	~SImGuiMainMenuWidget()
+	{
+		FCoreDelegates::OnBeginFrame.RemoveAll(this);
+		FCoreDelegates::OnEndFrame.RemoveAll(this);
+	}
+
+	const UWorld* GetWorld() const { return OwningWorld.Get(); }
+
+private:
+	void BeginFrame()
+	{
+		BeginImGuiFrame(GetCachedGeometry());
+
+		if (!bIsDockNodeValid)
+		{
+			bIsDockNodeValid = true;
+			const bool bIsEditorWorld = GIsEditor && !GetWorld();
+			ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), bIsEditorWorld ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_PassthruCentralNode);
+		}
+	}
+
+	void EndFrame()
+	{
+		EndImGuiFrame();
+		bIsDockNodeValid = false;
 	}
 
 private:
-	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override
+	TWeakObjectPtr<const UWorld> OwningWorld;
+
+	// cached during tick for easier access
+	bool bIsDockNodeValid = false;
+	UImGuiSubsystem* ImGuiSubsystem = nullptr;
+	FImGuiImageBindingParams OpenFolderIcon{};
+	FImGuiImageBindingParams CloseFolderIcon{};
+
+	void TickMainMenuBar(FImGuiMenuContainer& MenuContainer, FImGuiMenuContainer::FWidgetSlot& Slot, FImGuiTickContext* TickContext, bool bIsRoot)
 	{
-		UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
-		if (ImGuiSubsystem->GetMainWindowTickDelegate().IsBound())
+		if (Slot.IsMenuItem())
 		{
-			ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
-			ImGuiSubsystem->GetMainWindowTickDelegate().Broadcast(TickContext);
+			if (Slot.bTickInMenuBar)
+			{
+				Slot.GetTickDelegate().ExecuteIfBound(TickContext);
+			}
+			else
+			{
+				const float CursorPosX = ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x * 0.5f;
+				
+				char LabelBuffer[128];
+				FCStringAnsi::Sprintf(LabelBuffer, "        %s", Slot.GetName());
+				if (ImGui::MenuItem(LabelBuffer, nullptr, Slot.bIsActive))
+				{
+					Slot.bIsActive = !Slot.bIsActive;
+					MenuContainer.SaveSlotState(Slot);
+				}
+				ImGui::SetItemTooltip(*Slot.ToolTip);
+
+				if (Slot.Icon)
+				{
+					FImGuiImageBindingParams Icon = ImGuiSubsystem->RegisterOneFrameResource(Slot.Icon, ImGui::GetTextLineHeight());
+					ImGui::SameLine();
+					ImGui::SetCursorPosX(CursorPosX);
+					ImGui::Image(Icon.Id, Icon.Size, Icon.UV0, Icon.UV1);
+				}
+			}
+		}
+		else if (!Slot.GetChildren().IsEmpty())
+		{
+			const float CursorPosX = ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x * 0.5f;
+			
+			char LabelBuffer[128];
+			if (!bIsRoot)
+			{
+				FCStringAnsi::Sprintf(LabelBuffer, "        %s", Slot.GetName());
+			}
+			else
+			{
+				FCStringAnsi::Sprintf(LabelBuffer, "%s", Slot.GetName());
+			}
+			const bool bOpen = ImGui::BeginMenu(LabelBuffer);
+			if (bOpen)
+			{
+				for (auto& Child : Slot.GetChildren())
+				{
+					TickMainMenuBar(MenuContainer, Child, TickContext, /*bIsRoot=*/false);
+				}
+				ImGui::EndMenu();
+			}
+			if (!bIsRoot)
+			{
+				ImGui::SameLine();
+				ImGui::SetCursorPosX(CursorPosX);
+				if (bOpen)
+				{
+					ImGui::Image(OpenFolderIcon.Id, OpenFolderIcon.Size, OpenFolderIcon.UV0, OpenFolderIcon.UV1);
+				}
+				else
+				{
+					ImGui::Image(CloseFolderIcon.Id, CloseFolderIcon.Size, CloseFolderIcon.UV0, CloseFolderIcon.UV1);
+				}
+			}
+		}
+	}
+	void TickMainMenuWidgets(FImGuiMenuContainer& MenuContainer, FImGuiMenuContainer::FWidgetSlot& Slot, FImGuiTickContext* TickContext)
+	{
+		if (Slot.IsMenuItem())
+		{
+			if (Slot.bIsActive)
+			{
+				check(!Slot.bTickInMenuBar); //should not be possible to activate these
+
+				const bool bWasActive = Slot.bIsActive;
+				if (ImGui::Begin(Slot.GetName(), &Slot.bIsActive))
+				{
+					Slot.GetTickDelegate().ExecuteIfBound(TickContext);
+				}
+				ImGui::End();
+
+				if (bWasActive != Slot.bIsActive)
+				{
+					MenuContainer.SaveSlotState(Slot);
+				}
+			}
 		}
 		else
 		{
-			const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
-			ImGui::SetNextWindowDockID(MainDockSpaceID);
-			if (ImGui::Begin("Empty", nullptr))
+			for (auto& Child : Slot.GetChildren())
 			{
-				ImGui::Text("Nothing to display...");
+				TickMainMenuWidgets(MenuContainer, Child, TickContext);
 			}
-			ImGui::End();
 		}
+	}
+
+	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override
+	{
+		ImGuiSubsystem = UImGuiSubsystem::Get();
+		FImGuiMenuContainer& MenuContainer = GetMenuContainerForWorld(GetWorld());
+		TArray<FImGuiMenuContainer::FWidgetSlot>& Slots = MenuContainer.StartIterationOverMainMenuWidgetSlots();
+		ON_SCOPE_EXIT
+		{
+			MenuContainer.EndIterationOverMainMenuWidgetSlots();
+			ImGuiSubsystem = nullptr;
+		};
+
+		if (Slots.IsEmpty())
+		{
+			return;
+		}
+
+		FImGuiTickScope Scope{ TickContext };
+
+		OpenFolderIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderOpen"), ImGui::GetTextLineHeight());
+		CloseFolderIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderClosed"), ImGui::GetTextLineHeight());
+
+		if (!bIsDockNodeValid)
+		{
+			const bool bIsEditorWorld = GIsEditor && !GetWorld();
+			ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), bIsEditorWorld ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_PassthruCentralNode);
+		}
+
+		if (ImGui::BeginMainMenuBar())
+		{
+			for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
+			{
+				TickMainMenuBar(MenuContainer, Slot, TickContext, /*bIsRoot=*/true);
+			}
+			ImGui::EndMainMenuBar();
+		}
+
+		for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
+		{
+			TickMainMenuWidgets(MenuContainer, Slot, TickContext);
+		}
+
+		// we are done with the dock node
+		// if we enter `TickImGuiInternal` again that would mean the event is coming from window resizing
+		// so will have to add the dock node again!
+		bIsDockNodeValid = false;
 	}
 };
 
@@ -274,21 +738,21 @@ private:
 			LOCTEXT("ImGuiGroupName", "ImGui"),
 			FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
 
-		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateStatic(&FImGuiRuntimeModule::SpawnImGuiTab))
+		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateRaw(this, &FImGuiRuntimeModule::SpawnImGuiTab))
 			.SetGroup(m_ImGuiTabGroup.ToSharedRef())
 			.SetDisplayName(LOCTEXT("ImGuiMainTabTitle", "ImGui"))
 			.SetTooltipText(LOCTEXT("ImGuiMainTabTooltip", "Window hosting static ImGui widgets"))
 			.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
+
+		FWorldDelegates::OnWorldBeginTearDown.AddRaw(this, &FImGuiRuntimeModule::OnWorldBeginTearDown);
+#else
+		UGameViewportClient::OnViewportCreated().AddRaw(this, &FImGuiRuntimeModule::OnViewportCreated);
 #endif
 
-		if (!GIsEditor)
-		{
-			// game world uses console command instead of tabs
-			m_OpenImGuiWindowCommand = MakeUnique<FAutoConsoleCommand>(
-				TEXT("imgui.OpenWindow"),
-				TEXT("Opens ImGui window."),
-				FConsoleCommandDelegate::CreateRaw(this, &FImGuiRuntimeModule::OpenImGuiMainWindow));
-		}
+		m_OpenImGuiMenuCommand = MakeUnique<FAutoConsoleCommandWithWorld>(
+			TEXT("imgui.ToggleMenu"),
+			TEXT("Toggles ImGui menu."),
+			FConsoleCommandWithWorldDelegate::CreateRaw(this, &FImGuiRuntimeModule::ToggleImGuiMainMenu));
 	}
 
 	virtual void ShutdownModule() override
@@ -298,64 +762,245 @@ private:
 		{
 			FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(ImGuiTabName);
 		}
+		m_MainMenuWidgets.Reset();
+		m_EditorMainMenuWidget.Reset();
+#else
+		m_MainMenuWidget.Reset();
 #endif
 
-		m_ImGuiMainWindow.Reset();
-		m_OpenImGuiWindowCommand.Reset();
+		UGameViewportClient::OnViewportCreated().RemoveAll(this);
+
+		m_OpenImGuiMenuCommand.Reset();
 	}
 
 #if WITH_EDITOR
-	static TSharedRef<SDockTab> SpawnImGuiTab(const FSpawnTabArgs& SpawnTabArgs)
+	TSharedRef<SDockTab> SpawnImGuiTab(const FSpawnTabArgs& SpawnTabArgs)
 	{
+		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = SNew(SImGuiMainMenuWidget)
+			.MainViewportWindow(SpawnTabArgs.GetOwnerWindow());
+		m_EditorMainMenuWidget = MainMenuWidget;
+
 		return SNew(SDockTab)
 			.TabRole(ETabRole::NomadTab)
 			[
-				SNew(SImGuiMainWindowWidget)
-				.MainViewportWindow(SpawnTabArgs.GetOwnerWindow())
+				MainMenuWidget.ToSharedRef()
 			];
 	}
-#endif
-	
-	void OpenImGuiMainWindow()
-	{
-		if (!m_ImGuiMainWindow.IsValid())
-		{
-			m_ImGuiMainWindow = SNew(SWindow)
-				.Title(LOCTEXT("ImGuiWindowTitle", "ImGui"))
-				.ClientSize(FVector2f(512.f, 512.f))
-				.AutoCenter(EAutoCenter::None)
-				.SupportsMaximize(true)
-				.SupportsMinimize(true)
-				.UseOSWindowBorder(false)
-				//.LayoutBorder(FMargin(0.f))
-				//.UserResizeBorder(FMargin(0.f))
-				.SizingRule(ESizingRule::UserSized);
-			m_ImGuiMainWindow = FSlateApplication::Get().AddWindow(m_ImGuiMainWindow.ToSharedRef());
-			m_ImGuiMainWindow->SetContent(SNew(SImGuiMainWindowWidget).MainViewportWindow(m_ImGuiMainWindow));
 
-			m_ImGuiMainWindow->GetOnWindowClosedEvent().AddLambda(
-				[this](const TSharedRef<SWindow>& Window)
-				{
-					m_ImGuiMainWindow = nullptr;
-				}
-			);
+	void OnWorldBeginTearDown(UWorld* World)
+	{
+		for (auto Itr = m_MainMenuWidgets.CreateIterator(); Itr; ++Itr)
+		{
+			TSharedPtr<SImGuiMainMenuWidget> Widget = Itr->Pin();
+			const UWorld* WidgetWorld = Widget.IsValid() ? Widget->GetWorld() : nullptr;
+			if (!WidgetWorld || WidgetWorld == World)
+			{
+				Itr.RemoveCurrent();
+			}
+		}
+
+		for (auto Itr = m_MenuContainers.CreateIterator(); Itr; ++Itr)
+		{
+			if (Itr->GetWorld() == World)
+			{
+				Itr.RemoveCurrent();
+			}
+		}
+	}
+
+	void ToggleImGuiMainMenu(UWorld* World)
+	{
+		if (!World->IsGameWorld())
+		{
+			return;
+		}
+
+		int32 MainMenuWidgetIndex = INDEX_NONE;
+		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget;
+		for (int32 WidgetIndex = 0; WidgetIndex < m_MainMenuWidgets.Num(); ++WidgetIndex)
+		{
+			MainMenuWidget = m_MainMenuWidgets[WidgetIndex].Pin();
+			if (MainMenuWidget.IsValid() && MainMenuWidget->GetWorld() == World)
+			{
+				MainMenuWidgetIndex = WidgetIndex;
+				break;
+			}
+			MainMenuWidget.Reset();
+		}
+
+		if (!MainMenuWidget.IsValid())
+		{
+			UGameViewportClient* GameViewport = World->bIsTearingDown ? nullptr : World->GetGameViewport();
+			if (GameViewport)
+			{
+				MainMenuWidget = SNew(SImGuiMainMenuWidget)
+					.MainViewportWindow(GameViewport->GetWindow())
+					.OwningWorld(World);
+				GameViewport->AddViewportWidgetContent(MainMenuWidget.ToSharedRef(), TNumericLimits<int32>::Max());
+				m_MainMenuWidgets.Add(MainMenuWidget);
+
+				// same logic as Shift+F1 , need to run on next tick as console will refocus the game viewport
+				World->GetTimerManager().SetTimerForNextTick(
+					[]()
+					{
+						FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
+						FSlateApplication::Get().ResetToDefaultInputSettings();
+					});
+			}
 		}
 		else
 		{
-			UE_LOG(LogTemp, Log, TEXT("Only one instance of ImGui window is supported"))
+			if (UGameViewportClient* GameViewport = World->GetGameViewport())
+			{
+				GameViewport->RemoveViewportWidgetContent(MainMenuWidget.ToSharedRef());
+
+				FSlateApplication::Get().SetAllUserFocusToGameViewport(EFocusCause::SetDirectly);
+			}
+			if (MainMenuWidgetIndex != INDEX_NONE)
+			{
+				m_MainMenuWidgets.RemoveAt(MainMenuWidgetIndex);
+			}
 		}
+	}
+#else
+	void OnViewportCreated()
+	{
+		UGameViewportClient* GameViewport = GEngine->GameViewport;
+		if (IsValid(GameViewport))
+		{
+			GameViewport->OnInputKey().AddRaw(this, &FImGuiRuntimeModule::HandleViewportInputKeyEvent);
+		}
+	}
+
+	void HandleViewportInputKeyEvent(const FInputKeyEventArgs& EventArgs)
+	{
+		if (EventArgs.Event != EInputEvent::IE_Pressed)
+		{
+			return;
+		}
+
+		FModifierKeysState KeyState = FSlateApplication::Get().GetModifierKeys();
+		// take focus from viewport client and show the mouse cursor (similar to pressing Shift+F1 during PIE)
+		if (EventArgs.Key == EKeys::F1 && KeyState.IsShiftDown())
+		{
+			FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
+			FSlateApplication::Get().ResetToDefaultInputSettings();
+		}
+	}
+
+	void ToggleImGuiMainMenu(UWorld* World)
+	{
+		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_MainMenuWidget.Pin();
+		
+		if (!MainMenuWidget.IsValid())
+		{
+			if (UGameViewportClient* GameViewport = World->GetGameViewport())
+			{
+				MainMenuWidget = SNew(SImGuiMainMenuWidget)
+					.MainViewportWindow(GameViewport->GetWindow());
+				GameViewport->AddViewportWidgetContent(MainMenuWidget.ToSharedRef(), TNumericLimits<int32>::Max());
+				m_MainMenuWidget = MainMenuWidget;
+
+				// same logic as Shift+F1 , need to run on next tick as console will refocus the game viewport
+				World->GetTimerManager().SetTimerForNextTick(
+					[]()
+					{
+						FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
+						FSlateApplication::Get().ResetToDefaultInputSettings();
+					});
+			}
+		}
+		else
+		{
+			if (UGameViewportClient* GameViewport = World->GetGameViewport())
+			{
+				GameViewport->RemoveViewportWidgetContent(MainMenuWidget.ToSharedRef());
+				FSlateApplication::Get().SetAllUserFocusToGameViewport(EFocusCause::SetDirectly);
+			}
+			m_MainMenuWidget.Reset();
+		}
+	}
+#endif //#if WITH_EDITOR
+
+public:
+	FImGuiTickContext* GetWidgetTickContext(const UWorld* World) const
+	{
+		auto GetTickContextFromWidget = [](SImGuiMainMenuWidget* Widget) -> FImGuiTickContext*
+			{
+#if WITH_EDITOR
+				if ((GFrameCounter - Widget->GetLastPaintFrameCounter()) > 1)
+				{
+					return nullptr;
+				}
+#endif
+				ImGuiContext* ImguiContext = Widget->GetImGuiContext();
+				// NOTE: additional `WithinFrameScope` check as the context will most likely be used for drawing widget
+				// No point returning valid context if we cannot tick widgets
+				return (ImguiContext && ImguiContext->WithinFrameScope) ? FImGuiTickContext::GetTickContext(ImguiContext) : nullptr;
+			};
+
+#if WITH_EDITOR
+		if (!World)
+		{
+			TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_EditorMainMenuWidget.Pin();
+			if (MainMenuWidget.IsValid())
+			{
+				return GetTickContextFromWidget(MainMenuWidget.Get());
+			}
+		}
+		else
+		{
+			for (int32 WidgetIndex = 0; WidgetIndex < m_MainMenuWidgets.Num(); ++WidgetIndex)
+			{
+				TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_MainMenuWidgets[WidgetIndex].Pin();
+				if (MainMenuWidget.IsValid() && MainMenuWidget->GetWorld() == World)
+				{
+					return GetTickContextFromWidget(MainMenuWidget.Get());
+				}
+			}
+		}
+#else
+		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_MainMenuWidget.Pin();
+		if (MainMenuWidget.IsValid())
+		{
+			return GetTickContextFromWidget(MainMenuWidget.Get());
+		}
+#endif
+		return nullptr;
+	}
+
+	FImGuiMenuContainer& GetMenuContainer(const UWorld* World)
+	{
+#if WITH_EDITOR
+		for (auto Itr = m_MenuContainers.CreateIterator(); Itr; ++Itr)
+		{
+			if (Itr->GetWorld() == World)
+			{
+				return *Itr;
+			}
+		}
+		FImGuiMenuContainer NewContainer = {};
+		NewContainer.SetWorld(World);
+		return m_MenuContainers.Add_GetRef(MoveTemp(NewContainer));
+#else
+		return m_MenuContainer;
+#endif
 	}
 
 public:
 #if WITH_EDITOR
 	static const FName ImGuiTabName;
-
-	// tab group for adding static widgets
 	TSharedPtr<FWorkspaceItem> m_ImGuiTabGroup;
+
+	TArray<FImGuiMenuContainer> m_MenuContainers;
+	TWeakPtr<SImGuiMainMenuWidget> m_EditorMainMenuWidget;
+	TArray<TWeakPtr<SImGuiMainMenuWidget>> m_MainMenuWidgets;
+#else
+	FImGuiMenuContainer m_MenuContainer;
+	TWeakPtr<SImGuiMainMenuWidget> m_MainMenuWidget;
 #endif
 
-	TSharedPtr<SWindow> m_ImGuiMainWindow = nullptr;
-	TUniquePtr<FAutoConsoleCommand> m_OpenImGuiWindowCommand = nullptr;
+	TUniquePtr<FAutoConsoleCommandWithWorld> m_OpenImGuiMenuCommand = nullptr;
 };
 
 #if WITH_EDITOR
@@ -363,10 +1008,22 @@ const FName FImGuiRuntimeModule::ImGuiTabName = TEXT("ImGuiTab");
 
 TSharedRef<FWorkspaceItem> GetImGuiTabGroup()
 {
-	FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+	static FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
 	return ImGuiModule.m_ImGuiTabGroup.ToSharedRef();
 }
 #endif
+
+FImGuiMenuContainer& GetMenuContainerForWorld(const UWorld* World)
+{
+	static FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+	return ImGuiModule.GetMenuContainer(World);
+}
+
+FImGuiTickContext* GetWidgetTickContextForWorld(const UWorld* World)
+{
+	static FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+	return ImGuiModule.GetWidgetTickContext(World);
+}
 
 IMPLEMENT_MODULE(FImGuiRuntimeModule, ImGuiRuntime)
 

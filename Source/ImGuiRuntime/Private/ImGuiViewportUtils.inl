@@ -501,7 +501,7 @@ namespace ImGuiUtils
 									}
 									else
 									{
-										DrawCmd.UserCallback(RHICmdList, DrawRect, DrawCmd.UserCallbackData, DrawCmd.UserCallbackDataSize);
+										DrawCmd.UserCallback(RHICmdList, DrawRect, DrawData->OwnerViewport ? DrawData->OwnerViewport->Pos : ImVec2(0.f, 0.f), DrawCmd.UserCallbackData, DrawCmd.UserCallbackDataSize);
 
 										// TODO: add a flag to tell whether callback modified the render state here?
 										{

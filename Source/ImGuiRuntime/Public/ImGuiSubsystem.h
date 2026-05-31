@@ -11,8 +11,10 @@
 
 #include "ImGuiSubsystem.generated.h"
 
+class UWorld;
 class SWindow;
 class UTexture2D;
+class FConfigFile;
 class FSlateShaderResource;
 class UTextureRenderTarget2D;
 class FSlateShaderResourceProxy;
@@ -76,8 +78,12 @@ public:
 		return OnSubsystemInitializedDelegate;
 	}
 
-	IMGUIRUNTIME_API const char* GetIniDirectoryPath()	const { return *m_IniDirectoryPath; }
-	IMGUIRUNTIME_API const char* GetIniFilePath()		const { return *m_IniFilePath; }
+	const char* GetIniDirectoryPath()	const { return *m_IniDirectoryPath; }
+	const char* GetIniFilePath()		const { return *m_IniFilePath; }
+
+	IMGUIRUNTIME_API static const FString& GetSaveDataConfigFilepath();
+	FConfigFile* GetSaveDataConfigFile() const { return m_SaveDataConfigFile; }
+	IMGUIRUNTIME_API bool SaveConfigToDisk() const;
 
 	// resources
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2f LocalSize, float DrawScale = 1.f);
@@ -85,22 +91,24 @@ public:
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush);
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(UTexture2D* Texture);
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource);
+	const TArray<FImGuiTextureResource>&	  GetOneFrameResources() const { return m_OneFrameResources; }
 
 	// widget
 	IMGUIRUNTIME_API TSharedPtr<SWindow> CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
-	IMGUIRUNTIME_API FOnTickImGuiMainWindowDelegate& GetMainWindowTickDelegate() { return m_ImGuiMainWindowTickDelegate; }
+	IMGUIRUNTIME_API void RegisterMainMenuWidget(
+		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
+		FOnTickImGuiWidgetDelegate TickDelegate, bool bTickInMenuBar);
+	IMGUIRUNTIME_API void UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath);
+	IMGUIRUNTIME_API FImGuiTickContext* GetWidgetTickContext(const UWorld* World);
 
-	ImFontAtlas* GetSharedFontAtlas() const { return m_SharedFontAtlas.Get(); }
+	void UpdateFontAtlasTexture(ImTextureData* TexData);
 	IMGUIRUNTIME_API ImTextureRef GetSharedFontTextureID() const;
+	ImFontAtlas* GetSharedFontAtlas() const { return m_SharedFontAtlas.Get(); }
 
 	static ImTextureID	IndexToImGuiID(uint32 Index)	{ return static_cast<ImTextureID>(Index); }
 	static uint32		ImGuiIDToIndex(ImTextureID ID)  { return static_cast<uint32>(ID); }
 	static ImTextureID	GetMissingImageTextureID()		{ return MissingImageTextureIndex; }
 	static uint32		GetMissingImageTextureIndex()	{ return ImGuiIDToIndex(MissingImageTextureIndex); }
-
-	const TArray<FImGuiTextureResource>& GetOneFrameResources() const { return m_OneFrameResources; }
-
-	void UpdateFontAtlasTexture(ImTextureData* TexData);
 
 	bool CaptureGpuFrame() const;
 
@@ -114,8 +122,8 @@ private:
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnSubsystemInitialized, UImGuiSubsystem* /*Subsystem*/)
 	static FOnSubsystemInitialized OnSubsystemInitializedDelegate;
 
-	FOnTickImGuiMainWindowDelegate m_ImGuiMainWindowTickDelegate;
-	
+	FConfigFile* m_SaveDataConfigFile = nullptr;
+
 	FAnsiString m_IniDirectoryPath;
 	FAnsiString m_IniFilePath;
 

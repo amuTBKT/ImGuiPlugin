@@ -9,6 +9,8 @@
 #include "Widgets/SWindow.h"
 #include "TextureResource.h"
 #include "Engine/Texture2D.h"
+#include "Misc/EngineVersion.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Framework/Application/SlateApplication.h"
 
@@ -58,6 +60,15 @@ FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
 
 UImGuiSubsystem::FOnSubsystemInitialized UImGuiSubsystem::OnSubsystemInitializedDelegate = {};
 
+const FString& UImGuiSubsystem::GetSaveDataConfigFilepath()
+{
+	const TCHAR* UserSettingsDir = FPlatformProcess::UserSettingsDir();
+	const FString EngineVersion = FEngineVersion::Current().ToString(EVersionComponent::Minor);
+	static const FString ConfigFilepath =
+		FPaths::Combine(UserSettingsDir, *FApp::GetEpicProductIdentifier(), EngineVersion, TEXT("Config/ImGui/ImGuiSaveData.ini"));
+	return ConfigFilepath;
+}
+
 bool UImGuiSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
 	if (!Super::ShouldCreateSubsystem(Outer))
@@ -71,6 +82,21 @@ bool UImGuiSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+
+	// setup config file for storing widget specific data
+	{
+		m_SaveDataConfigFile = GConfig->Find(GetSaveDataConfigFilepath());
+		if (!m_SaveDataConfigFile)
+		{
+			m_SaveDataConfigFile = &GConfig->Add(GetSaveDataConfigFilepath(), FConfigFile{});
+		}
+
+		if (m_SaveDataConfigFile)
+		{
+			// needed to enable saving
+			m_SaveDataConfigFile->NoSave = false;
+		}
+	}
 
 	// setup ini file path and directory
 	{
@@ -181,6 +207,44 @@ TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, FVe
 	return Window;
 }
 
+bool UImGuiSubsystem::SaveConfigToDisk() const
+{
+	if (m_SaveDataConfigFile)
+	{
+		GConfig->Flush(false, GetSaveDataConfigFilepath());
+		return true;
+	}
+	return false;
+}
+
+void UImGuiSubsystem::RegisterMainMenuWidget(
+	const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
+	FOnTickImGuiWidgetDelegate TickDelegate, bool bTickInMenuBar)
+{
+	// defined in ImGuiRuntimeModule.cpp
+	extern void RegisterMainMenuWidgetForWorld(
+		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush * WidgetIcon,
+		FOnTickImGuiWidgetDelegate TickDelegate, bool bTickInMenuBar);
+
+	RegisterMainMenuWidgetForWorld(World, WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, bTickInMenuBar);
+}
+
+void UImGuiSubsystem::UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath)
+{
+	// defined in ImGuiRuntimeModule.cpp
+	extern void UnregisterMainMenuWidgetForWorld(const UWorld* World, const char* WidgetPath);
+
+	UnregisterMainMenuWidgetForWorld(World, WidgetPath);
+}
+
+FImGuiTickContext* UImGuiSubsystem::GetWidgetTickContext(const UWorld* World)
+{
+	// defined in ImGuiRuntimeModule.cpp
+	extern FImGuiTickContext* GetWidgetTickContextForWorld(const UWorld* World);
+
+	return GetWidgetTickContextForWorld(World);
+}
+
 void UImGuiSubsystem::OnBeginFrame()
 {
 	m_OneFrameResources.Reset();
@@ -263,11 +327,10 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 	{
 		const int32 FontAtlasWidth = TexData->Width;
 		const int32 FontAtlasHeight = TexData->Height;
-		const int32 BytesPerPixel = TexData->BytesPerPixel;
-		check(BytesPerPixel == GPixelFormats[PF_R8G8B8A8].BlockBytes);
 
 		if (TexData->Status == ImTextureStatus_WantCreate)
 		{
+			check(TexData->BytesPerPixel == GPixelFormats[PF_R8G8B8A8].BlockBytes);
 			TexData->SetTexID(AllocateFontAtlasTexture(FontAtlasWidth, FontAtlasHeight) + FontAtlasTextureStartIndex);
 		}
 
@@ -314,54 +377,41 @@ bool UImGuiSubsystem::CaptureGpuFrame() const
 
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2f LocalSize, float DrawScale/*=1.f*/)
 {
-	if (!SlateBrush)
-	{
-		return {};
-	}
-
-	const FSlateResourceHandle& ResourceHandle = SlateBrush->GetRenderingResource(LocalSize, DrawScale);
-	const FSlateShaderResourceProxy* Proxy = ResourceHandle.GetResourceProxy();
-	if (!Proxy)
-	{
-		return {};
-	}
-	
-	uint32 ResourceHandleIndex;
-	// NOTE: when updating slate atlases `Proxy->Resource` can return null which gets patched later in the frame.
-	// So make sure we get a unique `ResourceHandleIndex` here in order to allow shader to override the UV data.
-	if (Proxy->Resource)
-	{
-		ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([Proxy](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == Proxy->Resource; });
-	}
-	else
-	{
-		ResourceHandleIndex = INDEX_NONE;
-	}
-
-	if (ResourceHandleIndex == INDEX_NONE)
-	{
-		ResourceHandleIndex = m_OneFrameResources.Emplace(ResourceHandle);
-	}
-
-	const FVector2f StartUV = Proxy->StartUV;
-	const FVector2f SizeUV = Proxy->SizeUV;
-
 	FImGuiImageBindingParams Params = {};
-	Params.Size = ImVec2(LocalSize.X, LocalSize.Y) * DrawScale;
-	Params.UV0 = ImVec2(StartUV.X, StartUV.Y);
-	Params.UV1 = ImVec2(StartUV.X + SizeUV.X, StartUV.Y + SizeUV.Y);
-	Params.Id = IndexToImGuiID(ResourceHandleIndex);
+	if (SlateBrush)
+	{
+		const FSlateResourceHandle& ResourceHandle = SlateBrush->GetRenderingResource(LocalSize, DrawScale);
+		const FSlateShaderResourceProxy* Proxy = ResourceHandle.GetResourceProxy();
+		if (Proxy)
+		{
+			int32 ResourceHandleIndex;
+			// NOTE: when updating slate atlases `Proxy->Resource` can return null which gets patched later in the frame.
+			// So make sure we get a unique `ResourceHandleIndex` here in order to allow shader to override the UV data.
+			if (Proxy->Resource)
+			{
+				ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([Proxy](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == Proxy->Resource; });
+			}
+			else
+			{
+				ResourceHandleIndex = INDEX_NONE;
+			}
 
+			if (ResourceHandleIndex == INDEX_NONE)
+			{
+				ResourceHandleIndex = m_OneFrameResources.Emplace(ResourceHandle);
+			}
+
+			Params.Size = ImVec2(LocalSize.X, LocalSize.Y) * DrawScale;
+			Params.UV0 = ImVec2(Proxy->StartUV.X, Proxy->StartUV.Y);
+			Params.UV1 = ImVec2(Proxy->StartUV.X + Proxy->SizeUV.X, Proxy->StartUV.Y + Proxy->SizeUV.Y);
+			Params.Id = IndexToImGuiID(ResourceHandleIndex);
+		}
+	}
 	return Params;
 }
 
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
 {
-	if (!SlateBrush)
-	{
-		return {};
-	}
-
 	return RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f);
 }
 
@@ -380,22 +430,19 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(UTexture2D* T
 
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource)
 {
-	if (!SlateShaderResource)
-	{
-		return {};
-	}
-
-	uint32 ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([&](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == SlateShaderResource; });
-	if (ResourceHandleIndex == INDEX_NONE)
-	{
-		ResourceHandleIndex = m_OneFrameResources.Emplace(SlateShaderResource);
-	}
-
 	FImGuiImageBindingParams Params = {};
-	Params.Size = ImVec2(SlateShaderResource->GetWidth(), SlateShaderResource->GetHeight());
-	Params.UV0 = ImVec2(0.f, 0.f);
-	Params.UV1 = ImVec2(1.f, 1.f);
-	Params.Id = IndexToImGuiID(ResourceHandleIndex);
+	if (SlateShaderResource)
+	{
+		uint32 ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([&](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == SlateShaderResource; });
+		if (ResourceHandleIndex == INDEX_NONE)
+		{
+			ResourceHandleIndex = m_OneFrameResources.Emplace(SlateShaderResource);
+		}
 
+		Params.Size = ImVec2(SlateShaderResource->GetWidth(), SlateShaderResource->GetHeight());
+		Params.UV0 = ImVec2(0.f, 0.f);
+		Params.UV1 = ImVec2(1.f, 1.f);
+		Params.Id = IndexToImGuiID(ResourceHandleIndex);
+	}
 	return Params;
 }

@@ -23,7 +23,9 @@
 #define IMGUI_FNAME(Name) [](){ static FName StaticFName(Name); return StaticFName; }()
 
 // returns FSlateBrush for specified icon and style name
-#define IMGUI_STYLE_ICON(StyleName, IconName) [](){ static const FSlateBrush* Brush = FSlateIcon(FName(StyleName), FName(IconName)).GetIcon(); return Brush; }()
+#define IMGUI_STYLE_ICON_BRUSH(StyleName, IconName) []() -> const FSlateBrush* { static const FSlateBrush* Brush = FSlateIcon(FName(StyleName), FName(IconName)).GetOptionalIcon(); return Brush; }()
+// returns FSlateIcon for specified icon and style name
+#define IMGUI_STYLE_ICON(StyleName, IconName)  []() -> const FSlateIcon&  { static const FSlateIcon Icon = FSlateIcon(FName(StyleName), FName(IconName)); return Icon; }()
 
 class FDragDropOperation;
 struct FImGuiTickContext
@@ -44,30 +46,47 @@ struct FImGuiTickContext
 		}
 		return DragDropOp;
 	}
+
+	static FImGuiTickContext* GetTickContext(ImGuiContext* ImguiContext)
+	{
+		return ImguiContext ? (FImGuiTickContext*)ImguiContext->IO.UserData : nullptr;
+	}
+	static void StoreTickContext(FImGuiTickContext* TickContext, ImGuiContext* ImguiContext)
+	{
+		check(ImguiContext);
+		ImguiContext->IO.UserData = TickContext;
+	}
 };
 
 // since modules can be added as DLL, we need to set context before making ImGui calls.
 struct FImGuiTickScope : FNoncopyable
 {
 	explicit FImGuiTickScope(FImGuiTickContext* Context)
+		: PrevContext(BeginContext(Context))
 	{
-		BeginContext(Context);
 	}
 	~FImGuiTickScope()
 	{
-		EndContext();
+		EndContext(PrevContext);
+		PrevContext = nullptr;
 	}
 
-	FORCEINLINE static void BeginContext(FImGuiTickContext* Context)
+	FORCEINLINE static FImGuiTickContext* BeginContext(FImGuiTickContext* Context)
 	{
-		ImGui::SetCurrentContext(Context->ImguiContext);
-		ImPlot::SetCurrentContext(Context->ImplotContext);
+		ImGuiContext* PrevImGuiContext = ImGui::GetCurrentContext();
+		
+		ImGui::SetCurrentContext(Context ? Context->ImguiContext : nullptr);
+		ImPlot::SetCurrentContext(Context ? Context->ImplotContext : nullptr);
+
+		return FImGuiTickContext::GetTickContext(PrevImGuiContext);
 	}
-	FORCEINLINE static void EndContext()
+	FORCEINLINE static void EndContext(FImGuiTickContext* PrevContext)
 	{
-		ImGui::SetCurrentContext(nullptr);
-		ImPlot::SetCurrentContext(nullptr);
+		ImGui::SetCurrentContext(PrevContext ? PrevContext->ImguiContext : nullptr);
+		ImPlot::SetCurrentContext(PrevContext ? PrevContext->ImplotContext : nullptr);
 	}
+
+	FImGuiTickContext* PrevContext = nullptr;
 };
 
 // scope to resolve label/name conflicts
@@ -129,42 +148,67 @@ static FORCEINLINE FImGuiShaderState MakeImGuiShaderState(EImGuiShaderState Shad
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// params used to register an ImGui widget as standalone or main window widget
-struct FStaticWidgetRegisterParams
+// params used to register an ImGui widget as standalone or main menu widget
+struct FImGuiWidgetRegisterParams
 {
+	// ImGui widget init function (called during module load)
 	void(*InitFunction)(void);
+
+	// ImGui widget tick function
 	void(*TickFunction)(FImGuiTickContext* Context);
+	
+	// optional icon to use for the widget menu item
 	FSlateIcon WidgetIcon;
-	const char* WidgetName = nullptr;
-	const char* WidgetDescription = nullptr;
+	
+	// full path to widget (example: "Tools.MyWidget")
+	const char* WidgetPath = nullptr;
+	
+	// widget tooltip
+	const char* WidgetDescription = "";
+	
+	// to enable ImGui viewport support for the widget
 	bool bEnableViewports = true;
+	
+	// for drawing widget directly in the menubar (only valid when adding widget to the main menu)
+	bool bTickInMenuBar = false;
+
+	const char* GetWidetName() const
+	{
+		if (!ensureAlways(WidgetPath))
+		{
+			return nullptr;
+		}
+
+		int32 WidgetNameOffset = FAnsiStringView(WidgetPath).FindLastChar('.', WidgetNameOffset) ? WidgetNameOffset + 1 : 0;
+		return WidgetPath + WidgetNameOffset;
+	}
 
 	bool IsValid() const
 	{
-		return InitFunction && TickFunction && WidgetName && WidgetDescription;
+		return InitFunction && TickFunction && WidgetPath && WidgetDescription;
 	}
 };
 
 // adds widget to the main ImGui window
-struct FAutoRegisterMainWindowWidget
+struct FAutoRegisterMainMenuWidget
 {
-	IMGUIRUNTIME_API FAutoRegisterMainWindowWidget(FStaticWidgetRegisterParams RegisterParams);
+	IMGUIRUNTIME_API FAutoRegisterMainMenuWidget(FImGuiWidgetRegisterParams RegisterParams);
 };
 
-// creates a new tab for displaying widget
+// adds widget to a new editor docktab
 struct FAutoRegisterStandaloneWidget
 {
-	IMGUIRUNTIME_API FAutoRegisterStandaloneWidget(FStaticWidgetRegisterParams RegisterParams);
+	IMGUIRUNTIME_API FAutoRegisterStandaloneWidget(FImGuiWidgetRegisterParams RegisterParams);
 };
 
-#define IMGUI_REGISTER_MAIN_WINDOW_WIDGET(RegisterParams)				\
-static FAutoRegisterMainWindowWidget UE_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
+#define IMGUI_REGISTER_MAIN_MENU_WIDGET(RegisterParams)					\
+static FAutoRegisterMainMenuWidget UE_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
 
 #if WITH_EDITOR
 #define IMGUI_REGISTER_STANDALONE_WIDGET(RegisterParams)				\
 static FAutoRegisterStandaloneWidget UE_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
 #else
-// at runtime push standalone widgets to the main window
+// at runtime push standalone widgets to the menu
 #define IMGUI_REGISTER_STANDALONE_WIDGET(RegisterParams)				\
-static FAutoRegisterMainWindowWidget UE_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
+static FAutoRegisterMainMenuWidget UE_JOIN(AtModuleInit, __LINE__) = { RegisterParams };
 #endif

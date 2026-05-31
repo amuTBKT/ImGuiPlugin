@@ -75,6 +75,10 @@ public:
 	ImGuiContext* GetImGuiContext() const { return m_ImGuiContext; }
 	ImPlotContext* GetImPlotContext() const { return m_ImPlotContext; }
 
+#if WITH_EDITOR
+	uint64 GetLastPaintFrameCounter() const { return m_LastPaintFrameCounter; }
+#endif
+
 protected:
 	// Helper functions for manually ticking ImGui logic
 	// setup work for ImGui::NewFrame

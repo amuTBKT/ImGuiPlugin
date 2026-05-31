@@ -60,10 +60,11 @@ IMGUI_UNREAL_API uint64 ImFileWrite(const void* Data, uint64 Size, uint64 Count,
  * 
  * @param RHICmdList	: FRHICommandListImmediate used to render the ImGui widget.
  * @param DrawRect		: Draw rect inside the Slate window.
+ * @param ViewportPos	: Viewport position to adjust clip rect (Window/ViewportPos cached during Tick flickers for a frame when window moves to viewport).
  * @param UserData		: User data passed to ImDrawList::AddCallback(...) function.
  * @param UserDataSize	: Size of user data, not used internally but can be used for validation.
  */
-typedef void (*FImGuiDrawCallback)(class FRHICommandListImmediate& RHICmdList, const struct ImRect& DrawRect, void* UserData, size_t UserDataSize);
+typedef void (*FImGuiDrawCallback)(class FRHICommandListImmediate& RHICmdList, const struct ImRect& DrawRect, const struct ImVec2& ViewportPos, void* UserData, size_t UserDataSize);
 
 // Override ImGui's callback to use the new type defined above.
 #define ImDrawCallback FImGuiDrawCallback

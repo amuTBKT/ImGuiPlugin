@@ -36,6 +36,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	m_TickContext = MakeUnique<FImGuiTickContext>();
 	m_TickContext->ImguiContext = m_ImGuiContext;
 	m_TickContext->ImplotContext = m_ImPlotContext;
+	FImGuiTickContext::StoreTickContext(m_TickContext.Get(), m_ImGuiContext);
 
 	if (InArgs._ConfigFileName && FCStringAnsi::Strlen(InArgs._ConfigFileName) > 2)
 	{
@@ -47,7 +48,6 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	}
 
 	ImGuiIO& IO = GetImGuiIO();
-	IO.UserData = m_TickContext.Get();
 	IO.IniFilename = m_ConfigFilePath.IsEmpty() ? nullptr : *m_ConfigFilePath;
 
 	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -138,7 +138,7 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 	// cleanup references to this widget
 	{
 		ImGuiIO& IO = GetImGuiIO();
-		IO.UserData = nullptr;
+		FImGuiTickContext::StoreTickContext(nullptr, m_ImGuiContext);
 
 		// duplicate of context shutdown operation as we clear the IniFilename here
 		if (m_ImGuiContext->SettingsLoaded && IO.IniFilename)
@@ -306,6 +306,13 @@ FReply SImGuiWidgetBase::OnKeyChar(const FGeometry& WidgetGeometry, const FChara
 FReply SImGuiWidgetBase::OnKeyDown(const FGeometry& WidgetGeometry, const FKeyEvent& KeyEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
+
+	// don't consume console key event as this will block the debug console from opening
+	if (!IO.WantTextInput && KeyEvent.GetKey() == EKeys::Tilde)
+	{
+		return FReply::Unhandled();
+	}
+
 	AddKeyEvent(IO, KeyEvent, true);
 	return IO.WantCaptureKeyboard ? FReply::Handled() : FReply::Unhandled();
 }
@@ -313,6 +320,13 @@ FReply SImGuiWidgetBase::OnKeyDown(const FGeometry& WidgetGeometry, const FKeyEv
 FReply SImGuiWidgetBase::OnKeyUp(const FGeometry& WidgetGeometry, const FKeyEvent& KeyEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
+
+	// don't consume console key event as this will block the debug console from opening
+	if (!IO.WantTextInput && KeyEvent.GetKey() == EKeys::Tilde)
+	{
+		return FReply::Unhandled();
+	}
+
 	AddKeyEvent(IO, KeyEvent, false);
 	return IO.WantCaptureKeyboard ? FReply::Handled() : FReply::Unhandled();
 }
@@ -320,23 +334,35 @@ FReply SImGuiWidgetBase::OnKeyUp(const FGeometry& WidgetGeometry, const FKeyEven
 void SImGuiWidgetBase::OnMouseLeave(const FPointerEvent& MouseEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
+
+	if (!HasMouseCapture())
+	{
+		for (int32 MouseButton = 0; MouseButton < ImGuiMouseButton_COUNT; ++MouseButton)
+		{
+			if (ImGui::IsMouseDown(MouseButton))
+			{
+				IO.AddMouseButtonEvent(MouseButton, /*down=*/false);
+			}
+		}
+	}
 	IO.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
 }
 
 FReply SImGuiWidgetBase::OnMouseButtonDown(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent)
 {
 	ImGuiIO& IO = GetImGuiIO();
-	IO.AddMouseButtonEvent(ImGuiUtils::UnrealToImGuiMouseButton(MouseEvent.GetEffectingButton()), /*down=*/true);
+
+	// TODO: When returning Unhandled we don't receive OnMouseButtonUp event so ImGui never clears the down state for the button
+	// checking IO.WantCaptureMouse before adding mouse event seems to work well but feels wrong, are there any downsides to this setup :?
 
 	if (IO.WantCaptureMouse)
 	{
+		IO.AddMouseButtonEvent(ImGuiUtils::UnrealToImGuiMouseButton(MouseEvent.GetEffectingButton()), /*down=*/true);
+
 		FSlateThrottleManager::Get().DisableThrottle(true);
 		return FReply::Handled().CaptureMouse(SharedThis(this));
 	}
-	else
-	{
-		return FReply::Unhandled();
-	}
+	return FReply::Unhandled();
 }
 
 FReply SImGuiWidgetBase::OnMouseButtonUp(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent)
@@ -349,10 +375,7 @@ FReply SImGuiWidgetBase::OnMouseButtonUp(const FGeometry& WidgetGeometry, const 
 		FSlateThrottleManager::Get().DisableThrottle(false);
 		return FReply::Handled().ReleaseMouseCapture();
 	}
-	else
-	{
-		return FReply::Unhandled();
-	}
+	return FReply::Unhandled();
 }
 
 FReply SImGuiWidgetBase::OnMouseButtonDoubleClick(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent)
@@ -462,5 +485,15 @@ void SImGuiWidget::Construct(const FArguments& InArgs)
 
 void SImGuiWidget::TickImGuiInternal(FImGuiTickContext* TickContext)
 {
-	m_OnTickDelegate.ExecuteIfBound(TickContext);
+	FImGuiTickScope Scope{ TickContext };
+
+	ImGuiDockNodeFlags DockingFlags = ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoTabBar;
+	const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), DockingFlags);
+	ImGui::SetNextWindowDockID(MainDockSpaceID, ImGuiCond_Always);
+
+	if (ImGui::Begin("WidgetWindow", nullptr, ImGuiWindowFlags_NoDecoration))
+	{
+		m_OnTickDelegate.ExecuteIfBound(TickContext);
+	}
+	ImGui::End();
 }
