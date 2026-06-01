@@ -73,10 +73,12 @@ public:
 	// initialization
 	IMGUIRUNTIME_API static bool ShouldEnableImGui();
 	IMGUIRUNTIME_API static UImGuiSubsystem* Get();
-	IMGUIRUNTIME_API static TMulticastDelegateRegistration<void(UImGuiSubsystem*)>& OnSubsystemInitialized()
-	{
-		return OnSubsystemInitializedDelegate;
-	}
+
+	// events
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnSubsystemInitialized, UImGuiSubsystem* /*Subsystem*/)
+	static FOnSubsystemInitialized OnSubsystemInitialized;
+	static FSimpleMulticastDelegate OnBeginImGuiFrame;
+	static FSimpleMulticastDelegate OnEndImGuiFrame;
 
 	const char* GetIniDirectoryPath()	const { return *m_IniDirectoryPath; }
 	const char* GetIniFilePath()		const { return *m_IniFilePath; }
@@ -113,15 +115,13 @@ public:
 	bool CaptureGpuFrame() const;
 
 private:
-	void OnBeginFrame();
+	void BeginImGuiFrame();
+	void EndImGuiFrame();
 
 	int32 AllocateFontAtlasTexture(int32 SizeX, int32 SizeY);
 	void ReleaseFontAtlasTexture(int32 Index);
 
 private:
-	DECLARE_MULTICAST_DELEGATE_OneParam(FOnSubsystemInitialized, UImGuiSubsystem* /*Subsystem*/)
-	static FOnSubsystemInitialized OnSubsystemInitializedDelegate;
-
 	FConfigFile* m_SaveDataConfigFile = nullptr;
 
 	FAnsiString m_IniDirectoryPath;

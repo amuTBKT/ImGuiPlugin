@@ -15,14 +15,11 @@ struct FImGuiTickContext;
 namespace ImGuiUtils
 {
 	class FWidgetDrawer;
-	class SImGuiViewportWidget;
 }
 
 class IMGUIRUNTIME_API SImGuiWidgetBase : public SLeafWidget
 {
 	using Super = SLeafWidget;
-
-	friend class ImGuiUtils::SImGuiViewportWidget;
 
 public:
 	SLATE_BEGIN_ARGS(SImGuiWidgetBase)
@@ -74,6 +71,7 @@ public:
 
 	ImGuiContext* GetImGuiContext() const { return m_ImGuiContext; }
 	ImPlotContext* GetImPlotContext() const { return m_ImPlotContext; }
+	FImGuiTickContext* GetTickContext() const { return m_TickContext.Get(); }
 
 #if WITH_EDITOR
 	uint64 GetLastPaintFrameCounter() const { return m_LastPaintFrameCounter; }
@@ -87,23 +85,22 @@ protected:
 	void EndImGuiFrame();
 
 private:
-	FORCEINLINE ImGuiIO& GetImGuiIO() const;
 	FORCEINLINE void AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown);
 
 	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) = 0;
 
-protected:
+private:
 	ImGuiContext* m_ImGuiContext = nullptr;
 	ImPlotContext* m_ImPlotContext = nullptr;
-
-private:
-	FAnsiString m_ConfigFilePath;
 	TUniquePtr<FImGuiTickContext> m_TickContext;
+
+	FAnsiString m_ConfigFilePath;
 	TSharedPtr<ImGuiUtils::FWidgetDrawer> m_WidgetDrawers[2];
 
 	// TODO: initial zoom support, can we do better than this?
 	float m_WindowScale = 1.f;
 
+	mutable uint8 m_CachedImGuiCursor = 0;
 	bool m_IsDragOverActive = false;
 	TSharedPtr<class FDragDropOperation> LastDragDropOperation;
 

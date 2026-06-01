@@ -58,7 +58,9 @@ FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
 
 /*--------------------------------------------------------------------------------------------------------------------------*/
 
-UImGuiSubsystem::FOnSubsystemInitialized UImGuiSubsystem::OnSubsystemInitializedDelegate = {};
+UImGuiSubsystem::FOnSubsystemInitialized UImGuiSubsystem::OnSubsystemInitialized = {};
+FSimpleMulticastDelegate UImGuiSubsystem::OnBeginImGuiFrame = {};
+FSimpleMulticastDelegate UImGuiSubsystem::OnEndImGuiFrame = {};
 
 const FString& UImGuiSubsystem::GetSaveDataConfigFilepath()
 {
@@ -142,7 +144,8 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	m_MissingImageSlateBrush.SetResourceObject(m_MissingImageTexture);
 	static_assert(ImTextureID_Invalid == MissingImageTextureIndex);
 
-	FCoreDelegates::OnBeginFrame.AddUObject(this, &UImGuiSubsystem::OnBeginFrame);
+	FCoreDelegates::OnBeginFrame.AddUObject(this, &UImGuiSubsystem::BeginImGuiFrame);
+	FCoreDelegates::OnEndFrame.AddUObject(this, &UImGuiSubsystem::EndImGuiFrame);
 	
 	// Need to ensure shared font atlas is released after all slate windows have exited
 	// Note: Subsystem is deinitialized before slate so copy the pointer for callback
@@ -154,10 +157,10 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 			FontAtlasToDestroy = nullptr;
 		});
 
-	OnSubsystemInitializedDelegate.Broadcast(this);
+	OnSubsystemInitialized.Broadcast(this);
 
 	// first frame setup
-	OnBeginFrame();
+	BeginImGuiFrame();
 }
 
 void UImGuiSubsystem::Deinitialize()
@@ -245,7 +248,7 @@ FImGuiTickContext* UImGuiSubsystem::GetWidgetTickContext(const UWorld* World)
 	return GetWidgetTickContextForWorld(World);
 }
 
-void UImGuiSubsystem::OnBeginFrame()
+void UImGuiSubsystem::BeginImGuiFrame()
 {
 	m_OneFrameResources.Reset();
 	m_OneFrameSlateBrushes.Reset();
@@ -271,6 +274,13 @@ void UImGuiSubsystem::OnBeginFrame()
 	}
 
 	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);
+
+	OnBeginImGuiFrame.Broadcast();
+}
+
+void UImGuiSubsystem::EndImGuiFrame()
+{
+	OnEndImGuiFrame.Broadcast();
 }
 
 ImTextureRef UImGuiSubsystem::GetSharedFontTextureID() const

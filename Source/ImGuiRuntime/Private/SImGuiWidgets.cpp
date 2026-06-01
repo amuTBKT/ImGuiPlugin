@@ -47,7 +47,9 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 		m_ConfigFilePath = FAnsiString::Printf("%s/%s.ini", ImGuiSubsystem->GetIniDirectoryPath(), *FileName);
 	}
 
-	ImGuiIO& IO = GetImGuiIO();
+	FImGuiTickScope Scope{ m_TickContext.Get() };
+
+	ImGuiIO& IO = m_ImGuiContext->IO;
 	IO.IniFilename = m_ConfigFilePath.IsEmpty() ? nullptr : *m_ConfigFilePath;
 
 	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -137,7 +139,9 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 {
 	// cleanup references to this widget
 	{
-		ImGuiIO& IO = GetImGuiIO();
+		FImGuiTickScope Scope{ m_TickContext.Get() };
+
+		ImGuiIO& IO = m_ImGuiContext->IO;
 		FImGuiTickContext::StoreTickContext(nullptr, m_ImGuiContext);
 
 		// duplicate of context shutdown operation as we clear the IniFilename here
@@ -160,16 +164,11 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 	m_ImGuiContext = nullptr;
 }
 
-ImGuiIO& SImGuiWidgetBase::GetImGuiIO() const
-{
-	checkf(m_ImGuiContext, TEXT("ImGuiContext is invalid!"));
-
-	ImGui::SetCurrentContext(m_ImGuiContext);
-	return ImGui::GetIO();
-}
-
 void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry)
 {
+	// NOTE: atm only module code calls this, so we can assume tick context is valid!
+	check(m_ImGuiContext == ImGui::GetCurrentContext());
+
 	if (m_ImGuiContext->WithinFrameScope)
 	{
 		return;
@@ -189,7 +188,7 @@ void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry)
 	LastDragDropOperation.Reset();
 
 	{
-		ImGuiIO& IO = GetImGuiIO();
+		ImGuiIO& IO = m_ImGuiContext->IO;
 
 		FVector2f WidgetSize = WidgetGeometry.GetAbsoluteSize();
 		IO.DisplaySize = ImVec2(WidgetSize.X, WidgetSize.Y);
@@ -207,15 +206,20 @@ void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry)
 
 void SImGuiWidgetBase::EndImGuiFrame()
 {
+	// NOTE: atm only module code calls this, so we can assume tick context is valid!
+	check(m_ImGuiContext == ImGui::GetCurrentContext());
+
 	if (!m_ImGuiContext->WithinFrameScope)
 	{
 		return;
 	}
 
 	// the widget was not rendered this frame
-	ImGui::SetCurrentContext(m_ImGuiContext);
 	ImGui::EndFrame();
 	ImGui::UpdatePlatformWindows();
+
+	// NOTE: probably no point updating here as the widget is not rendered/visible.
+	// m_CachedImGuiCursor = ImGui::GetMouseCursor();
 }
 
 void SImGuiWidgetBase::Tick(const FGeometry& WidgetGeometry, const double CurrentTime, const float DeltaTime)
@@ -223,6 +227,8 @@ void SImGuiWidgetBase::Tick(const FGeometry& WidgetGeometry, const double Curren
 	DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Tick Widget"), STAT_ImGui_TickWidget, STATGROUP_ImGui);
 
 	Super::Tick(WidgetGeometry, CurrentTime, DeltaTime);
+
+	FImGuiTickScope Scope{ m_TickContext.Get() };
 
 	BeginImGuiFrame(WidgetGeometry);
 
@@ -239,7 +245,9 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 		return LayerId;
 	}
 
-	ImGuiIO& IO = GetImGuiIO();
+	FImGuiTickScope Scope{ m_TickContext.Get() };
+
+	ImGuiIO& IO = m_ImGuiContext->IO;
 	ImGui::Render();
 
 	const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
@@ -278,6 +286,8 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 #if WITH_EDITOR
 	m_LastPaintFrameCounter = GFrameCounter;
 #endif
+
+	m_CachedImGuiCursor = ImGui::GetMouseCursor();
 	
 	return LayerId;
 }
@@ -298,14 +308,14 @@ void SImGuiWidgetBase::AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown)
 
 FReply SImGuiWidgetBase::OnKeyChar(const FGeometry& WidgetGeometry, const FCharacterEvent& CharacterEvent)
 {
-	ImGuiIO& IO = GetImGuiIO();
+	ImGuiIO& IO = m_ImGuiContext->IO;
 	IO.AddInputCharacterUTF16(CharacterEvent.GetCharacter());
 	return IO.WantTextInput ? FReply::Handled() : FReply::Unhandled();
 }
 
 FReply SImGuiWidgetBase::OnKeyDown(const FGeometry& WidgetGeometry, const FKeyEvent& KeyEvent)
 {
-	ImGuiIO& IO = GetImGuiIO();
+	ImGuiIO& IO = m_ImGuiContext->IO;
 
 	// don't consume console key event as this will block the debug console from opening
 	if (!IO.WantTextInput && KeyEvent.GetKey() == EKeys::Tilde)
@@ -319,7 +329,7 @@ FReply SImGuiWidgetBase::OnKeyDown(const FGeometry& WidgetGeometry, const FKeyEv
 
 FReply SImGuiWidgetBase::OnKeyUp(const FGeometry& WidgetGeometry, const FKeyEvent& KeyEvent)
 {
-	ImGuiIO& IO = GetImGuiIO();
+	ImGuiIO& IO = m_ImGuiContext->IO;
 
 	// don't consume console key event as this will block the debug console from opening
 	if (!IO.WantTextInput && KeyEvent.GetKey() == EKeys::Tilde)
@@ -333,10 +343,12 @@ FReply SImGuiWidgetBase::OnKeyUp(const FGeometry& WidgetGeometry, const FKeyEven
 
 void SImGuiWidgetBase::OnMouseLeave(const FPointerEvent& MouseEvent)
 {
-	ImGuiIO& IO = GetImGuiIO();
+	ImGuiIO& IO = m_ImGuiContext->IO;
 
 	if (!HasMouseCapture())
 	{
+		FImGuiTickScope Scope{ m_TickContext.Get() };
+
 		for (int32 MouseButton = 0; MouseButton < ImGuiMouseButton_COUNT; ++MouseButton)
 		{
 			if (ImGui::IsMouseDown(MouseButton))
@@ -350,7 +362,7 @@ void SImGuiWidgetBase::OnMouseLeave(const FPointerEvent& MouseEvent)
 
 FReply SImGuiWidgetBase::OnMouseButtonDown(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent)
 {
-	ImGuiIO& IO = GetImGuiIO();
+	ImGuiIO& IO = m_ImGuiContext->IO;
 
 	// TODO: When returning Unhandled we don't receive OnMouseButtonUp event so ImGui never clears the down state for the button
 	// checking IO.WantCaptureMouse before adding mouse event seems to work well but feels wrong, are there any downsides to this setup :?
@@ -367,7 +379,7 @@ FReply SImGuiWidgetBase::OnMouseButtonDown(const FGeometry& WidgetGeometry, cons
 
 FReply SImGuiWidgetBase::OnMouseButtonUp(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent)
 {
-	ImGuiIO& IO = GetImGuiIO();
+	ImGuiIO& IO = m_ImGuiContext->IO;
 	IO.AddMouseButtonEvent(ImGuiUtils::UnrealToImGuiMouseButton(MouseEvent.GetEffectingButton()), /*down=*/false);
 
 	if (HasMouseCapture())
@@ -380,7 +392,7 @@ FReply SImGuiWidgetBase::OnMouseButtonUp(const FGeometry& WidgetGeometry, const 
 
 FReply SImGuiWidgetBase::OnMouseButtonDoubleClick(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent)
 {
-	ImGuiIO& IO = GetImGuiIO();
+	ImGuiIO& IO = m_ImGuiContext->IO;
 	IO.AddMouseButtonEvent(ImGuiUtils::UnrealToImGuiMouseButton(MouseEvent.GetEffectingButton()), /*down=*/true);
 
 	return FReply::Handled();
@@ -388,14 +400,14 @@ FReply SImGuiWidgetBase::OnMouseButtonDoubleClick(const FGeometry& WidgetGeometr
 
 FReply SImGuiWidgetBase::OnMouseWheel(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent)
 {
-	ImGuiIO& IO = GetImGuiIO();
+	ImGuiIO& IO = m_ImGuiContext->IO;
 
 	// TODO: initial zoom support, can we do better than this?
 	if (IO.KeyCtrl)
 	{
 		m_WindowScale += MouseEvent.GetWheelDelta() * 0.25f;
 		m_WindowScale = FMath::Clamp(m_WindowScale, 1.f, 4.f);
-		ImGui::GetStyle().FontScaleMain = m_WindowScale;
+		m_ImGuiContext->Style.FontScaleMain = m_WindowScale;
 	}
 	else
 	{
@@ -407,7 +419,7 @@ FReply SImGuiWidgetBase::OnMouseWheel(const FGeometry& WidgetGeometry, const FPo
 
 FReply SImGuiWidgetBase::OnMouseMove(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent)
 {
-	ImGuiIO& IO = GetImGuiIO();	
+	ImGuiIO& IO = m_ImGuiContext->IO;
 	FVector2f MousePosition = MouseEvent.GetScreenSpacePosition();
 	if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) == 0)
 	{
@@ -420,9 +432,7 @@ FReply SImGuiWidgetBase::OnMouseMove(const FGeometry& WidgetGeometry, const FPoi
 
 FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& WidgetGeometry, const FPointerEvent& CursorEvent) const
 {
-	ImGuiIO& IO = GetImGuiIO();
-	const ImGuiMouseCursor MouseCursor = ImGui::GetMouseCursor();
-	return (MouseCursor == ImGuiMouseCursor_None) ? FCursorReply::Unhandled() : FCursorReply::Cursor(ImGuiUtils::ImGuiToUnrealCursor(MouseCursor));
+	return (m_CachedImGuiCursor == ImGuiMouseCursor_None) ? FCursorReply::Unhandled() : FCursorReply::Cursor(ImGuiUtils::ImGuiToUnrealCursor(m_CachedImGuiCursor));
 }
 
 static bool AllowDragDropOperation(const FDragDropOperation* Operation)
@@ -441,7 +451,7 @@ void SImGuiWidgetBase::OnDragLeave(const FDragDropEvent& DragDropEvent)
 {
 	m_IsDragOverActive = false;
 
-	ImGuiIO& IO = GetImGuiIO();
+	ImGuiIO& IO = m_ImGuiContext->IO;
 	IO.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
 }
 
@@ -449,7 +459,7 @@ FReply SImGuiWidgetBase::OnDragOver(const FGeometry& WidgetGeometry, const FDrag
 {
 	m_IsDragOverActive = true;
 
-	ImGuiIO& IO = GetImGuiIO();
+	ImGuiIO& IO = m_ImGuiContext->IO;
 	FVector2f MousePosition = DragDropEvent.GetScreenSpacePosition();
 	if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) == 0)
 	{

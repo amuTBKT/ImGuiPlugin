@@ -433,7 +433,7 @@ FAutoRegisterMainMenuWidget::FAutoRegisterMainMenuWidget(FImGuiWidgetRegisterPar
 	}
 	else
 	{
-		UImGuiSubsystem::OnSubsystemInitialized().AddLambda(
+		UImGuiSubsystem::OnSubsystemInitialized.AddLambda(
 			[RegisterParams](UImGuiSubsystem* ImGuiSubsystem)
 			{
 				RegisterParams.InitFunction();
@@ -482,7 +482,7 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegiste
 	}
 	else
 	{
-		UImGuiSubsystem::OnSubsystemInitialized().AddLambda(
+		UImGuiSubsystem::OnSubsystemInitialized.AddLambda(
 			[RegisterParams](UImGuiSubsystem* ImGuiSubsystem)
 			{
 				RegisterParams.InitFunction();
@@ -530,8 +530,8 @@ public:
 			.ConfigFileName(*ConfigFileName));
 		OwningWorld = InArgs._OwningWorld;
 
-		FCoreDelegates::OnBeginFrame.AddRaw(this, &SImGuiMainMenuWidget::BeginFrame);
-		FCoreDelegates::OnEndFrame.AddRaw(this, &SImGuiMainMenuWidget::EndFrame);
+		UImGuiSubsystem::OnBeginImGuiFrame.AddRaw(this, &SImGuiMainMenuWidget::BeginFrame);
+		UImGuiSubsystem::OnEndImGuiFrame.AddRaw(this, &SImGuiMainMenuWidget::EndFrame);
 
 		// first frame setup
 		BeginFrame();
@@ -539,8 +539,8 @@ public:
 
 	~SImGuiMainMenuWidget()
 	{
-		FCoreDelegates::OnBeginFrame.RemoveAll(this);
-		FCoreDelegates::OnEndFrame.RemoveAll(this);
+		UImGuiSubsystem::OnBeginImGuiFrame.RemoveAll(this);
+		UImGuiSubsystem::OnEndImGuiFrame.RemoveAll(this);
 	}
 
 	const UWorld* GetWorld() const { return OwningWorld.Get(); }
@@ -548,6 +548,8 @@ public:
 private:
 	void BeginFrame()
 	{
+		FImGuiTickScope Scope{ GetTickContext() };
+
 		BeginImGuiFrame(GetCachedGeometry());
 
 		if (!bIsDockNodeValid)
@@ -560,6 +562,8 @@ private:
 
 	void EndFrame()
 	{
+		FImGuiTickScope Scope{ GetTickContext() };
+
 		EndImGuiFrame();
 		bIsDockNodeValid = false;
 	}

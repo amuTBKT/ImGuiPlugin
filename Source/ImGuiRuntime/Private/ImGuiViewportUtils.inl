@@ -8,6 +8,7 @@ namespace ImGuiUtils
 	}
 
 	class FWidgetDrawer;
+	class SImGuiViewportWidget;
 	struct FDeferredDeletionQueue
 	{
 		FDeferredDeletionQueue()
@@ -641,7 +642,7 @@ namespace ImGuiUtils
 				TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin();
 				TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 
-				const bool bNewVisibility = RootWidget.IsValid() ? (RootWidget->m_LastPaintFrameCounter >= GFrameCounter) : false;
+				const bool bNewVisibility = RootWidget.IsValid() ? (RootWidget->GetLastPaintFrameCounter() >= GFrameCounter) : false;
 				if (ViewportWindow && (bNewVisibility != ViewportWindow->IsVisible()))
 				{
 					if (bNewVisibility)
@@ -726,7 +727,7 @@ namespace ImGuiUtils
 
 			// NOTE: not passing through 'OnMouseButtonDown' as we would like to capture the mouse here and not the root widget
 
-			ImGuiIO& IO = RootWidget->GetImGuiIO();
+			ImGuiIO& IO = RootWidget->GetImGuiContext()->IO;
 			IO.AddMouseButtonEvent(ImGuiUtils::UnrealToImGuiMouseButton(MouseEvent.GetEffectingButton()), /*down=*/true);
 
 			if (IO.WantCaptureMouse)
@@ -750,7 +751,7 @@ namespace ImGuiUtils
 
 			// NOTE: not passing through 'OnMouseButtonUp' as we would like to release the mouse capture here and not the root widget
 
-			ImGuiIO& IO = RootWidget->GetImGuiIO();
+			ImGuiIO& IO = RootWidget->GetImGuiContext()->IO;
 			IO.AddMouseButtonEvent(ImGuiUtils::UnrealToImGuiMouseButton(MouseEvent.GetEffectingButton()), /*down=*/false);
 
 			if (HasMouseCapture())
