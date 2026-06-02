@@ -24,6 +24,45 @@
 #include "imgui/misc/imgui_threaded_rendering.h"
 #include "ImGuiViewportUtils.inl"
 
+#ifdef WITH_NET_IMGUI
+#define NETIMGUI_IMPLEMENTATION
+#include "net_imgui/NetImgui_Api.h"
+
+static TAutoConsoleVariable<int32> CVarNetImGuiPort(
+	TEXT("imgui.NetImGuiPort"),
+	INDEX_NONE,
+	TEXT("NetImGui host port override"),
+	ECVF_ReadOnly);
+
+static int32 GetNetImGuiPort()
+{
+	int32 Port = CVarNetImGuiPort.GetValueOnGameThread();
+	if (Port == INDEX_NONE)
+	{
+		static TOptional<int32> CommandlineOverride;
+		if (!CommandlineOverride.IsSet())
+		{
+			if (FParse::Value(FCommandLine::Get(), TEXT("-NetImGuiPort="), Port))
+			{
+				CommandlineOverride = Port;
+			}
+			else
+			{
+				CommandlineOverride = INDEX_NONE;
+			}
+		}
+		Port = CommandlineOverride.GetValue();
+	}
+	return Port;
+}
+
+static const char* GetNetImGuiClientName()
+{
+	static FAnsiString ClientName = TCHAR_TO_UTF8(*FString::Printf(TEXT("%s"), FApp::GetProjectName()));
+	return *ClientName;
+}
+#endif
+
 void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 {
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
@@ -133,6 +172,16 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 
 	// TODO: setting?
 	ImGui::StyleColorsDark();
+
+#ifdef WITH_NET_IMGUI
+	NetImgui::Startup();
+
+	int32 NetImGuiPort = GetNetImGuiPort();
+	if (NetImGuiPort != INDEX_NONE)
+	{
+		NetImgui::ConnectFromApp(GetNetImGuiClientName(), NetImGuiPort);
+	}
+#endif
 }
 
 SImGuiWidgetBase::~SImGuiWidgetBase()
@@ -140,6 +189,10 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 	// cleanup references to this widget
 	{
 		FImGuiTickScope Scope{ m_TickContext.Get() };
+
+#ifdef WITH_NET_IMGUI
+		NetImgui::Shutdown();
+#endif
 
 		ImGuiIO& IO = m_ImGuiContext->IO;
 		FImGuiTickContext::StoreTickContext(nullptr, m_ImGuiContext);
@@ -216,7 +269,10 @@ void SImGuiWidgetBase::EndImGuiFrame()
 
 	// the widget was not rendered this frame
 	ImGui::EndFrame();
-	ImGui::UpdatePlatformWindows();
+	if ((m_ImGuiContext->IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
+	{
+		ImGui::UpdatePlatformWindows();
+	}
 
 	// NOTE: probably no point updating here as the widget is not rendered/visible.
 	// m_CachedImGuiCursor = ImGui::GetMouseCursor();
@@ -248,38 +304,45 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 	FImGuiTickScope Scope{ m_TickContext.Get() };
 
 	ImGuiIO& IO = m_ImGuiContext->IO;
+
 	ImGui::Render();
-
-	const FSlateRect DrawRect = WidgetGeometry.GetRenderBoundingRect();
-
-	TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
-	if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetTime(), DrawRect.GetTopLeft2f()))
-	{
-		OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
-		FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
-		OutDrawElements.PopClip();
-	}
-
 	if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
 	{
-		ImGuiViewport* MainViewport = ImGui::GetMainViewport();
-		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)MainViewport->PlatformUserData;
+		ImGui::UpdatePlatformWindows();
+	}
 
-		// TODO: maybe find a better way to detect window docking operations? This is not expensive, just a bit ugly!
-		TSharedPtr<SWindow> PreviousParentWindow = ViewportData->ParentWindow.Pin();
-		TSharedPtr<SWindow> CurrentParentWindow = FSlateApplication::Get().FindWidgetWindow(AsShared());
-		if (ViewportData && (!PreviousParentWindow || (PreviousParentWindow != CurrentParentWindow)))
+#ifdef WITH_NET_IMGUI
+	if (!NetImgui::IsConnected())
+#endif
+	{
+		TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
+		if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetTime(), WidgetGeometry.GetRenderBoundingRect().GetTopLeft2f()))
 		{
-			ViewportData->ParentWindow = CurrentParentWindow;
-			ViewportData->bInvalidateManagedViewportWindows = true;
+			OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
+			FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
+			OutDrawElements.PopClip();
 		}
 
-		ImGui::UpdatePlatformWindows();
-		ImGui::RenderPlatformWindowsDefault();
-
-		if (ViewportData)
+		if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
 		{
-			ViewportData->bInvalidateManagedViewportWindows = false;
+			ImGuiViewport* MainViewport = ImGui::GetMainViewport();
+			ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)MainViewport->PlatformUserData;
+
+			// TODO: maybe find a better way to detect window docking operations? This is not expensive, just a bit ugly!
+			TSharedPtr<SWindow> PreviousParentWindow = ViewportData->ParentWindow.Pin();
+			TSharedPtr<SWindow> CurrentParentWindow = FSlateApplication::Get().FindWidgetWindow(AsShared());
+			if (ViewportData && (!PreviousParentWindow || (PreviousParentWindow != CurrentParentWindow)))
+			{
+				ViewportData->ParentWindow = CurrentParentWindow;
+				ViewportData->bInvalidateManagedViewportWindows = true;
+			}
+
+			ImGui::RenderPlatformWindowsDefault();
+
+			if (ViewportData)
+			{
+				ViewportData->bInvalidateManagedViewportWindows = false;
+			}
 		}
 	}
 
@@ -288,7 +351,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 #endif
 
 	m_CachedImGuiCursor = ImGui::GetMouseCursor();
-	
+
 	return LayerId;
 }
 

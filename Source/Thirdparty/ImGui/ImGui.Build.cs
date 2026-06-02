@@ -11,6 +11,11 @@ public class ImGui : ModuleRules
 
 		PublicDefinitions.Add("WITH_IMGUI=1");
 
+		if (Target.Type != TargetType.Editor)
+		{
+			PublicDefinitions.Add("WITH_NET_IMGUI=1");
+		}
+
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui"));
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/imgui"));
 

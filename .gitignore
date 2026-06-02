@@ -14,3 +14,7 @@ Build/
 *.lib
 *.exe
 *.sln
+
+# netimgui server
+Source/Thirdparty/ImGui/net_imgui_server/netImgui.cfg
+!Source/Thirdparty/ImGui/net_imgui_server/NetImguiServer.exe
