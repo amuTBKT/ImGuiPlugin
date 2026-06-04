@@ -37,6 +37,9 @@ struct FImGuiTickContext
 	TSharedPtr<FDragDropOperation> DragDropOperation = nullptr;
 	bool bDragDropOperationReleasedThisFrame = false;
 
+	// drawing remotely to NetImGui server
+	bool bIsDrawingRemotely = false;
+
 	TSharedPtr<FDragDropOperation> TryConsumeDragDropOperation()
 	{
 		TSharedPtr<FDragDropOperation> DragDropOp;

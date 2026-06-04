@@ -255,6 +255,12 @@ void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry)
 			ImGui::SetActiveID(-1, nullptr);
 		}
 	}
+
+#ifdef WITH_NET_IMGUI
+	m_TickContext->bIsDrawingRemotely = NetImgui::IsConnected();
+#else
+	m_TickContext->bIsDrawingRemotely = false;
+#endif
 }
 
 void SImGuiWidgetBase::EndImGuiFrame()
