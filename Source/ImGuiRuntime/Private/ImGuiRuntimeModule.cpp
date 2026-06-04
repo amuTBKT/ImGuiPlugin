@@ -653,6 +653,7 @@ private:
 				check(!Slot.bTickInMenuBar); //should not be possible to activate these
 
 				const bool bWasActive = Slot.bIsActive;
+				ImGui::SetNextWindowSize(ImVec2(512.f, 512.f), ImGuiCond_FirstUseEver);
 				if (ImGui::Begin(Slot.GetName(), &Slot.bIsActive))
 				{
 					Slot.GetTickDelegate().ExecuteIfBound(TickContext);
