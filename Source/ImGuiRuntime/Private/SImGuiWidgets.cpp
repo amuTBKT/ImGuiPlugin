@@ -317,38 +317,36 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 		ImGui::UpdatePlatformWindows();
 	}
 
-#ifdef WITH_NET_IMGUI
-	if (!NetImgui::IsConnected())
-#endif
+	TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
+	if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetTime(), WidgetGeometry.GetRenderBoundingRect().GetTopLeft2f()))
 	{
-		TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
-		if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetTime(), WidgetGeometry.GetRenderBoundingRect().GetTopLeft2f()))
+		OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
+		FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
+		OutDrawElements.PopClip();
+	}
+
+	if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
+	{
+		ImGuiViewport* MainViewport = ImGui::GetMainViewport();
+		ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)MainViewport->PlatformUserData;
+
+		// TODO: maybe find a better way to detect window docking operations? This is not expensive, just a bit ugly!
+		TSharedPtr<SWindow> PreviousParentWindow = ViewportData->ParentWindow.Pin();
+		TSharedPtr<SWindow> CurrentParentWindow = FSlateApplication::Get().FindWidgetWindow(AsShared());
+		if (ViewportData && (!PreviousParentWindow || (PreviousParentWindow != CurrentParentWindow)))
 		{
-			OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
-			FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
-			OutDrawElements.PopClip();
+			ViewportData->ParentWindow = CurrentParentWindow;
+			ViewportData->bInvalidateManagedViewportWindows = true;
 		}
 
-		if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
+		if (!m_TickContext->bIsDrawingRemotely)
 		{
-			ImGuiViewport* MainViewport = ImGui::GetMainViewport();
-			ImGuiUtils::FImGuiViewportData* ViewportData = (ImGuiUtils::FImGuiViewportData*)MainViewport->PlatformUserData;
-
-			// TODO: maybe find a better way to detect window docking operations? This is not expensive, just a bit ugly!
-			TSharedPtr<SWindow> PreviousParentWindow = ViewportData->ParentWindow.Pin();
-			TSharedPtr<SWindow> CurrentParentWindow = FSlateApplication::Get().FindWidgetWindow(AsShared());
-			if (ViewportData && (!PreviousParentWindow || (PreviousParentWindow != CurrentParentWindow)))
-			{
-				ViewportData->ParentWindow = CurrentParentWindow;
-				ViewportData->bInvalidateManagedViewportWindows = true;
-			}
-
 			ImGui::RenderPlatformWindowsDefault();
+		}
 
-			if (ViewportData)
-			{
-				ViewportData->bInvalidateManagedViewportWindows = false;
-			}
+		if (ViewportData)
+		{
+			ViewportData->bInvalidateManagedViewportWindows = false;
 		}
 	}
 
