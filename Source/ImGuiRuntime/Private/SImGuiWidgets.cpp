@@ -75,7 +75,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	m_TickContext = MakeUnique<FImGuiTickContext>();
 	m_TickContext->ImguiContext = m_ImGuiContext;
 	m_TickContext->ImplotContext = m_ImPlotContext;
-	FImGuiTickContext::StoreTickContext(m_TickContext.Get(), m_ImGuiContext);
+	FImGuiTickContext::SetTickContextUserData(m_ImGuiContext, m_TickContext.Get());
 
 	if (InArgs._ConfigFileName && FCStringAnsi::Strlen(InArgs._ConfigFileName) > 2)
 	{
@@ -195,7 +195,7 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 #endif
 
 		ImGuiIO& IO = m_ImGuiContext->IO;
-		FImGuiTickContext::StoreTickContext(nullptr, m_ImGuiContext);
+		FImGuiTickContext::SetTickContextUserData(m_ImGuiContext, nullptr);
 
 		// duplicate of context shutdown operation as we clear the IniFilename here
 		if (m_ImGuiContext->SettingsLoaded && IO.IniFilename)

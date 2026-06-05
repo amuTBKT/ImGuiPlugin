@@ -50,14 +50,14 @@ struct FImGuiTickContext
 		return DragDropOp;
 	}
 
-	static FImGuiTickContext* GetTickContext(ImGuiContext* ImguiContext)
+	static FImGuiTickContext* GetTickContextFromImGuiContext(ImGuiContext* ImguiContext)
 	{
 		return ImguiContext ? (FImGuiTickContext*)ImguiContext->IO.UserData : nullptr;
 	}
-	static void StoreTickContext(FImGuiTickContext* TickContext, ImGuiContext* ImguiContext)
+	static void SetTickContextUserData(ImGuiContext* ImguiContext, FImGuiTickContext* InTickContext)
 	{
 		check(ImguiContext);
-		ImguiContext->IO.UserData = TickContext;
+		ImguiContext->IO.UserData = InTickContext;
 	}
 };
 
@@ -81,7 +81,7 @@ struct FImGuiTickScope : FNoncopyable
 		ImGui::SetCurrentContext(Context ? Context->ImguiContext : nullptr);
 		ImPlot::SetCurrentContext(Context ? Context->ImplotContext : nullptr);
 
-		return FImGuiTickContext::GetTickContext(PrevImGuiContext);
+		return FImGuiTickContext::GetTickContextFromImGuiContext(PrevImGuiContext);
 	}
 	FORCEINLINE static void EndContext(FImGuiTickContext* PrevContext)
 	{

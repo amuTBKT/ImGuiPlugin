@@ -941,7 +941,7 @@ public:
 				ImGuiContext* ImguiContext = Widget->GetImGuiContext();
 				// NOTE: additional `WithinFrameScope` check as the context will most likely be used for drawing widget
 				// No point returning valid context if we cannot tick widgets
-				return (ImguiContext && ImguiContext->WithinFrameScope) ? FImGuiTickContext::GetTickContext(ImguiContext) : nullptr;
+				return (ImguiContext && ImguiContext->WithinFrameScope) ? FImGuiTickContext::GetTickContextFromImGuiContext(ImguiContext) : nullptr;
 			};
 
 #if WITH_EDITOR
