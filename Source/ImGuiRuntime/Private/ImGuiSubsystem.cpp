@@ -222,14 +222,14 @@ bool UImGuiSubsystem::SaveConfigToDisk() const
 
 void UImGuiSubsystem::RegisterMainMenuWidget(
 	const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
-	FOnTickImGuiWidgetDelegate TickDelegate, bool bTickInMenuBar)
+	FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags)
 {
 	// defined in ImGuiRuntimeModule.cpp
 	extern void RegisterMainMenuWidgetForWorld(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush * WidgetIcon,
-		FOnTickImGuiWidgetDelegate TickDelegate, bool bTickInMenuBar);
+		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags);
 
-	RegisterMainMenuWidgetForWorld(World, WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, bTickInMenuBar);
+	RegisterMainMenuWidgetForWorld(World, WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, WidgetFlags);
 }
 
 void UImGuiSubsystem::UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath)

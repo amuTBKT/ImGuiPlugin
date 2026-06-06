@@ -168,10 +168,13 @@ struct FImGuiWidgetRegisterParams
 	
 	// widget tooltip
 	const char* WidgetDescription = "";
-	
+
 	// to enable ImGui viewport support for the widget
 	bool bEnableViewports = true;
-	
+
+	// tick delegate handles ImGui window creation
+	bool bSkipWindowCreation = false;
+
 	// for drawing widget directly in the menubar (only valid when adding widget to the main menu)
 	bool bTickInMenuBar = false;
 

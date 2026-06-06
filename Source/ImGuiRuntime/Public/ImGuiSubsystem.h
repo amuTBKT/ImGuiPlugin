@@ -58,6 +58,14 @@ struct FImGuiFontTextureEntry
 	bool bInUse = false;
 };
 
+enum class EImGuiMainMenuWidgetFlags : uint8
+{
+	None				= 0,
+	TickInMenuBar		= 1 << 0,	// tick the widget in menu bar instead of creating a window
+	SkipWindowCreation	= 1 << 1,	// widget callback handles window creation
+};
+ENUM_CLASS_FLAGS(EImGuiMainMenuWidgetFlags);
+
 UCLASS(MinimalAPI)
 class UImGuiSubsystem : public UEngineSubsystem
 {
@@ -99,7 +107,7 @@ public:
 	IMGUIRUNTIME_API TSharedPtr<SWindow> CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
 	IMGUIRUNTIME_API void RegisterMainMenuWidget(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
-		FOnTickImGuiWidgetDelegate TickDelegate, bool bTickInMenuBar);
+		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None);
 	IMGUIRUNTIME_API void UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath);
 	IMGUIRUNTIME_API FImGuiTickContext* GetWidgetTickContext(const UWorld* World);
 

@@ -4,9 +4,13 @@
 #include "Modules/ModuleInterface.h"
 
 #include "Engine/World.h"
+#include "TimerManager.h"
+#include "Engine/Engine.h"
 #include "SImGuiWidgets.h"
 #include "ImGuiSubsystem.h"
 #include "UObject/Package.h"
+#include "InputKeyEventArgs.h"
+#include "Algo/BinarySearch.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/ConfigCacheIni.h"
 #include "HAL/PlatformFileManager.h"
@@ -176,13 +180,13 @@ struct FImGuiMenuContainer
 			, SlotNameOffset(Path.FindLastChar('.', SlotNameOffset) ? SlotNameOffset + 1 : 0)
 		{}
 
-		explicit FWidgetSlot(FAnsiString InPath, FAnsiString InToolTip, const FSlateBrush* InIcon, FOnTickImGuiWidgetDelegate InTickDelegate, bool bInTickInMenuBar)
+		explicit FWidgetSlot(FAnsiString InPath, FAnsiString InToolTip, const FSlateBrush* InIcon, FOnTickImGuiWidgetDelegate InTickDelegate, EImGuiMainMenuWidgetFlags InWidgetFlags)
 			: Path(MoveTemp(InPath))
 			, ToolTip(MoveTemp(InToolTip))
 			, Icon(InIcon)
 			, Storage(TInPlaceType<FOnTickImGuiWidgetDelegate>(), MoveTemp(InTickDelegate))
 			, SlotNameOffset(Path.FindLastChar('.', SlotNameOffset) ? SlotNameOffset + 1 : 0)
-			, bTickInMenuBar(bInTickInMenuBar)
+			, WidgetFlags(InWidgetFlags)
 		{}
 
 		const char*							GetName()			const { return *Path + SlotNameOffset; };
@@ -193,25 +197,25 @@ struct FImGuiMenuContainer
 
 		bool operator==(const FAnsiStringView& Other)	const { return Other.Equals(*Path, ESearchCase::IgnoreCase); }
 		bool operator==(const FWidgetSlot& Other)		const { return FCStringAnsi::Stricmp(*Path, *Other.Path) == 0; }
+		bool operator<(const FWidgetSlot& Other)		const { return FCStringAnsi::Stricmp(*Path, *Other.Path) < 0; }
 
 		FAnsiString Path;
 		FAnsiString ToolTip;
-		const FSlateBrush* Icon;
+		const FSlateBrush* Icon = nullptr;
 		TVariant<FOnTickImGuiWidgetDelegate, TArray<FWidgetSlot>> Storage;
 		int32 SlotNameOffset = 0;
 		// is the menu item active and drawing the widget window
 		bool bIsActive = false;
-		// use TickDelegate for drawing menu item instead of a widget window
-		bool bTickInMenuBar = false;
+		EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None;
 	};
 
 	struct FQueuedWidgetSlot
 	{
 		FAnsiString					WidgetPath;
 		FAnsiString					WidgetToolTip;
-		const FSlateBrush* WidgetIcon;
+		const FSlateBrush*			WidgetIcon = nullptr;
 		FOnTickImGuiWidgetDelegate	TickDelegate;
-		bool						bTickInMenuBar;
+		EImGuiMainMenuWidgetFlags	WidgetFlags = EImGuiMainMenuWidgetFlags::None;
 
 		bool operator==(const FAnsiStringView& Other) const
 		{
@@ -222,6 +226,13 @@ struct FImGuiMenuContainer
 			return FCStringAnsi::Stricmp(*WidgetPath, *Other.WidgetPath) == 0;
 		}
 	};
+
+	static FWidgetSlot* AddSlotSorted(TArray<FWidgetSlot>& Container, FWidgetSlot&& Slot)
+	{
+		const int32 InsertIndex = Algo::LowerBound(Container, Slot);
+		Container.Insert(MoveTemp(Slot), InsertIndex);
+		return &Container[InsertIndex];
+	}
 
 	FWidgetSlot* FindSlot(FAnsiStringView Path)
 	{
@@ -266,7 +277,7 @@ struct FImGuiMenuContainer
 		FWidgetSlot* ParentSlot = SubPath.IsEmpty() ? nullptr : WidgetSlots.FindByKey(SubPath);
 		if (!ParentSlot)
 		{
-			ParentSlot = &WidgetSlots.Emplace_GetRef(FAnsiString(SubPath));
+			ParentSlot = AddSlotSorted(WidgetSlots, FWidgetSlot(FAnsiString(SubPath)));
 		}
 
 		while (PathItr)
@@ -280,7 +291,7 @@ struct FImGuiMenuContainer
 			FWidgetSlot* NextSlot = ParentSlot->GetChildren().FindByKey(SubPath);
 			if (!NextSlot)
 			{
-				NextSlot = &ParentSlot->GetChildren().Emplace_GetRef(FAnsiString(SubPath));
+				NextSlot = AddSlotSorted(ParentSlot->GetChildren(), FWidgetSlot(FAnsiString(SubPath)));
 			}
 			else if (NextSlot->IsMenuItem())
 			{
@@ -300,7 +311,7 @@ struct FImGuiMenuContainer
 
 		for (const auto& Item : WidgetSlotsToAdd)
 		{
-			RegisterWidget(*Item.WidgetPath, *Item.WidgetToolTip, Item.WidgetIcon, Item.TickDelegate, Item.bTickInMenuBar);
+			RegisterWidget(*Item.WidgetPath, *Item.WidgetToolTip, Item.WidgetIcon, Item.TickDelegate, Item.WidgetFlags);
 		}
 		WidgetSlotsToAdd.Reset();
 
@@ -313,11 +324,11 @@ struct FImGuiMenuContainer
 
 	void RegisterWidget(
 		const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
-		FOnTickImGuiWidgetDelegate TickDelegate, bool bTickInMenuBar)
+		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags)
 	{
 		if (QueueWidgetSlotChanges)
 		{
-			WidgetSlotsToAdd.Emplace(WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, bTickInMenuBar);
+			WidgetSlotsToAdd.Emplace(WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, WidgetFlags);
 			WidgetSlotsToRemove.Remove(WidgetSlotsToAdd.Last());
 			return;
 		}
@@ -331,8 +342,10 @@ struct FImGuiMenuContainer
 			}
 			else
 			{
-				ParentSlot->GetChildren().Add(FWidgetSlot{ FAnsiString(WidgetPath), FAnsiString(WidgetToolTip), WidgetIcon, TickDelegate, bTickInMenuBar });
-				LoadSlotState(ParentSlot->GetChildren().Last());
+				FWidgetSlot NewSlot = FWidgetSlot{ FAnsiString(WidgetPath), FAnsiString(WidgetToolTip), WidgetIcon, TickDelegate, WidgetFlags };
+				LoadSlotState(NewSlot);
+				
+				AddSlotSorted(ParentSlot->GetChildren(), MoveTemp(NewSlot));
 			}
 		}
 	}
@@ -403,10 +416,10 @@ FImGuiMenuContainer& GetMenuContainerForWorld(const UWorld* World);
 
 void RegisterMainMenuWidgetForWorld(
 	const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
-	FOnTickImGuiWidgetDelegate TickDelegate, bool bTickInMenuBar)
+	FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags)
 {
 	FImGuiMenuContainer& MenuContainer = GetMenuContainerForWorld(World);
-	MenuContainer.RegisterWidget(WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, bTickInMenuBar);
+	MenuContainer.RegisterWidget(WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, WidgetFlags);
 }
 
 void UnregisterMainMenuWidgetForWorld(const UWorld* World, const char* WidgetPath)
@@ -424,22 +437,32 @@ FAutoRegisterMainMenuWidget::FAutoRegisterMainMenuWidget(FImGuiWidgetRegisterPar
 		return;
 	}
 
+	EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None;
+	if (RegisterParams.bTickInMenuBar)
+	{
+		WidgetFlags |= EImGuiMainMenuWidgetFlags::TickInMenuBar;
+	}
+	if (RegisterParams.bSkipWindowCreation)
+	{
+		WidgetFlags |= EImGuiMainMenuWidgetFlags::SkipWindowCreation;
+	}
+
 	if (UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get())
 	{
 		RegisterParams.InitFunction();
 		GetMenuContainerForWorld(nullptr).RegisterWidget(
 			RegisterParams.WidgetPath, RegisterParams.WidgetDescription, RegisterParams.WidgetIcon.GetOptionalIcon(),
-			FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction), RegisterParams.bTickInMenuBar);
+			FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction), WidgetFlags);
 	}
 	else
 	{
 		UImGuiSubsystem::OnSubsystemInitialized.AddLambda(
-			[RegisterParams](UImGuiSubsystem* ImGuiSubsystem)
+			[RegisterParams, WidgetFlags](UImGuiSubsystem* ImGuiSubsystem)
 			{
 				RegisterParams.InitFunction();
 				GetMenuContainerForWorld(nullptr).RegisterWidget(
 					RegisterParams.WidgetPath, RegisterParams.WidgetDescription, RegisterParams.WidgetIcon.GetOptionalIcon(),
-					FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction), RegisterParams.bTickInMenuBar);
+					FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction), WidgetFlags);
 			});
 	}
 }
@@ -455,6 +478,7 @@ static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FI
 			.OnTickDelegate(FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction))
 			.ConfigFileName(RegisterParams.GetWidetName())
 			.bEnableViewports(RegisterParams.bEnableViewports)
+			.bTickDelegateCreatesWindow(RegisterParams.bSkipWindowCreation)
 		];
 }
 
@@ -581,7 +605,7 @@ private:
 	{
 		if (Slot.IsMenuItem())
 		{
-			if (Slot.bTickInMenuBar)
+			if (EnumHasAnyFlags(Slot.WidgetFlags, EImGuiMainMenuWidgetFlags::TickInMenuBar))
 			{
 				Slot.GetTickDelegate().ExecuteIfBound(TickContext);
 			}
@@ -589,8 +613,8 @@ private:
 			{
 				const float CursorPosX = ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x * 0.5f;
 				
-				char LabelBuffer[128];
-				FCStringAnsi::Sprintf(LabelBuffer, "        %s", Slot.GetName());
+				char LabelBuffer[256];
+				FCStringAnsi::Sprintf(LabelBuffer, "        %s###%s", Slot.GetName(), Slot.GetName());
 				if (ImGui::MenuItem(LabelBuffer, nullptr, Slot.bIsActive))
 				{
 					Slot.bIsActive = !Slot.bIsActive;
@@ -611,10 +635,10 @@ private:
 		{
 			const float CursorPosX = ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x * 0.5f;
 			
-			char LabelBuffer[128];
+			char LabelBuffer[256];
 			if (!bIsRoot)
 			{
-				FCStringAnsi::Sprintf(LabelBuffer, "        %s", Slot.GetName());
+				FCStringAnsi::Sprintf(LabelBuffer, "        %s###%s", Slot.GetName(), Slot.GetName());
 			}
 			else
 			{
@@ -650,19 +674,26 @@ private:
 		{
 			if (Slot.bIsActive)
 			{
-				check(!Slot.bTickInMenuBar); //should not be possible to activate these
+				check(!EnumHasAnyFlags(Slot.WidgetFlags, EImGuiMainMenuWidgetFlags::TickInMenuBar)); //should not be possible to activate these
 
-				const bool bWasActive = Slot.bIsActive;
-				ImGui::SetNextWindowSize(ImVec2(512.f, 512.f), ImGuiCond_FirstUseEver);
-				if (ImGui::Begin(Slot.GetName(), &Slot.bIsActive))
+				if (EnumHasAnyFlags(Slot.WidgetFlags, EImGuiMainMenuWidgetFlags::SkipWindowCreation))
 				{
 					Slot.GetTickDelegate().ExecuteIfBound(TickContext);
 				}
-				ImGui::End();
-
-				if (bWasActive != Slot.bIsActive)
+				else
 				{
-					MenuContainer.SaveSlotState(Slot);
+					const bool bWasActive = Slot.bIsActive;
+					ImGui::SetNextWindowSize(ImVec2(512.f, 512.f), ImGuiCond_FirstUseEver);
+					if (ImGui::Begin(Slot.GetName(), &Slot.bIsActive))
+					{
+						Slot.GetTickDelegate().ExecuteIfBound(TickContext);
+					}
+					ImGui::End();
+
+					if (bWasActive != Slot.bIsActive)
+					{
+						MenuContainer.SaveSlotState(Slot);
+					}
 				}
 			}
 		}

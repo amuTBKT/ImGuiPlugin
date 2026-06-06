@@ -121,12 +121,14 @@ public:
 		, _OnTickDelegate()
 		, _ConfigFileName(nullptr)
 		, _bEnableViewports(true)
+		, _bTickDelegateCreatesWindow(false)
 		{
 		}
 		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
 		SLATE_EVENT(FOnTickImGuiWidgetDelegate, OnTickDelegate);
 		SLATE_ARGUMENT(const ANSICHAR*, ConfigFileName);
 		SLATE_ARGUMENT(bool, bEnableViewports);
+		SLATE_ARGUMENT(bool, bTickDelegateCreatesWindow);
 	SLATE_END_ARGS()
 	
 	void Construct(const FArguments& InArgs);
@@ -136,4 +138,5 @@ private:
 
 private:
 	FOnTickImGuiWidgetDelegate m_OnTickDelegate = {};
+	bool m_bSkipWindowCreation = false;
 };

@@ -558,19 +558,27 @@ void SImGuiWidget::Construct(const FArguments& InArgs)
 		.bEnableViewports(InArgs._bEnableViewports));
 
 	m_OnTickDelegate = InArgs._OnTickDelegate;
+	m_bSkipWindowCreation = InArgs._bTickDelegateCreatesWindow;
 }
 
 void SImGuiWidget::TickImGuiInternal(FImGuiTickContext* TickContext)
 {
 	FImGuiTickScope Scope{ TickContext };
 
-	ImGuiDockNodeFlags DockingFlags = ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoTabBar;
-	const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), DockingFlags);
-	ImGui::SetNextWindowDockID(MainDockSpaceID, ImGuiCond_Always);
-
-	if (ImGui::Begin("WidgetWindow", nullptr, ImGuiWindowFlags_NoDecoration))
+	if (m_bSkipWindowCreation)
 	{
 		m_OnTickDelegate.ExecuteIfBound(TickContext);
 	}
-	ImGui::End();
+	else
+	{
+		ImGuiDockNodeFlags DockingFlags = ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoTabBar;
+		const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), DockingFlags);
+
+		ImGui::SetNextWindowDockID(MainDockSpaceID, ImGuiCond_Always);
+		if (ImGui::Begin("SImGuiWidget_WidgetWindow", nullptr, ImGuiWindowFlags_NoDecoration))
+		{
+			m_OnTickDelegate.ExecuteIfBound(TickContext);
+		}
+		ImGui::End();
+	}
 }
