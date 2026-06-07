@@ -428,6 +428,14 @@ void UnregisterMainMenuWidgetForWorld(const UWorld* World, const char* WidgetPat
 	MenuContainer.UnregisterWidget(WidgetPath);
 }
 
+bool* GetMainMenuWidgetActiveStateForWorld(const UWorld* World, const char* WidgetPath)
+{
+	FImGuiMenuContainer& MenuContainer = GetMenuContainerForWorld(World);
+	FImGuiMenuContainer::FWidgetSlot* ParentSlot = MenuContainer.FindSlot(WidgetPath);
+	FImGuiMenuContainer::FWidgetSlot* Slot = ParentSlot ? ParentSlot->GetChildren().FindByKey(WidgetPath) : nullptr;
+	return Slot ? &Slot->bIsActive : nullptr;
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 FAutoRegisterMainMenuWidget::FAutoRegisterMainMenuWidget(FImGuiWidgetRegisterParams RegisterParams)

@@ -107,9 +107,10 @@ public:
 	IMGUIRUNTIME_API TSharedPtr<SWindow> CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
 	IMGUIRUNTIME_API void RegisterMainMenuWidget(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
-		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None);
-	IMGUIRUNTIME_API void UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath);
-	IMGUIRUNTIME_API FImGuiTickContext* GetWidgetTickContext(const UWorld* World);
+		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None) const;
+	IMGUIRUNTIME_API void UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath) const;
+	IMGUIRUNTIME_API bool* GetMainMenuWidgetActiveState(const UWorld* World, const char* WidgetPath) const;
+	IMGUIRUNTIME_API FImGuiTickContext* GetWidgetTickContext(const UWorld* World) const;
 
 	void UpdateFontAtlasTexture(ImTextureData* TexData);
 	IMGUIRUNTIME_API ImTextureRef GetSharedFontTextureID() const;
