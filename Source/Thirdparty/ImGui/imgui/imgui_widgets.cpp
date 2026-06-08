@@ -1,4 +1,4 @@
-// dear imgui, v1.92.8 WIP
+// dear imgui, v1.92.9 WIP
 // (widgets code)
 
 /*
@@ -266,6 +266,8 @@ void ImGui::TextEx(const char* text, const char* text_end, ImGuiTextFlags flags)
     }
 }
 
+// Note that all functions taking format strings in the API may be passed ("%s", text) or ("%.*s", text_len, text),
+// which will automatically bypass the formatter.
 void ImGui::TextUnformatted(const char* text, const char* text_end)
 {
     TextEx(text, text_end, ImGuiTextFlags_NoWidthForLargeClippedText);
@@ -1158,7 +1160,7 @@ void ImGui::ImageWithBg(ImTextureRef tex_ref, const ImVec2& image_size, const Im
     else
         window->DrawList->AddImage(tex_ref, bb.Min + padding, bb.Max - padding, uv0, uv1, GetColorU32(tint_col));
     if (g.Style.ImageBorderSize > 0.0f)
-        window->DrawList->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_Border), rounding, ImDrawFlags_None, g.Style.ImageBorderSize);
+        window->DrawList->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_Border), rounding, g.Style.ImageBorderSize);
 }
 
 void ImGui::Image(ImTextureRef tex_ref, const ImVec2& image_size, const ImVec2& uv0, const ImVec2& uv1)
@@ -1295,8 +1297,9 @@ bool ImGui::Checkbox(const char* label, bool* v)
     if (is_visible)
     {
         RenderNavCursor(total_bb, id);
-        RenderFrame(check_bb.Min, check_bb.Max, GetColorU32((held && hovered) ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg), true, style.FrameRounding);
+        ImU32 bg_col = GetColorU32((held && hovered) ? ImGuiCol_FrameBgActive : hovered ? ImGuiCol_FrameBgHovered : (mixed_value || checked) ? ImGuiCol_CheckboxSelectedBg : ImGuiCol_FrameBg);
         ImU32 check_col = GetColorU32(ImGuiCol_CheckMark);
+        RenderFrame(check_bb.Min, check_bb.Max, bg_col, true, style.FrameRounding);
         if (mixed_value)
         {
             // Undocumented tristate/mixed/indeterminate checkbox (#2644)
@@ -1752,14 +1755,14 @@ void ImGui::SeparatorTextEx(ImGuiID id, const char* label, const char* label_end
     const float separator_thickness = style.SeparatorTextBorderSize;
     const ImVec2 min_size(label_size.x + extra_w + padding.x * 2.0f, ImMax(label_size.y + padding.y * 2.0f, separator_thickness));
     const ImRect bb(pos, ImVec2(window->WorkRect.Max.x, pos.y + min_size.y));
-    const float text_baseline_y = ImTrunc((bb.GetHeight() - label_size.y) * style.SeparatorTextAlign.y + 0.99999f); //ImMax(padding.y, ImTrunc((style.SeparatorTextSize - label_size.y) * 0.5f));
+    const float text_baseline_y = ImTrunc((bb.GetHeight() - label_size.y) * style.SeparatorTextAlign.y + 0.999f); //ImMax(padding.y, ImTrunc((style.SeparatorTextSize - label_size.y) * 0.5f));
     ItemSize(min_size, text_baseline_y);
     if (!ItemAdd(bb, id))
         return;
 
     const float sep1_x1 = pos.x;
     const float sep2_x2 = bb.Max.x;
-    const float seps_y = ImTrunc((bb.Min.y + bb.Max.y) * 0.5f + 0.99999f);
+    const float seps_y = ImTrunc((bb.Min.y + bb.Max.y) * 0.5f + 0.999f);
 
     const float label_avail_w = ImMax(0.0f, sep2_x2 - sep1_x1 - padding.x * 2.0f);
     const ImVec2 label_pos(pos.x + padding.x + ImMax(0.0f, (label_avail_w - label_size.x - extra_w) * style.SeparatorTextAlign.x), pos.y + text_baseline_y); // FIXME-ALIGN
@@ -3578,7 +3581,8 @@ bool ImGui::VSliderInt(const char* label, const ImVec2& size, int* v, int v_min,
 // - ImParseFormatSanitizeForPrinting() [Internal]
 // - ImParseFormatSanitizeForScanning() [Internal]
 // - ImParseFormatPrecision() [Internal]
-// - TempInputTextScalar() [Internal]
+// - TempInputText() [Internal]
+// - TempInputScalar() [Internal]
 // - InputScalar()
 // - InputScalarN()
 // - InputFloat()
@@ -4589,6 +4593,7 @@ void ImGui::InputTextDeactivateHook(ImGuiID id)
     ImGuiInputTextState* state = &g.InputTextState;
     if (id == 0 || state->ID != id)
         return;
+    //IMGUI_DEBUG_LOG_ACTIVEID("InputTextDeactivateHook() id = 0x%08X\n", id);
     g.InputTextDeactivatedState.ID = state->ID;
     if (state->Flags & ImGuiInputTextFlags_ReadOnly)
     {
@@ -4904,7 +4909,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
     }
 
     const bool is_osx = io.ConfigMacOSXBehaviors;
-    if (g.ActiveId != id && init_make_active)
+    if (init_make_active && g.ActiveId != id)
     {
         IM_ASSERT(state && state->ID == id);
         SetActiveID(id, window);
@@ -5645,7 +5650,7 @@ bool ImGui::InputTextEx(const char* label, const char* hint, char* buf, int buf_
         ImVec2 cursor_screen_pos = ImTrunc(draw_pos + cursor_offset - draw_scroll);
         ImRect cursor_screen_rect(cursor_screen_pos.x, cursor_screen_pos.y - g.FontSize + 0.5f, cursor_screen_pos.x + 1.0f, cursor_screen_pos.y - 1.5f);
         if (cursor_is_visible && cursor_screen_rect.Overlaps(clip_rect))
-            draw_window->DrawList->AddLineV(cursor_screen_rect.Min.x, cursor_screen_rect.Min.y, cursor_screen_rect.Max.y, GetColorU32(ImGuiCol_InputTextCursor), 1.0f * (float)(int)style._MainScale); // FIXME-DPI: Cursor thickness (#7031)
+            draw_window->DrawList->AddLineV(cursor_screen_rect.Min.x, cursor_screen_rect.Min.y, cursor_screen_rect.Max.y, GetColorU32(ImGuiCol_InputTextCursor), style.InputTextCursorSize);
 
         // Notify OS of text input position for advanced IME (-1 x offset so that Windows IME can cover our cursor. Bit of an extra nicety.)
         // This is required for some backends (SDL3) to start emitting character/text inputs.
@@ -6359,7 +6364,7 @@ bool ImGui::ColorPicker4(const char* label, float col[4], ImGuiColorEditFlags fl
             const float a1 = (n+1.0f)/6.0f * 2.0f * IM_PI + aeps;
             const int vert_start_idx = draw_list->VtxBuffer.Size;
             draw_list->PathArcTo(wheel_center, (wheel_r_inner + wheel_r_outer)*0.5f, a0, a1, segment_per_arc);
-            draw_list->PathStroke(col_white, 0, wheel_thickness);
+            draw_list->PathStroke(col_white, wheel_thickness);
             const int vert_end_idx = draw_list->VtxBuffer.Size;
 
             // Paint colors over existing vertices
@@ -6503,7 +6508,7 @@ bool ImGui::ColorButton(const char* desc_id, const ImVec4& col, ImGuiColorEditFl
         if (g.Style.FrameBorderSize > 0.0f)
             RenderFrameBorder(bb.Min, bb.Max, rounding);
         else
-            window->DrawList->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_FrameBg), rounding, 0, 1.0f * (float)(int)g.Style._MainScale); // Color buttons are often in need of some sort of border // FIXME-DPI
+            window->DrawList->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_FrameBg), rounding, 1.0f * (float)(int)g.Style._MainScale); // Color buttons are often in need of some sort of border // FIXME-DPI
     }
 
     // Drag and Drop Source
@@ -7176,7 +7181,7 @@ void ImGui::TreeNodeDrawLineToChildNode(const ImVec2& target_pos)
         window->DrawList->PathArcToFast(ImVec2(x1, y - rounding), rounding, 6, 3);
         if (x1 < x2)
             window->DrawList->PathLineTo(ImVec2(x2, y));
-        window->DrawList->PathStroke(GetColorU32(ImGuiCol_TreeLines), ImDrawFlags_None, g.Style.TreeLinesSize);
+        window->DrawList->PathStroke(GetColorU32(ImGuiCol_TreeLines), g.Style.TreeLinesSize);
     }
     else
     {
@@ -8954,7 +8959,7 @@ int ImGui::PlotEx(ImGuiPlotType plot_type, const char* label, float (*values_get
         // Tooltip on hover
         if (hovered && inner_bb.Contains(g.IO.MousePos))
         {
-            const float t = ImClamp((g.IO.MousePos.x - inner_bb.Min.x) / (inner_bb.Max.x - inner_bb.Min.x), 0.0f, 0.9999f);
+            const float t = ImClamp((g.IO.MousePos.x - inner_bb.Min.x) / (inner_bb.Max.x - inner_bb.Min.x), 0.0f, 0.999f);
             const int v_idx = (int)(t * item_count);
             IM_ASSERT(v_idx >= 0 && v_idx < values_count);
 
@@ -9402,8 +9407,7 @@ bool ImGui::BeginMenuEx(const char* label, const char* icon, bool enabled)
 
     bool pressed;
 
-    // We use ImGuiSelectableFlags_NoSetKeyOwner to allow down on one menu item, move, up on another.
-    const ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_NoHoldingActiveID | ImGuiSelectableFlags_NoSetKeyOwner | ImGuiSelectableFlags_SelectOnClick | ImGuiSelectableFlags_NoAutoClosePopups;
+    const ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_NoAutoClosePopups | (ImGuiSelectableFlags)ImGuiSelectableFlags_SelectOnClick;
     ImGuiMenuColumns* offsets = &window->DC.MenuColumns;
     if (window->DC.LayoutType == ImGuiLayoutType_Horizontal)
     {
@@ -9440,6 +9444,14 @@ bool ImGui::BeginMenuEx(const char* label, const char* icon, bool enabled)
     }
     if (!enabled)
         EndDisabled();
+
+    // Once dragged, release ActiveId + key ownership. This is to allow the idiom of mouse down a menu, dragging elsewhere, up on some other MenuItem(). (#8233, #9394)
+    // Could move logic into lower-level ImGuiButtonFlags_AutoReleaseActiveId + ImGuiButtonFlags_AutoReleaseKeyOwner? Easier once we get rid of the Selectable() middle-man here.
+    if (g.ActiveId == id && g.HoveredId != id && g.ActiveIdSource == ImGuiInputSource_Mouse && IsMouseDragging(0))
+    {
+        ClearActiveID();
+        SetKeyOwner(ImGuiKey_MouseLeft, ImGuiKeyOwner_NoOwner);
+    }
 
     const bool hovered = (g.HoveredId == id) && enabled && !g.NavHighlightItemUnderNav;
     if (menuset_is_open)
@@ -9520,6 +9532,9 @@ bool ImGui::BeginMenuEx(const char* label, const char* icon, bool enabled)
 
     IMGUI_TEST_ENGINE_ITEM_INFO(id, label, g.LastItemData.StatusFlags | ImGuiItemStatusFlags_Openable | (menu_is_open ? ImGuiItemStatusFlags_Opened : 0));
     PopID();
+
+    if (g.ActiveId == id && want_open)
+        g.ActiveIdNoClearOnFocusLoss = true;
 
     if (want_open && !menu_is_open && g.OpenPopupStack.Size > g.BeginPopupStack.Size)
     {
@@ -9613,7 +9628,7 @@ bool ImGui::MenuItemEx(const char* label, const char* icon, const char* shortcut
         BeginDisabled();
 
     // We use ImGuiSelectableFlags_NoSetKeyOwner to allow down on one menu item, move, up on another.
-    const ImGuiSelectableFlags selectable_flags = ImGuiSelectableFlags_NoHoldingActiveID | ImGuiSelectableFlags_SelectOnRelease | ImGuiSelectableFlags_NoSetKeyOwner | ImGuiSelectableFlags_SetNavIdOnHover;
+    const ImGuiSelectableFlags selectable_flags = (ImGuiSelectableFlags)ImGuiSelectableFlags_SelectOnRelease | (ImGuiSelectableFlags)ImGuiSelectableFlags_SetNavIdOnHover;
     ImGuiMenuColumns* offsets = &window->DC.MenuColumns;
     if (window->DC.LayoutType == ImGuiLayoutType_Horizontal)
     {
@@ -9656,6 +9671,17 @@ bool ImGui::MenuItemEx(const char* label, const char* icon, const char* shortcut
                 RenderCheckMark(window->DrawList, text_pos + ImVec2(offsets->OffsetMark + stretch_w + g.FontSize * 0.40f, g.FontSize * 0.134f * 0.5f), GetColorU32(ImGuiCol_Text), g.FontSize * 0.866f);
         }
     }
+
+    // Once dragged, release ActiveId + key ownership. This is to allow the idiom of mouse down a menu, dragging elsewhere, up on some other MenuItem(). (#8233, #9394)
+    // Could move logic into lower-level ImGuiButtonFlags_AutoReleaseActiveId + ImGuiButtonFlags_AutoReleaseKeyOwner? Easier once we get rid of the Selectable() middle-man here.
+    const ImGuiID id = g.LastItemData.ID;
+    if (g.ActiveId == id && g.HoveredId != id && g.ActiveIdSource == ImGuiInputSource_Mouse && IsMouseDragging(0))
+    {
+        ClearActiveID();
+        SetKeyOwner(ImGuiKey_MouseLeft, ImGuiKeyOwner_NoOwner);
+    }
+
+
     IMGUI_TEST_ENGINE_ITEM_INFO(g.LastItemData.ID, label, g.LastItemData.StatusFlags | ImGuiItemStatusFlags_Checkable | (selected ? ImGuiItemStatusFlags_Checked : 0));
     if (!enabled)
         EndDisabled();
@@ -10867,7 +10893,7 @@ bool    ImGui::TabItemEx(ImGuiTabBar* tab_bar, const char* label, bool* p_open, 
                 float rounding = style.TabRounding;
                 display_draw_list->PathArcToFast(tl + ImVec2(+rounding, +rounding), rounding, 7, 9);
                 display_draw_list->PathArcToFast(tr + ImVec2(-rounding, +rounding), rounding, 9, 11);
-                display_draw_list->PathStroke(overline_col, 0, style.TabBarOverlineSize);
+                display_draw_list->PathStroke(overline_col, style.TabBarOverlineSize);
             }
             else
             {
@@ -10972,20 +10998,16 @@ void ImGui::TabItemBackground(ImDrawList* draw_list, const ImRect& bb, ImGuiTabI
     IM_UNUSED(flags);
     IM_ASSERT(width > 0.0f);
     const float rounding = ImMax(0.0f, ImMin((flags & ImGuiTabItemFlags_Button) ? g.Style.FrameRounding : g.Style.TabRounding, width * 0.5f - 1.0f));
-    const float y1 = bb.Min.y + 1.0f;
+    const float y1 = bb.Min.y + 1.0f; // Leave a bit of room in title bars.
     const float y2 = bb.Max.y - g.Style.TabBarBorderSize;
-    draw_list->PathLineTo(ImVec2(bb.Min.x, y2));
-    draw_list->PathArcToFast(ImVec2(bb.Min.x + rounding, y1 + rounding), rounding, 6, 9);
-    draw_list->PathArcToFast(ImVec2(bb.Max.x - rounding, y1 + rounding), rounding, 9, 12);
-    draw_list->PathLineTo(ImVec2(bb.Max.x, y2));
-    draw_list->PathFillConvex(col);
+    draw_list->AddRectFilled(bb.Min, ImVec2(bb.Max.x, y2), col, rounding, ImDrawFlags_RoundCornersTop);
     if (g.Style.TabBorderSize > 0.0f)
     {
         draw_list->PathLineTo(ImVec2(bb.Min.x + 0.5f, y2));
         draw_list->PathArcToFast(ImVec2(bb.Min.x + rounding + 0.5f, y1 + rounding + 0.5f), rounding, 6, 9);
         draw_list->PathArcToFast(ImVec2(bb.Max.x - rounding - 0.5f, y1 + rounding + 0.5f), rounding, 9, 12);
         draw_list->PathLineTo(ImVec2(bb.Max.x - 0.5f, y2));
-        draw_list->PathStroke(GetColorU32(ImGuiCol_Border), 0, g.Style.TabBorderSize);
+        draw_list->PathStroke(GetColorU32(ImGuiCol_Border), g.Style.TabBorderSize);
     }
 }
 

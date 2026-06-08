@@ -97,6 +97,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+	// IO.BackendFlags |= ImGuiBackendFlags_HasGamepad; //TODO: enable gamepad support
 
 	if (InArgs._bEnableViewports)
 	{
