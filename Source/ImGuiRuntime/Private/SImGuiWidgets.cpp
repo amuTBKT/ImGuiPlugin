@@ -92,12 +92,12 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	IO.IniFilename = m_ConfigFilePath.IsEmpty() ? nullptr : *m_ConfigFilePath;
 
 	IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+	//IO.BackendFlags |= ImGuiBackendFlags_HasGamepad; //TODO: enable gamepad support
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
-	// IO.BackendFlags |= ImGuiBackendFlags_HasGamepad; //TODO: enable gamepad support
+	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 
 	if (InArgs._bEnableViewports)
 	{
@@ -117,6 +117,11 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 #ifdef IMGUI_DISABLE_DEFAULT_SHELL_FUNCTIONS
 	PlatformIO.Platform_OpenInShellFn = ImGuiUtils::UnrealPlatform_OpenInShell;
 #endif
+
+	PlatformIO.DrawCallback_ResetRenderState = ImDrawCallback_ResetRenderState;
+	PlatformIO.DrawCallback_SetSamplerNearest = ImDrawCallback_SetSamplerStatePoint;
+	// NOTE: This just disables the point sampler override, actual sampler state comes from the texture (doesn't have to be linear)
+	PlatformIO.DrawCallback_SetSamplerLinear = ImDrawCallback_ResetSamplerState;
 
 	// viewport setup
 	if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)

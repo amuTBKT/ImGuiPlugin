@@ -532,6 +532,8 @@ namespace ImGuiUtils
 
 						FMatrix44f ProjectionMatrixParam = CalculateProjectionMatrix();
 						uint32_t ShaderStateOverrides = 0;
+						bool bForcePointSamplerState = false;
+						FRHISamplerState* PointSamplerStateRHI = TStaticSamplerState<>::GetRHI();
 
 						RHICmdList.SetViewport(ViewportRect.Min.x, ViewportRect.Min.y, 0.f, ViewportRect.Max.x, ViewportRect.Max.y, 1.f);
 						RHICmdList.SetScissorRect(false, 0.f, 0.f, 0.f, 0.f);
@@ -556,6 +558,10 @@ namespace ImGuiUtils
 										ShaderStateOverrides = static_cast<uint32>(reinterpret_cast<uintptr_t>(DrawCmd.UserCallbackData));
 
 										// No VS state exposed atm.
+									}
+									else if (DrawCmd.UserCallback == ImDrawCallback_SetSamplerStatePoint || DrawCmd.UserCallback == ImDrawCallback_ResetSamplerState)
+									{
+										bForcePointSamplerState = (DrawCmd.UserCallback == ImDrawCallback_SetSamplerStatePoint);
 									}
 									else
 									{
@@ -602,7 +608,7 @@ namespace ImGuiUtils
 										RHICmdList,
 										PixelShader,
 										m_BoundTextures[TextureIndex].TextureRHI,
-										m_BoundTextures[TextureIndex].SamplerRHI,
+										bForcePointSamplerState ? PointSamplerStateRHI : m_BoundTextures[TextureIndex].SamplerRHI.GetReference(),
 										ShaderStateOverrides | (m_BoundTextures[TextureIndex].IsSRGB ? (uint32)EImGuiShaderState::OutputInSRGB : 0));
 
 									RHICmdList.DrawIndexedPrimitive(IndexBuffer, DrawCmd.VtxOffset + GlobalVertexOffset, 0, DrawCmd.ElemCount, DrawCmd.IdxOffset + GlobalIndexOffset, DrawCmd.ElemCount / 3, 1);

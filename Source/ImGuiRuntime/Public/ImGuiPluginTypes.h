@@ -132,8 +132,10 @@ struct FImGuiImageBindingParams
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define ImDrawCallback_ResetRenderState (ImDrawCallback)(-1)
-#define ImDrawCallback_SetShaderState	(ImDrawCallback)(-2)
+#define ImDrawCallback_ResetRenderState		 (ImDrawCallback)(-1)
+#define ImDrawCallback_SetShaderState		 (ImDrawCallback)(-2)
+#define ImDrawCallback_SetSamplerStatePoint	 (ImDrawCallback)(-3)
+#define ImDrawCallback_ResetSamplerState	 (ImDrawCallback)(-4)
 using FImGuiShaderState = void*;
 
 enum class EImGuiShaderState : uint32
