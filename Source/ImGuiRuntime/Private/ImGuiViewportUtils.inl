@@ -245,7 +245,7 @@ namespace ImGuiUtils
 
 	FORCEINLINE static EMouseCursor::Type ImGuiToUnrealCursor(ImGuiMouseCursor Cursor)
 	{
-		static constexpr EMouseCursor::Type ImGuiToUMGCursor[ImGuiMouseCursor_COUNT] =
+		static constexpr EMouseCursor::Type ImGuiToSlateCursor[] =
 		{
 			EMouseCursor::Default,
 			EMouseCursor::TextEditBeam,
@@ -255,9 +255,13 @@ namespace ImGuiUtils
 			EMouseCursor::ResizeSouthWest,
 			EMouseCursor::ResizeSouthEast,
 			EMouseCursor::Hand,
+			EMouseCursor::Default,
+			EMouseCursor::Default,
 			EMouseCursor::SlashedCircle,
 		};
-		return ImGuiToUMGCursor[Cursor];
+		static_assert(UE_ARRAY_COUNT(ImGuiToSlateCursor) == ImGuiMouseCursor_COUNT);
+
+		return ImGuiToSlateCursor[Cursor];
 	}
 
 	FORCEINLINE static int32 UnrealToImGuiMouseButton(FKey MouseKey)

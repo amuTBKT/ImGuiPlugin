@@ -96,6 +96,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
 	//IO.BackendFlags |= ImGuiBackendFlags_HasGamepad; //TODO: enable gamepad support
+	IO.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 
@@ -361,6 +362,20 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 #endif
 
 	m_CachedImGuiCursor = ImGui::GetMouseCursor();
+
+	if (IO.WantSetMousePos)
+	{
+		TSharedPtr<ICursor> SlateCursor = FSlateApplication::Get().GetPlatformCursor();
+		if (SlateCursor.IsValid())
+		{
+			FVector2f MousePosition = FVector2f(IO.MousePos.x, IO.MousePos.y);
+			if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) == 0)
+			{
+				MousePosition = WidgetGeometry.AbsoluteToLocal(MousePosition);
+			}
+			SlateCursor->SetPosition(MousePosition.X, MousePosition.Y);
+		}
+	}
 
 	return LayerId;
 }
