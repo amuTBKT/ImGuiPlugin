@@ -207,7 +207,6 @@ namespace ImGuiUtils
 			{ EKeys::RightParantheses.GetFName(), ImGuiKey_None },
 			{ EKeys::Quote.GetFName(), ImGuiKey_None },
 
-#if 0 //TODO: enable gamepad support
 			{ EKeys::Gamepad_LeftThumbstick.GetFName(), ImGuiKey_GamepadL3 },
 			{ EKeys::Gamepad_RightThumbstick.GetFName(), ImGuiKey_GamepadR3 },
 			{ EKeys::Gamepad_Special_Left.GetFName(), ImGuiKey_GamepadBack },
@@ -236,7 +235,6 @@ namespace ImGuiUtils
 			{ EKeys::Gamepad_RightStick_Down.GetFName(), ImGuiKey_GamepadRStickDown },
 			{ EKeys::Gamepad_RightStick_Right.GetFName(), ImGuiKey_GamepadRStickRight },
 			{ EKeys::Gamepad_RightStick_Left.GetFName(), ImGuiKey_GamepadRStickLeft },
-#endif
 		};
 
 		const ImGuiKey* Key = KeyMap.Find(Keyname);

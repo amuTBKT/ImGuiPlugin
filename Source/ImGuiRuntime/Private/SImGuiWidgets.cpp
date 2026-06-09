@@ -95,7 +95,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
 	IO.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-	//IO.BackendFlags |= ImGuiBackendFlags_HasGamepad; //TODO: enable gamepad support
+	IO.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 	IO.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
@@ -516,6 +516,16 @@ FReply SImGuiWidgetBase::OnMouseMove(const FGeometry& WidgetGeometry, const FPoi
 	IO.AddMousePosEvent(MousePosition.X, MousePosition.Y);
 
 	return FReply::Handled();
+}
+
+FReply SImGuiWidgetBase::OnAnalogValueChanged(const FGeometry& MyGeometry, const FAnalogInputEvent& AnalogInputEvent)
+{
+	ImGuiIO& IO = m_ImGuiContext->IO;
+
+	float Value = AnalogInputEvent.GetAnalogValue();
+	IO.AddKeyAnalogEvent(ImGuiUtils::UnrealToImGuiKey(AnalogInputEvent.GetKey().GetFName()), FMath::Abs(Value) > 0.1f, Value);
+
+	return IO.WantCaptureKeyboard ? FReply::Handled() : FReply::Unhandled();
 }
 
 FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& WidgetGeometry, const FPointerEvent& CursorEvent) const

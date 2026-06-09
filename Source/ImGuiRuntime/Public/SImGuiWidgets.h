@@ -63,6 +63,8 @@ public:
 
 	virtual FReply OnMouseMove(const FGeometry& WidgetGeometry, const FPointerEvent& MouseEvent) override;
 
+	virtual FReply OnAnalogValueChanged(const FGeometry& MyGeometry, const FAnalogInputEvent& AnalogInputEvent) override;
+
 	virtual FCursorReply OnCursorQuery(const FGeometry& WidgetGeometry, const FPointerEvent& CursorEvent) const override;
 
 	virtual void OnDragLeave(const FDragDropEvent& DragDropEvent) override;
