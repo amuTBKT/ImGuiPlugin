@@ -40,6 +40,10 @@ struct FImGuiTickContext
 	// drawing remotely to NetImGui server
 	bool bIsDrawingRemotely = false;
 
+	// updating the main menu bar
+	// TODO: is there a better way to detect if we are inside `BeginMainMenuBar`/`EndMainMenuBar` block?
+	bool bIsTickingMainMenuBar = false;
+
 	TSharedPtr<FDragDropOperation> TryConsumeDragDropOperation()
 	{
 		TSharedPtr<FDragDropOperation> DragDropOp;
@@ -127,8 +131,71 @@ struct FImGuiImageBindingParams
 	ImVec2 Size = ImVec2(1.f, 1.f);
 	ImVec2 UV0 = ImVec2(0.f, 0.f);
 	ImVec2 UV1 = ImVec2(1.f, 1.f);
-	ImTextureID Id = 0u;
+	ImTextureID Id = ImTextureID_Invalid;
 };
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+namespace FImGui
+{
+	// utility function to allow adding icon to menu item
+	FORCEINLINE bool MenuItem(const char* Label, bool bIsActive, const FImGuiImageBindingParams& Icon)
+	{
+		const float CursorPosX = ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x * 0.5f;
+
+		// label name with padding for icon
+		char LabelBuffer[128];
+		FCStringAnsi::Sprintf(LabelBuffer, "        %s", Label, Label);
+		
+		ImGui::BeginGroup();
+		bool bPressed = ImGui::MenuItem(LabelBuffer, nullptr, bIsActive);
+
+		ImGui::SameLine();
+		ImGui::SetCursorPosX(CursorPosX);
+		if (Icon.Id != ImTextureID_Invalid)
+		{
+			ImGui::Image(Icon.Id, Icon.Size, Icon.UV0, Icon.UV1);
+		}
+		else
+		{
+			ImGui::Dummy(ImVec2(1.f, 1.f));
+		}
+		ImGui::EndGroup();
+
+		return bPressed;
+	}
+
+	// utility function to allow adding icon to sub menu
+	template <typename MenuCallback>
+	FORCEINLINE void SubMenu(const char* Label, const FImGuiImageBindingParams& ExpandedIcon, const FImGuiImageBindingParams& CollapsedIcon, MenuCallback MenuFunc)
+	{
+		const float CursorPosX = ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x * 0.5f;
+
+		// label name with padding for icon
+		// NOTE: "[Icon] Label" has the same ID as "Label"
+		// this is to ensure calling ImGui::BeginMenu("Label") finds the same menu as FImGui::SubMenu("Label", ...)
+		char LabelBuffer[256];
+		FCStringAnsi::Sprintf(LabelBuffer, "        %s###%s", Label, Label);
+
+		const bool bOpen = ImGui::BeginMenu(LabelBuffer);
+		if (bOpen)
+		{
+			MenuFunc();
+			ImGui::EndMenu();
+		}
+		
+		ImGui::SameLine();
+		ImGui::SetCursorPosX(CursorPosX);
+		if (bOpen)
+		{
+			ImGui::Image(ExpandedIcon.Id, ExpandedIcon.Size, ExpandedIcon.UV0, ExpandedIcon.UV1);
+		}
+		else
+		{
+			ImGui::Image(CollapsedIcon.Id, CollapsedIcon.Size, CollapsedIcon.UV0, CollapsedIcon.UV1);
+		}
+	}
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -177,7 +244,7 @@ struct FImGuiWidgetRegisterParams
 	// tick delegate handles ImGui window creation
 	bool bSkipWindowCreation = false;
 
-	// for drawing widget directly in the menubar (only valid when adding widget to the main menu)
+	// allow widget to customize menu bar item (only valid when adding widget to the main menu)
 	bool bTickInMenuBar = false;
 
 	const char* GetWidetName() const

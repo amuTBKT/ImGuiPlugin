@@ -61,7 +61,7 @@ struct FImGuiFontTextureEntry
 enum class EImGuiMainMenuWidgetFlags : uint8
 {
 	None				= 0,
-	TickInMenuBar		= 1 << 0,	// tick the widget in menu bar instead of creating a window
+	TickInMenuBar		= 1 << 0,	// allow ticking the widget in menu bar
 	SkipWindowCreation	= 1 << 1,	// widget callback handles window creation
 };
 ENUM_CLASS_FLAGS(EImGuiMainMenuWidgetFlags);

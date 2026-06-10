@@ -564,9 +564,6 @@ public:
 
 		UImGuiSubsystem::OnBeginImGuiFrame.AddRaw(this, &SImGuiMainMenuWidget::BeginFrame);
 		UImGuiSubsystem::OnEndImGuiFrame.AddRaw(this, &SImGuiMainMenuWidget::EndFrame);
-
-		// first frame setup
-		BeginFrame();
 	}
 
 	~SImGuiMainMenuWidget()
@@ -606,74 +603,44 @@ private:
 	// cached during tick for easier access
 	bool bIsDockNodeValid = false;
 	UImGuiSubsystem* ImGuiSubsystem = nullptr;
-	FImGuiImageBindingParams OpenFolderIcon{};
-	FImGuiImageBindingParams CloseFolderIcon{};
+	FImGuiImageBindingParams ExpandedMenuIcon{};
+	FImGuiImageBindingParams CollapsedMenuIcon{};
 
-	void TickMainMenuBar(FImGuiMenuContainer& MenuContainer, FImGuiMenuContainer::FWidgetSlot& Slot, FImGuiTickContext* TickContext, bool bIsRoot)
+	void TickMainMenuBar(FImGuiMenuContainer& MenuContainer, FImGuiMenuContainer::FWidgetSlot& Slot, FImGuiTickContext* TickContext)
 	{
 		if (Slot.IsMenuItem())
 		{
+			const bool bWasSlotActive = Slot.bIsActive;
+
 			if (EnumHasAnyFlags(Slot.WidgetFlags, EImGuiMainMenuWidgetFlags::TickInMenuBar))
 			{
 				Slot.GetTickDelegate().ExecuteIfBound(TickContext);
 			}
 			else
 			{
-				const float CursorPosX = ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x * 0.5f;
-				
-				char LabelBuffer[256];
-				FCStringAnsi::Sprintf(LabelBuffer, "        %s###%s", Slot.GetName(), Slot.GetName());
-				if (ImGui::MenuItem(LabelBuffer, nullptr, Slot.bIsActive))
+				FImGuiImageBindingParams Icon = Slot.Icon ? ImGuiSubsystem->RegisterOneFrameResource(Slot.Icon, ImGui::GetTextLineHeight()) : FImGuiImageBindingParams{};
+				if (FImGui::MenuItem(Slot.GetName(), Slot.bIsActive, Icon))
 				{
 					Slot.bIsActive = !Slot.bIsActive;
-					MenuContainer.SaveSlotState(Slot);
 				}
 				ImGui::SetItemTooltip(*Slot.ToolTip);
+			}
 
-				if (Slot.Icon)
-				{
-					FImGuiImageBindingParams Icon = ImGuiSubsystem->RegisterOneFrameResource(Slot.Icon, ImGui::GetTextLineHeight());
-					ImGui::SameLine();
-					ImGui::SetCursorPosX(CursorPosX);
-					ImGui::Image(Icon.Id, Icon.Size, Icon.UV0, Icon.UV1);
-				}
+			if (bWasSlotActive != Slot.bIsActive)
+			{
+				MenuContainer.SaveSlotState(Slot);
 			}
 		}
 		else if (!Slot.GetChildren().IsEmpty())
 		{
-			const float CursorPosX = ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x * 0.5f;
-			
-			char LabelBuffer[256];
-			if (!bIsRoot)
-			{
-				FCStringAnsi::Sprintf(LabelBuffer, "        %s###%s", Slot.GetName(), Slot.GetName());
-			}
-			else
-			{
-				FCStringAnsi::Sprintf(LabelBuffer, "%s", Slot.GetName());
-			}
-			const bool bOpen = ImGui::BeginMenu(LabelBuffer);
-			if (bOpen)
-			{
-				for (auto& Child : Slot.GetChildren())
+			FImGui::SubMenu(Slot.GetName(), ExpandedMenuIcon, CollapsedMenuIcon,
+				[&]()
 				{
-					TickMainMenuBar(MenuContainer, Child, TickContext, /*bIsRoot=*/false);
-				}
-				ImGui::EndMenu();
-			}
-			if (!bIsRoot)
-			{
-				ImGui::SameLine();
-				ImGui::SetCursorPosX(CursorPosX);
-				if (bOpen)
-				{
-					ImGui::Image(OpenFolderIcon.Id, OpenFolderIcon.Size, OpenFolderIcon.UV0, OpenFolderIcon.UV1);
-				}
-				else
-				{
-					ImGui::Image(CloseFolderIcon.Id, CloseFolderIcon.Size, CloseFolderIcon.UV0, CloseFolderIcon.UV1);
-				}
-			}
+					for (auto& ChildSlot : Slot.GetChildren())
+					{
+						TickMainMenuBar(MenuContainer, ChildSlot, TickContext);
+					}
+				});
 		}
 	}
 	void TickMainMenuWidgets(FImGuiMenuContainer& MenuContainer, FImGuiMenuContainer::FWidgetSlot& Slot, FImGuiTickContext* TickContext)
@@ -682,8 +649,6 @@ private:
 		{
 			if (Slot.bIsActive)
 			{
-				check(!EnumHasAnyFlags(Slot.WidgetFlags, EImGuiMainMenuWidgetFlags::TickInMenuBar)); //should not be possible to activate these
-
 				if (EnumHasAnyFlags(Slot.WidgetFlags, EImGuiMainMenuWidgetFlags::SkipWindowCreation))
 				{
 					Slot.GetTickDelegate().ExecuteIfBound(TickContext);
@@ -732,8 +697,8 @@ private:
 
 		FImGuiTickScope Scope{ TickContext };
 
-		OpenFolderIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderOpen"), ImGui::GetTextLineHeight());
-		CloseFolderIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderClosed"), ImGui::GetTextLineHeight());
+		ExpandedMenuIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderOpen"), ImGui::GetTextLineHeight());
+		CollapsedMenuIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderClosed"), ImGui::GetTextLineHeight());
 
 		if (!bIsDockNodeValid)
 		{
@@ -743,11 +708,22 @@ private:
 
 		if (ImGui::BeginMainMenuBar())
 		{
+			TickContext->bIsTickingMainMenuBar = true;
+
 			for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
 			{
-				TickMainMenuBar(MenuContainer, Slot, TickContext, /*bIsRoot=*/true);
+				if (!Slot.GetChildren().IsEmpty() && ImGui::BeginMenu(Slot.GetName()))
+				{
+					for (auto& ChildSlot : Slot.GetChildren())
+					{
+						TickMainMenuBar(MenuContainer, ChildSlot, TickContext);
+					}
+					ImGui::EndMenu();
+				}
 			}
 			ImGui::EndMainMenuBar();
+
+			TickContext->bIsTickingMainMenuBar = false;
 		}
 
 		for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)

@@ -102,7 +102,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 
 	if (InArgs._bEnableViewports)
 	{
-		IO.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+		IO.ConfigFlags  |= ImGuiConfigFlags_ViewportsEnable;
 		IO.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
 		IO.BackendFlags |= ImGuiBackendFlags_PlatformHasViewports;
 	}
