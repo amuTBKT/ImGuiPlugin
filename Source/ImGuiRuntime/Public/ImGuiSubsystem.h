@@ -84,7 +84,7 @@ public:
 
 	// events
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnSubsystemInitialized, UImGuiSubsystem* /*Subsystem*/)
-	static FOnSubsystemInitialized OnSubsystemInitialized;
+	IMGUIRUNTIME_API static FOnSubsystemInitialized OnSubsystemInitialized;
 	static FSimpleMulticastDelegate OnBeginImGuiFrame;
 	static FSimpleMulticastDelegate OnEndImGuiFrame;
 

@@ -756,7 +756,7 @@ private:
 #if WITH_EDITOR
 		m_ImGuiTabGroup = WorkspaceMenu::GetMenuStructure().GetToolsCategory()->AddGroup(
 			LOCTEXT("ImGuiGroupName", "ImGui"),
-			FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
+			FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"), /*bSortChildren=*/true);
 
 		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateRaw(this, &FImGuiRuntimeModule::SpawnImGuiTab))
 			.SetGroup(m_ImGuiTabGroup.ToSharedRef())

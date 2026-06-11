@@ -99,7 +99,7 @@ private:
 	FAnsiString m_ConfigFilePath;
 	TSharedPtr<ImGuiUtils::FWidgetDrawer> m_WidgetDrawers[2];
 
-	// TODO: initial zoom support, can we do better than this?
+	// initial zoom support, can we do better than this?
 	float m_WindowScale = 1.f;
 
 	mutable uint8 m_CachedImGuiCursor = 0;

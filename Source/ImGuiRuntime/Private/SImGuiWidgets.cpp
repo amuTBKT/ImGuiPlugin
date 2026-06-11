@@ -490,10 +490,10 @@ FReply SImGuiWidgetBase::OnMouseWheel(const FGeometry& WidgetGeometry, const FPo
 {
 	ImGuiIO& IO = m_ImGuiContext->IO;
 
-	// TODO: initial zoom support, can we do better than this?
+	// initial zoom support
 	if (IO.KeyCtrl)
 	{
-		m_WindowScale += MouseEvent.GetWheelDelta() * 0.25f;
+		m_WindowScale += MouseEvent.GetWheelDelta() * 0.1f;
 		m_WindowScale = FMath::Clamp(m_WindowScale, 1.f, 4.f);
 		m_ImGuiContext->Style.FontScaleMain = m_WindowScale;
 	}
