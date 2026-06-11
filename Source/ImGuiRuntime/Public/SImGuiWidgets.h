@@ -1,4 +1,4 @@
-// Copyright 2024-25 Amit Kumar Mehar. All Rights Reserved.
+// Copyright 2024-26 Amit Kumar Mehar. All Rights Reserved.
 
 #pragma once
 
@@ -99,7 +99,7 @@ private:
 	FAnsiString m_ConfigFilePath;
 	TSharedPtr<ImGuiUtils::FWidgetDrawer> m_WidgetDrawers[2];
 
-	// initial zoom support, can we do better than this?
+	// initial zoom support
 	float m_WindowScale = 1.f;
 
 	mutable uint8 m_CachedImGuiCursor = 0;
