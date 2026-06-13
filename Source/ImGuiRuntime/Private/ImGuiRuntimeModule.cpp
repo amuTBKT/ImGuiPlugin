@@ -227,6 +227,13 @@ struct FImGuiMenuContainer
 		}
 	};
 
+	enum class EFindSlotResult
+	{
+		Found,			// menu item available/created on demand
+		NotFound,		// menu item not found
+		ConflictingID	// menu item with same ID already registered
+	};
+
 	static FWidgetSlot* AddSlotSorted(TArray<FWidgetSlot>& Container, FWidgetSlot&& Slot)
 	{
 		const int32 InsertIndex = Algo::LowerBound(Container, Slot);
@@ -234,77 +241,73 @@ struct FImGuiMenuContainer
 		return &Container[InsertIndex];
 	}
 
+	TPair<EFindSlotResult, FWidgetSlot*> FindOrCreateSlot_Internal(FAnsiStringView Path, bool bCreateHierarchy)
+	{
+		FWidgetSlot::FPathIterator PathItr{ Path };
+
+		FAnsiStringView SubPath = ++PathItr;
+		if (SubPath.IsEmpty())
+		{
+			return { EFindSlotResult::NotFound, nullptr };
+		}
+
+		FWidgetSlot* ParentSlot = WidgetSlots.FindByKey(SubPath);
+		if (!ParentSlot)
+		{
+			if (bCreateHierarchy)
+			{
+				ParentSlot = AddSlotSorted(WidgetSlots, FWidgetSlot(FAnsiString(SubPath)));
+			}
+			else
+			{
+				return { EFindSlotResult::NotFound, nullptr };
+			}
+		}
+		else if (ParentSlot->IsMenuItem())
+		{
+			ensureAlwaysMsgf(false, TEXT("Path(%hs) points to an active menu item (%hs)"), Path.GetData(), *ParentSlot->Path);
+			return { EFindSlotResult::ConflictingID, nullptr };
+		}
+
+		while (PathItr)
+		{
+			SubPath = ++PathItr;
+			if (SubPath.IsEmpty())
+			{
+				break;
+			}
+
+			FWidgetSlot* NextSlot = ParentSlot->GetChildren().FindByKey(SubPath);
+			if (!NextSlot)
+			{
+				if (bCreateHierarchy)
+				{
+					NextSlot = AddSlotSorted(ParentSlot->GetChildren(), FWidgetSlot(FAnsiString(SubPath)));
+				}
+				else
+				{
+					break;
+				}
+			}
+			else if (NextSlot->IsMenuItem())
+			{
+				ensureAlwaysMsgf(false, TEXT("Path(%hs) points to an active menu item (%hs)"), *FAnsiString(SubPath), *NextSlot->Path);
+				return { EFindSlotResult::ConflictingID, nullptr };
+			}
+			ParentSlot = NextSlot;
+		}
+
+		return { EFindSlotResult::Found, ParentSlot };
+	}	
 	FWidgetSlot* FindSlot(FAnsiStringView Path)
 	{
-		FWidgetSlot::FPathIterator PathItr{ Path };
-
-		FAnsiStringView SubPath = ++PathItr;
-		FWidgetSlot* ParentSlot = SubPath.IsEmpty() ? nullptr : WidgetSlots.FindByKey(SubPath);
-		if (!ParentSlot)
-		{
-			return nullptr;
-		}
-
-		while (PathItr)
-		{
-			SubPath = ++PathItr;
-			if (SubPath.IsEmpty())
-			{
-				break;
-			}
-
-			FWidgetSlot* NextSlot = ParentSlot->GetChildren().FindByKey(SubPath);
-			if (!NextSlot)
-			{
-				break;
-			}
-			else if (NextSlot->IsMenuItem())
-			{
-				ensureAlwaysMsgf(false, TEXT("Path points to an active menu item!"));
-				ParentSlot = nullptr;
-				break;
-			}
-			ParentSlot = NextSlot;
-		}
-
-		return ParentSlot;
+		return FindOrCreateSlot_Internal(Path, /*bCreateHierarchy=*/false).Value;
 	}
-	FWidgetSlot* InitializeSlotHierarchy(FAnsiStringView Path)
+	TPair<EFindSlotResult, FWidgetSlot*> FindOrCreateSlot(FAnsiStringView Path)
 	{
-		FWidgetSlot::FPathIterator PathItr{ Path };
-
-		FAnsiStringView SubPath = ++PathItr;
-		FWidgetSlot* ParentSlot = SubPath.IsEmpty() ? nullptr : WidgetSlots.FindByKey(SubPath);
-		if (!ParentSlot)
-		{
-			ParentSlot = AddSlotSorted(WidgetSlots, FWidgetSlot(FAnsiString(SubPath)));
-		}
-
-		while (PathItr)
-		{
-			SubPath = ++PathItr;
-			if (SubPath.IsEmpty())
-			{
-				break;
-			}
-
-			FWidgetSlot* NextSlot = ParentSlot->GetChildren().FindByKey(SubPath);
-			if (!NextSlot)
-			{
-				NextSlot = AddSlotSorted(ParentSlot->GetChildren(), FWidgetSlot(FAnsiString(SubPath)));
-			}
-			else if (NextSlot->IsMenuItem())
-			{
-				ensureAlwaysMsgf(false, TEXT("Path points to an active menu item!"));
-				ParentSlot = nullptr;
-				break;
-			}
-			ParentSlot = NextSlot;
-		}
-
-		return ParentSlot;
+		return FindOrCreateSlot_Internal(Path, /*bCreateHierarchy=*/true);
 	}
-	
+
 	void ProcessQueuedMainWidgetSlots()
 	{
 		check(!QueueWidgetSlotChanges);
@@ -326,6 +329,11 @@ struct FImGuiMenuContainer
 		const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
 		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags)
 	{
+		if (!ensureAlways(WidgetPath && FCStringAnsi::Strlen(WidgetPath) > 0))
+		{
+			return;
+		}
+
 		if (QueueWidgetSlotChanges)
 		{
 			WidgetSlotsToAdd.Emplace(WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, WidgetFlags);
@@ -333,8 +341,8 @@ struct FImGuiMenuContainer
 			return;
 		}
 
-		FWidgetSlot* ParentSlot = InitializeSlotHierarchy(WidgetPath);
-		if (ensureAlways(ParentSlot))
+		auto FoundSlot = FindOrCreateSlot(WidgetPath);
+		if (FWidgetSlot* ParentSlot = FoundSlot.Value)
 		{
 			if (ParentSlot->GetChildren().Contains(WidgetPath))
 			{
@@ -348,9 +356,26 @@ struct FImGuiMenuContainer
 				AddSlotSorted(ParentSlot->GetChildren(), MoveTemp(NewSlot));
 			}
 		}
+		else if ((FoundSlot.Key == EFindSlotResult::NotFound) && ensureAlways(EnumHasAnyFlags(WidgetFlags, EImGuiMainMenuWidgetFlags::TickInMenuBar)))
+		{
+			// widget will create its own menu
+			if (WidgetSlots.Contains(WidgetPath))
+			{
+				ensureAlwaysMsgf(false, TEXT("Widget slot (Path=%hs) already registered"), WidgetPath);
+			}
+			else
+			{
+				AddSlotSorted(WidgetSlots, FWidgetSlot{ FAnsiString(WidgetPath), FAnsiString(WidgetToolTip), WidgetIcon, TickDelegate, WidgetFlags });
+			}
+		}
 	}
 	void UnregisterWidget(const char* WidgetPath)
 	{
+		if (!ensureAlways(WidgetPath && FCStringAnsi::Strlen(WidgetPath) > 0))
+		{
+			return;
+		}
+
 		if (QueueWidgetSlotChanges)
 		{
 			WidgetSlotsToRemove.Emplace(WidgetPath);
@@ -362,6 +387,10 @@ struct FImGuiMenuContainer
 		if (ParentSlot)
 		{
 			ParentSlot->GetChildren().RemoveAll([&](const auto& Entry) { return Entry == WidgetPath; });
+		}
+		else
+		{
+			WidgetSlots.RemoveAll([&](const auto& Entry) { return Entry == WidgetPath; });
 		}
 	}
 
@@ -432,7 +461,15 @@ bool* GetMainMenuWidgetActiveStateForWorld(const UWorld* World, const char* Widg
 {
 	FImGuiMenuContainer& MenuContainer = GetMenuContainerForWorld(World);
 	FImGuiMenuContainer::FWidgetSlot* ParentSlot = MenuContainer.FindSlot(WidgetPath);
-	FImGuiMenuContainer::FWidgetSlot* Slot = ParentSlot ? ParentSlot->GetChildren().FindByKey(WidgetPath) : nullptr;
+	FImGuiMenuContainer::FWidgetSlot* Slot = nullptr;
+	if (ParentSlot)
+	{
+		Slot = ParentSlot->GetChildren().FindByKey(WidgetPath);
+	}
+	else
+	{
+		Slot = MenuContainer.WidgetSlots.FindByKey(WidgetPath);
+	}
 	return Slot ? &Slot->bIsActive : nullptr;
 }
 
@@ -633,14 +670,14 @@ private:
 		}
 		else if (!Slot.GetChildren().IsEmpty())
 		{
-			FImGui::SubMenu(Slot.GetName(), ExpandedMenuIcon, CollapsedMenuIcon,
+			FImGui::SubMenu(Slot.GetName(),
 				[&]()
 				{
 					for (auto& ChildSlot : Slot.GetChildren())
 					{
 						TickMainMenuBar(MenuContainer, ChildSlot, TickContext);
 					}
-				});
+				}, ExpandedMenuIcon, CollapsedMenuIcon);
 		}
 	}
 	void TickMainMenuWidgets(FImGuiMenuContainer& MenuContainer, FImGuiMenuContainer::FWidgetSlot& Slot, FImGuiTickContext* TickContext)
@@ -690,12 +727,19 @@ private:
 			ImGuiSubsystem = nullptr;
 		};
 
+		FImGuiTickScope Scope{ TickContext };
+
 		if (Slots.IsEmpty())
 		{
+			const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoMove;
+			const ImVec2 WindowPos = ImGui::GetMainViewport()->Pos + ImGui::GetStyle().WindowPadding * ImVec2(1.f, -1.f) + ImVec2(0.f, ImGui::GetMainViewport()->Size.y);
+			ImGui::SetNextWindowPos(WindowPos, ImGuiCond_Always, ImVec2(0.f, 1.f));
+			ImGui::SetNextWindowBgAlpha(0.5f);
+			ImGui::Begin("EmptyWindow", nullptr, WindowFlags);
+			ImGui::TextUnformatted("No ImGui menu items registered!");
+			ImGui::End();
 			return;
 		}
-
-		FImGuiTickScope Scope{ TickContext };
 
 		ExpandedMenuIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderOpen"), ImGui::GetTextLineHeight());
 		CollapsedMenuIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderClosed"), ImGui::GetTextLineHeight());
@@ -712,7 +756,11 @@ private:
 
 			for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
 			{
-				if (!Slot.GetChildren().IsEmpty() && ImGui::BeginMenu(Slot.GetName()))
+				if (Slot.IsMenuItem())
+				{
+					Slot.GetTickDelegate().ExecuteIfBound(TickContext);
+				}
+				else if (!Slot.GetChildren().IsEmpty() && ImGui::BeginMenu(Slot.GetName()))
 				{
 					for (auto& ChildSlot : Slot.GetChildren())
 					{

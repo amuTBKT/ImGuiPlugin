@@ -167,7 +167,7 @@ namespace FImGui
 
 	// utility function to allow adding icon to sub menu
 	template <typename MenuCallback>
-	FORCEINLINE void SubMenu(const char* Label, const FImGuiImageBindingParams& ExpandedIcon, const FImGuiImageBindingParams& CollapsedIcon, MenuCallback MenuFunc)
+	FORCEINLINE bool SubMenu(const char* Label, MenuCallback MenuFunc, const FImGuiImageBindingParams& ExpandedIcon, const FImGuiImageBindingParams& CollapsedIcon, ImVec2 IconOffset = ImVec2(0.f, 0.f))
 	{
 		const float CursorPosX = ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x * 0.5f;
 
@@ -175,7 +175,15 @@ namespace FImGui
 		// NOTE: "[Icon] Label" has the same ID as "Label"
 		// this is to ensure calling ImGui::BeginMenu("Label") finds the same menu as FImGui::SubMenu("Label", ...)
 		char LabelBuffer[256];
-		FCStringAnsi::Sprintf(LabelBuffer, "        %s###%s", Label, Label);
+		if (FCStringAnsi::Strstr(Label, "##"))
+		{
+			// icon padding handled by user
+			FCStringAnsi::Sprintf(LabelBuffer, "%s", Label);
+		}
+		else
+		{
+			FCStringAnsi::Sprintf(LabelBuffer, "        %s###%s", Label, Label);
+		}
 
 		const bool bOpen = ImGui::BeginMenu(LabelBuffer);
 		if (bOpen)
@@ -186,6 +194,7 @@ namespace FImGui
 		
 		ImGui::SameLine();
 		ImGui::SetCursorPosX(CursorPosX);
+		ImGui::SetCursorPos(ImGui::GetCursorPos() + IconOffset);
 		if (bOpen)
 		{
 			ImGui::Image(ExpandedIcon.Id, ExpandedIcon.Size, ExpandedIcon.UV0, ExpandedIcon.UV1);
@@ -194,6 +203,14 @@ namespace FImGui
 		{
 			ImGui::Image(CollapsedIcon.Id, CollapsedIcon.Size, CollapsedIcon.UV0, CollapsedIcon.UV1);
 		}
+
+		return bOpen;
+	}
+
+	template <typename MenuCallback>
+	FORCEINLINE bool SubMenu(const char* Label, MenuCallback MenuFunc, const FImGuiImageBindingParams& Icon, ImVec2 IconOffset = ImVec2(0.f, 0.f))
+	{
+		return SubMenu(Label, MenuFunc, Icon, Icon, IconOffset);
 	}
 }
 
