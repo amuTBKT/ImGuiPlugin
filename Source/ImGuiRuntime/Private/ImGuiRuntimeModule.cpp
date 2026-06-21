@@ -18,6 +18,14 @@
 #include "Framework/Application/SlateApplication.h"
 
 #if WITH_EDITOR
+#include "SLevelViewport.h"
+#include "Widgets/SNullWidget.h"
+#include "ViewportToolBarContext.h"
+#include "Widgets/Text/STextBlock.h"
+#include "SEditorViewportToolBarMenu.h"
+#include "SEditorViewportToolBarButton.h"
+#include "Subsystems/PanelExtensionSubsystem.h"
+
 #include "EditorStyleSet.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Framework/Docking/TabManager.h"
@@ -26,6 +34,13 @@
 #endif
 
 #define LOCTEXT_NAMESPACE "ImGuiPlugin"
+
+static TAutoConsoleVariable<bool> CVarAddImGuiWidgetToLevelViewport(
+	TEXT("imgui.UseLevelViewport"),
+	false,
+	TEXT("Prefer LevelViewport over Tabbed window for hosting ImGui editor widget.\n")
+	TEXT("This only applies for the Editor context, doesn't affect PIE or Game context."),
+	ECVF_ReadOnly);
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -597,6 +612,7 @@ public:
 			Super::FArguments()
 			.MainViewportWindow(InArgs._MainViewportWindow)
 			.ConfigFileName(*ConfigFileName));
+
 		OwningWorld = InArgs._OwningWorld;
 
 		UImGuiSubsystem::OnBeginImGuiFrame.AddRaw(this, &SImGuiMainMenuWidget::BeginFrame);
@@ -611,6 +627,13 @@ public:
 
 	const UWorld* GetWorld() const { return OwningWorld.Get(); }
 
+#if WITH_EDITOR
+	void ToggleMenu() { bToggleMenu = true; }
+	void SetMenuOffset(ImVec2 Offset) { PendingMenuOffset = Offset; }
+	TSharedPtr<SLevelViewport> GetLevelViewport() const { return LevelViewport.Pin(); }
+	void SetLevelViewport(TSharedPtr<SLevelViewport> InViewport) { bIsAddedToLevelViewport = InViewport.IsValid(); LevelViewport = InViewport; }
+#endif
+
 private:
 	void BeginFrame()
 	{
@@ -618,12 +641,7 @@ private:
 
 		BeginImGuiFrame(GetCachedGeometry());
 
-		if (!bIsDockNodeValid)
-		{
-			bIsDockNodeValid = true;
-			const bool bIsEditorWorld = GIsEditor && !GetWorld();
-			ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), bIsEditorWorld ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_PassthruCentralNode);
-		}
+		SetupDockNode();
 	}
 
 	void EndFrame()
@@ -634,8 +652,57 @@ private:
 		bIsDockNodeValid = false;
 	}
 
+	void SetupDockNode()
+	{
+		if (!bIsDockNodeValid)
+		{
+			bIsDockNodeValid = true;
+
+#if WITH_EDITOR
+			if (bIsAddedToLevelViewport)
+			{
+				// create a docking host with padding on the top to account for viewport toolbar buttons
+				float PaddingY = GLevelEditorModeTools().IsViewportUIHidden() ? ImGui::GetFrameHeight() : 32.f;
+
+				ImGui::SetNextWindowBgAlpha(0.f);
+				ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID);
+				ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + ImVec2(0.f, PaddingY));
+				ImGui::SetNextWindowSize(ImGui::GetMainViewport()->Size - ImVec2(0.f, PaddingY));
+
+				ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+				ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+				ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+
+				const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+				if (ImGui::Begin("##DockspaceWindow", nullptr, WindowFlags))
+				{
+					ImGuiID DockspaceId = ImGui::GetID("MainViewportDockSpace");
+					ImGui::DockSpace(DockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+				}
+				ImGui::End();
+
+				ImGui::PopStyleVar(3);
+			}
+			else
+#endif
+			{
+				const bool bIsEditorContext = GIsEditor && !GetWorld();
+				ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), bIsEditorContext ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_PassthruCentralNode);
+			}
+		}
+	}
+
 private:
 	TWeakObjectPtr<const UWorld> OwningWorld;
+
+	// when added to level viewport
+#if WITH_EDITOR
+	bool bToggleMenu = true;
+	bool bIsAddedToLevelViewport = false;
+	ImVec2 MenuOffset = ImVec2(0.f, 0.f);
+	TOptional<ImVec2> PendingMenuOffset;
+	TWeakPtr<SLevelViewport> LevelViewport;
+#endif
 
 	// cached during tick for easier access
 	bool bIsDockNodeValid = false;
@@ -744,34 +811,88 @@ private:
 		ExpandedMenuIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderOpen"), ImGui::GetTextLineHeight());
 		CollapsedMenuIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderClosed"), ImGui::GetTextLineHeight());
 
-		if (!bIsDockNodeValid)
-		{
-			const bool bIsEditorWorld = GIsEditor && !GetWorld();
-			ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), bIsEditorWorld ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_PassthruCentralNode);
-		}
+		SetupDockNode();
 
-		if (ImGui::BeginMainMenuBar())
-		{
-			TickContext->bIsTickingMainMenuBar = true;
-
-			for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
+		auto RunMainMenuTickLogic = [&]()
 			{
-				if (Slot.IsMenuItem())
+				TickContext->bIsTickingMainMenuBar = true;
+				for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
 				{
-					Slot.GetTickDelegate().ExecuteIfBound(TickContext);
-				}
-				else if (!Slot.GetChildren().IsEmpty() && ImGui::BeginMenu(Slot.GetName()))
-				{
-					for (auto& ChildSlot : Slot.GetChildren())
+					if (Slot.IsMenuItem())
 					{
-						TickMainMenuBar(MenuContainer, ChildSlot, TickContext);
+						Slot.GetTickDelegate().ExecuteIfBound(TickContext);
 					}
-					ImGui::EndMenu();
+					else if (!Slot.GetChildren().IsEmpty() && ImGui::BeginMenu(Slot.GetName()))
+					{
+						for (auto& ChildSlot : Slot.GetChildren())
+						{
+							TickMainMenuBar(MenuContainer, ChildSlot, TickContext);
+						}
+						ImGui::EndMenu();
+					}
+				}
+				TickContext->bIsTickingMainMenuBar = false;
+			};
+
+#if WITH_EDITOR
+		if (bIsAddedToLevelViewport)
+		{
+			// TODO: ImGui pushes Debug default window on first frame with focus enabled which dismisses the popup :(
+			// any workaround? For now just skip updates on first frame. 
+			// only an issue when widget is recreated. We could keep the widget alive all the time (instead of using weak ptr... ?)
+			if (ImGui::GetFrameCount() > 1)
+			{
+				const bool bCloseMenu = (GLevelEditorModeTools().IsViewportUIHidden() || bToggleMenu) && ImGui::IsPopupOpen("##ImGuiMenuPopup", ImGuiPopupFlags_None);
+				if (bCloseMenu)
+				{
+					bToggleMenu = false;
+				}
+				else if (bToggleMenu)
+				{
+					ImGui::OpenPopup("##ImGuiMenuPopup", ImGuiPopupFlags_NoReopen);
+				}
+
+				if (PendingMenuOffset)
+				{
+					MenuOffset = PendingMenuOffset.GetValue() - ImGui::GetMainViewport()->Pos + ImVec2(0.f, 2.f);
+					PendingMenuOffset.Reset();
+				}
+
+				ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + MenuOffset, ImGuiCond_Always);
+				if (ImGui::BeginPopup("##ImGuiMenuPopup", ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
+				{
+					if (bToggleMenu && ImGui::IsWindowAppearing())
+					{
+						bToggleMenu = false;
+					}
+
+					RunMainMenuTickLogic();
+
+					if (bCloseMenu)
+					{
+						ImGui::CloseCurrentPopup();
+					}
+					ImGui::EndPopup();
 				}
 			}
-			ImGui::EndMainMenuBar();
 
-			TickContext->bIsTickingMainMenuBar = false;
+			if (GLevelEditorModeTools().IsViewportUIHidden())
+			{
+				if (ImGui::BeginMainMenuBar())
+				{
+					RunMainMenuTickLogic();
+					ImGui::EndMainMenuBar();
+				}
+			}
+		}
+		else
+#endif
+		{
+			if (ImGui::BeginMainMenuBar())
+			{
+				RunMainMenuTickLogic();
+				ImGui::EndMainMenuBar();
+			}
 		}
 
 		for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
@@ -787,6 +908,59 @@ private:
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if WITH_EDITOR
+class SImGuiViewportToolBarButton : public SViewportToolBar
+{
+public:
+	SLATE_BEGIN_ARGS(SImGuiViewportToolBarButton) {}
+		SLATE_ARGUMENT(TWeakPtr<SLevelViewport>, LevelViewport);
+	SLATE_END_ARGS()
+
+	void Construct(const FArguments& InArgs)
+	{
+		LevelViewport = InArgs._LevelViewport;
+		ChildSlot
+		[
+			SNew(SEditorViewportToolBarButton)
+			.OnClicked(this, &SImGuiViewportToolBarButton::OnClicked)
+			[
+				SNew(STextBlock)
+				.Text(LOCTEXT("ImGuiMainTabTitle", "ImGui"))
+			]
+		];
+	}
+
+	FReply OnClicked();
+
+	TWeakPtr<SLevelViewport> LevelViewport;
+};
+
+static FDelayedAutoRegisterHelper ImGuiViewportToolbar_DelayedAutoRegister(EDelayedRegisterRunPhase::EndOfEngineInit,
+	[]()
+	{
+		if (CVarAddImGuiWidgetToLevelViewport.GetValueOnGameThread() == false || !GEditor)
+		{
+			return;
+		}
+
+		if (UPanelExtensionSubsystem* PanelExtensionSubsystem = GEditor->GetEditorSubsystem<UPanelExtensionSubsystem>())
+		{
+			FPanelExtensionFactory MenuWidget;
+			MenuWidget.CreateExtensionWidget = FPanelExtensionFactory::FCreateExtensionWidget::CreateLambda(
+				[](FWeakObjectPtr ExtensionContext) -> TSharedRef<SWidget>
+				{
+					if (const UViewportToolBarContext* ExtensionContextObject = Cast<UViewportToolBarContext>(ExtensionContext.Get()); ensure(ExtensionContextObject))
+					{
+						return SNew(SImGuiViewportToolBarButton).LevelViewport(ExtensionContextObject->Viewport);
+					}
+					return SNullWidget::NullWidget;
+				});
+			MenuWidget.Identifier = IMGUI_FNAME("ImGuiPlugin_Menu");
+			PanelExtensionSubsystem->RegisterPanelFactory(IMGUI_FNAME("LevelViewportToolBar.LeftExtension"), MenuWidget);
+		}
+	});
+#endif //#if WITH_EDITOR
 
 class FImGuiRuntimeModule : public IModuleInterface
 {
@@ -806,11 +980,14 @@ private:
 			LOCTEXT("ImGuiGroupName", "ImGui"),
 			FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"), /*bSortChildren=*/true);
 
-		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(ImGuiTabName, FOnSpawnTab::CreateRaw(this, &FImGuiRuntimeModule::SpawnImGuiTab))
-			.SetGroup(m_ImGuiTabGroup.ToSharedRef())
-			.SetDisplayName(LOCTEXT("ImGuiMainTabTitle", "ImGui"))
-			.SetTooltipText(LOCTEXT("ImGuiMainTabTooltip", "Window hosting static ImGui widgets"))
-			.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
+		if (CVarAddImGuiWidgetToLevelViewport.GetValueOnGameThread() == false)
+		{
+			FGlobalTabmanager::Get()->RegisterNomadTabSpawner(IMGUI_FNAME("ImGuiTab"), FOnSpawnTab::CreateRaw(this, &FImGuiRuntimeModule::SpawnImGuiTab))
+				.SetGroup(m_ImGuiTabGroup.ToSharedRef())
+				.SetDisplayName(LOCTEXT("ImGuiMainTabTitle", "ImGui"))
+				.SetTooltipText(LOCTEXT("ImGuiMainTabTooltip", "Window hosting static ImGui widgets"))
+				.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
+		}
 
 		FWorldDelegates::OnWorldBeginTearDown.AddRaw(this, &FImGuiRuntimeModule::OnWorldBeginTearDown);
 #else
@@ -826,9 +1003,17 @@ private:
 	virtual void ShutdownModule() override
 	{
 #if WITH_EDITOR
+		if (GEditor)
+		{
+			if (UPanelExtensionSubsystem* PanelExtensionSubsystem = GEditor->GetEditorSubsystem<UPanelExtensionSubsystem>())
+			{
+				PanelExtensionSubsystem->UnregisterPanelFactory(IMGUI_FNAME("LevelViewportToolBar.LeftExtension"), IMGUI_FNAME("ImGuiPlugin_Menu"));
+			}
+		}
+
 		if (FSlateApplication::IsInitialized())
 		{
-			FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(ImGuiTabName);
+			FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(IMGUI_FNAME("ImGuiTab"));
 		}
 		m_MainMenuWidgets.Reset();
 		m_EditorMainMenuWidget.Reset();
@@ -844,6 +1029,8 @@ private:
 #if WITH_EDITOR
 	TSharedRef<SDockTab> SpawnImGuiTab(const FSpawnTabArgs& SpawnTabArgs)
 	{
+		check(CVarAddImGuiWidgetToLevelViewport.GetValueOnGameThread() == false);
+
 		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = SNew(SImGuiMainMenuWidget)
 			.MainViewportWindow(SpawnTabArgs.GetOwnerWindow());
 		m_EditorMainMenuWidget = MainMenuWidget;
@@ -1072,14 +1259,64 @@ public:
 };
 
 #if WITH_EDITOR
-const FName FImGuiRuntimeModule::ImGuiTabName = TEXT("ImGuiTab");
-
 TSharedRef<FWorkspaceItem> GetImGuiTabGroup()
 {
 	static FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
 	return ImGuiModule.m_ImGuiTabGroup.ToSharedRef();
 }
-#endif
+
+FReply SImGuiViewportToolBarButton::OnClicked()
+{
+	static FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+
+	TSharedPtr<SLevelViewport> Viewport = LevelViewport.Pin();
+	if (Viewport)
+	{
+		TSharedPtr<SWindow> ViewportWindow = FSlateApplication::Get().FindWidgetWindow(Viewport.ToSharedRef());
+
+		auto MainMenuWidget = ImGuiModule.m_EditorMainMenuWidget.Pin();
+		if (MainMenuWidget)
+		{
+			// handle split viewport switching!
+			TSharedPtr<SLevelViewport> CurrentViewport = MainMenuWidget->GetLevelViewport();
+			if (CurrentViewport != Viewport)
+			{
+				CurrentViewport->RemoveOverlayWidget(MainMenuWidget.ToSharedRef());
+				MainMenuWidget.Reset();
+			}
+		}
+		
+		if (!MainMenuWidget)
+		{
+			MainMenuWidget = SNew(SImGuiMainMenuWidget).MainViewportWindow(ViewportWindow);
+			Viewport->AddOverlayWidget(MainMenuWidget.ToSharedRef(), 0);
+
+			MainMenuWidget->SetLevelViewport(Viewport);
+			ImGuiModule.m_EditorMainMenuWidget = MainMenuWidget;
+		}
+		else
+		{
+			if (FSlateApplication::Get().GetModifierKeys().IsShiftDown())
+			{
+				Viewport->RemoveOverlayWidget(MainMenuWidget.ToSharedRef());
+				MainMenuWidget.Reset();
+			}
+			else
+			{
+				MainMenuWidget->ToggleMenu();
+			}
+		}
+
+		// adjust offset to match the viewport toolbar button
+		if (MainMenuWidget.IsValid())
+		{
+			FVector2f MenuOffset = GetTickSpaceGeometry().GetRenderBoundingRect().GetBottomLeft2f();
+			MainMenuWidget->SetMenuOffset(ImVec2(MenuOffset.X, MenuOffset.Y));
+		}
+	}
+	return FReply::Handled();
+}
+#endif //#if WITH_EDITOR
 
 FImGuiMenuContainer& GetMenuContainerForWorld(const UWorld* World)
 {

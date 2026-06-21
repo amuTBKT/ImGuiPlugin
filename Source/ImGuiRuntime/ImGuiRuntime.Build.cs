@@ -40,7 +40,9 @@ public class ImGuiRuntime : ModuleRules
 			PrivateDependencyModuleNames.AddRange(
 				new string[]
 				{
+					"UnrealEd",
 					"EditorStyle",
+					"LevelEditor",
 				}
 			);
 		}
