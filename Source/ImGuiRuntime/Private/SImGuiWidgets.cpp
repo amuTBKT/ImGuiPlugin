@@ -490,6 +490,11 @@ FReply SImGuiWidgetBase::OnMouseWheel(const FGeometry& WidgetGeometry, const FPo
 {
 	ImGuiIO& IO = m_ImGuiContext->IO;
 
+	if (!IO.WantCaptureMouse)
+	{
+		return FReply::Unhandled();
+	}
+
 	// initial zoom support
 	if (IO.KeyCtrl)
 	{
@@ -515,7 +520,7 @@ FReply SImGuiWidgetBase::OnMouseMove(const FGeometry& WidgetGeometry, const FPoi
 	}
 	IO.AddMousePosEvent(MousePosition.X, MousePosition.Y);
 
-	return FReply::Handled();
+	return FReply::Unhandled();
 }
 
 FReply SImGuiWidgetBase::OnAnalogValueChanged(const FGeometry& MyGeometry, const FAnalogInputEvent& AnalogInputEvent)
@@ -530,6 +535,12 @@ FReply SImGuiWidgetBase::OnAnalogValueChanged(const FGeometry& MyGeometry, const
 
 FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& WidgetGeometry, const FPointerEvent& CursorEvent) const
 {
+	ImGuiIO& IO = m_ImGuiContext->IO;
+	if (!IO.WantCaptureMouse)
+	{
+		return FCursorReply::Unhandled();
+	}
+
 	return (m_CachedImGuiCursor == ImGuiMouseCursor_None) ? FCursorReply::Unhandled() : FCursorReply::Cursor(ImGuiUtils::ImGuiToUnrealCursor(m_CachedImGuiCursor));
 }
 
