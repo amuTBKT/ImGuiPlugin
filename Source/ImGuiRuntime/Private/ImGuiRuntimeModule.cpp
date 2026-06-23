@@ -24,6 +24,7 @@
 #include "Widgets/Text/STextBlock.h"
 #include "SEditorViewportToolBarMenu.h"
 #include "SEditorViewportToolBarButton.h"
+#include "Widgets/Layout/SConstraintCanvas.h"
 #include "Subsystems/PanelExtensionSubsystem.h"
 
 #include "EditorStyleSet.h"
@@ -488,6 +489,35 @@ bool* GetMainMenuWidgetActiveStateForWorld(const UWorld* World, const char* Widg
 	return Slot ? &Slot->bIsActive : nullptr;
 }
 
+namespace ImGuiFocusHandler
+{
+	// give focus back to game viewport
+	void ResetFocus()
+	{
+		FSlateApplication::Get().SetAllUserFocusToGameViewport(EFocusCause::SetDirectly);
+	}
+
+	// same logic as Shift+F1
+	void SetUIFocus(UWorld* World)
+	{
+		if (World)
+		{
+			// when called using console command we need to run on next tick as console will refocus the game viewport
+			World->GetTimerManager().SetTimerForNextTick(
+				[]()
+				{
+					FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
+					FSlateApplication::Get().ResetToDefaultInputSettings();
+				});
+		}
+		else
+		{
+			FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
+			FSlateApplication::Get().ResetToDefaultInputSettings();
+		}
+	}
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 FAutoRegisterMainMenuWidget::FAutoRegisterMainMenuWidget(FImGuiWidgetRegisterParams RegisterParams)
@@ -544,6 +574,13 @@ static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FI
 
 FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegisterParams RegisterParams)
 {
+	if (!GIsEditor)
+	{
+		// when running with '-game' argument push everything to the main menu (same behaviour as packaged builds)
+		FAutoRegisterMainMenuWidget RegisterMainMenuWidget{ MoveTemp(RegisterParams) };
+		return;
+	}
+
 	extern TSharedRef<FWorkspaceItem> GetImGuiTabGroup();
 
 	if (!ensureAlways(RegisterParams.IsValid()))
@@ -613,7 +650,7 @@ public:
 			.MainViewportWindow(InArgs._MainViewportWindow)
 			.ConfigFileName(*ConfigFileName));
 
-		OwningWorld = InArgs._OwningWorld;
+		m_OwningWorld = InArgs._OwningWorld;
 
 		UImGuiSubsystem::OnBeginImGuiFrame.AddRaw(this, &SImGuiMainMenuWidget::BeginFrame);
 		UImGuiSubsystem::OnEndImGuiFrame.AddRaw(this, &SImGuiMainMenuWidget::EndFrame);
@@ -625,18 +662,39 @@ public:
 		UImGuiSubsystem::OnEndImGuiFrame.RemoveAll(this);
 	}
 
-	const UWorld* GetWorld() const { return OwningWorld.Get(); }
+	virtual FVector2D ComputeDesiredSize(float) const override
+	{
+#if WITH_EDITOR
+		// very small non zero size to disable windows from getting merged into the main viewport (inputs are disabled on level editor widget!)
+		return m_bIsAddedToLevelViewport ? FVector2D(8.f, 8.f) : FVector2D::ZeroVector;
+#else
+		return FVector2D::ZeroVector;
+#endif
+	}
+
+	const UWorld* GetWorld() const { return m_OwningWorld.Get(); }
 
 #if WITH_EDITOR
-	void ToggleMenu() { bToggleMenu = true; }
-	void SetMenuOffset(ImVec2 Offset) { PendingMenuOffset = Offset; }
-	TSharedPtr<SLevelViewport> GetLevelViewport() const { return LevelViewport.Pin(); }
-	void SetLevelViewport(TSharedPtr<SLevelViewport> InViewport) { bIsAddedToLevelViewport = InViewport.IsValid(); LevelViewport = InViewport; }
+	void OpenMenu() { m_bOpenMenu = true; m_MenuRequestedFrameIndex = GetImGuiContext()->FrameCount; }
+	void SetMenuOffset(ImVec2 Offset) { m_PendingMenuOffset = Offset; }
+	TSharedPtr<SLevelViewport> GetLevelViewport() const { return m_LevelViewport.Pin(); }
+	TSharedPtr<SWidget> GetLevelViewportOverlayWidget() const { return m_LevelViewportOverlayWidget.Pin(); }
+	void SetLevelViewport(TSharedPtr<SLevelViewport> InLevelViewport, TSharedPtr<SWidget> InOverlayWidget)
+	{
+		m_bIsAddedToLevelViewport = InOverlayWidget.IsValid();
+		m_LevelViewportOverlayWidget = InOverlayWidget;
+		m_LevelViewport = InLevelViewport;
+	}
 #endif
 
 private:
 	void BeginFrame()
 	{
+		if (!GetVisibility().IsVisible())
+		{
+			return;
+		}
+
 		FImGuiTickScope Scope{ GetTickContext() };
 
 		BeginImGuiFrame(GetCachedGeometry());
@@ -649,39 +707,19 @@ private:
 		FImGuiTickScope Scope{ GetTickContext() };
 
 		EndImGuiFrame();
-		bIsDockNodeValid = false;
+		m_bIsDockNodeValid = false;
 	}
 
 	void SetupDockNode()
 	{
-		if (!bIsDockNodeValid)
+		if (!m_bIsDockNodeValid)
 		{
-			bIsDockNodeValid = true;
+			m_bIsDockNodeValid = true;
 
 #if WITH_EDITOR
-			if (bIsAddedToLevelViewport)
+			if (m_bIsAddedToLevelViewport)
 			{
-				// create a docking host with padding on the top to account for viewport toolbar buttons
-				float PaddingY = GLevelEditorModeTools().IsViewportUIHidden() ? ImGui::GetFrameHeight() : 32.f;
-
-				ImGui::SetNextWindowBgAlpha(0.f);
-				ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID);
-				ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + ImVec2(0.f, PaddingY));
-				ImGui::SetNextWindowSize(ImGui::GetMainViewport()->Size - ImVec2(0.f, PaddingY));
-
-				ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-				ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-				ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-
-				const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
-				if (ImGui::Begin("##DockspaceWindow", nullptr, WindowFlags))
-				{
-					ImGuiID DockspaceId = ImGui::GetID("MainViewportDockSpace");
-					ImGui::DockSpace(DockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
-				}
-				ImGui::End();
-
-				ImGui::PopStyleVar(3);
+				// can't support docking :(
 			}
 			else
 #endif
@@ -693,22 +731,24 @@ private:
 	}
 
 private:
-	TWeakObjectPtr<const UWorld> OwningWorld;
+	TWeakObjectPtr<const UWorld> m_OwningWorld;
 
 	// when added to level viewport
 #if WITH_EDITOR
-	bool bToggleMenu = true;
-	bool bIsAddedToLevelViewport = false;
-	ImVec2 MenuOffset = ImVec2(0.f, 0.f);
-	TOptional<ImVec2> PendingMenuOffset;
-	TWeakPtr<SLevelViewport> LevelViewport;
+	bool m_bOpenMenu = true;
+	int32 m_MenuRequestedFrameIndex = 0;
+	bool m_bIsAddedToLevelViewport = false;
+	ImVec2 m_MenuOffset = ImVec2(0.f, 0.f);
+	TOptional<ImVec2> m_PendingMenuOffset;
+	TWeakPtr<SLevelViewport> m_LevelViewport;
+	TWeakPtr<SWidget> m_LevelViewportOverlayWidget;
 #endif
 
 	// cached during tick for easier access
-	bool bIsDockNodeValid = false;
-	UImGuiSubsystem* ImGuiSubsystem = nullptr;
-	FImGuiImageBindingParams ExpandedMenuIcon{};
-	FImGuiImageBindingParams CollapsedMenuIcon{};
+	bool m_bIsDockNodeValid = false;
+	UImGuiSubsystem* m_ImGuiSubsystem = nullptr;
+	FImGuiImageBindingParams m_ExpandedMenuIcon{};
+	FImGuiImageBindingParams m_CollapsedMenuIcon{};
 
 	void TickMainMenuBar(FImGuiMenuContainer& MenuContainer, FImGuiMenuContainer::FWidgetSlot& Slot, FImGuiTickContext* TickContext)
 	{
@@ -722,7 +762,7 @@ private:
 			}
 			else
 			{
-				FImGuiImageBindingParams Icon = Slot.Icon ? ImGuiSubsystem->RegisterOneFrameResource(Slot.Icon, ImGui::GetTextLineHeight()) : FImGuiImageBindingParams{};
+				FImGuiImageBindingParams Icon = Slot.Icon ? m_ImGuiSubsystem->RegisterOneFrameResource(Slot.Icon, ImGui::GetTextLineHeight()) : FImGuiImageBindingParams{};
 				if (FImGui::MenuItem(Slot.GetName(), Slot.bIsActive, Icon))
 				{
 					Slot.bIsActive = !Slot.bIsActive;
@@ -744,7 +784,7 @@ private:
 					{
 						TickMainMenuBar(MenuContainer, ChildSlot, TickContext);
 					}
-				}, ExpandedMenuIcon, CollapsedMenuIcon);
+				}, m_ExpandedMenuIcon, m_CollapsedMenuIcon);
 		}
 	}
 	void TickMainMenuWidgets(FImGuiMenuContainer& MenuContainer, FImGuiMenuContainer::FWidgetSlot& Slot, FImGuiTickContext* TickContext)
@@ -785,13 +825,13 @@ private:
 
 	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override
 	{
-		ImGuiSubsystem = UImGuiSubsystem::Get();
+		m_ImGuiSubsystem = UImGuiSubsystem::Get();
 		FImGuiMenuContainer& MenuContainer = GetMenuContainerForWorld(GetWorld());
 		TArray<FImGuiMenuContainer::FWidgetSlot>& Slots = MenuContainer.StartIterationOverMainMenuWidgetSlots();
 		ON_SCOPE_EXIT
 		{
 			MenuContainer.EndIterationOverMainMenuWidgetSlots();
-			ImGuiSubsystem = nullptr;
+			m_ImGuiSubsystem = nullptr;
 		};
 
 		FImGuiTickScope Scope{ TickContext };
@@ -808,8 +848,8 @@ private:
 			return;
 		}
 
-		ExpandedMenuIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderOpen"), ImGui::GetTextLineHeight());
-		CollapsedMenuIcon = ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderClosed"), ImGui::GetTextLineHeight());
+		m_ExpandedMenuIcon = m_ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderOpen"), ImGui::GetTextLineHeight());
+		m_CollapsedMenuIcon = m_ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderClosed"), ImGui::GetTextLineHeight());
 
 		SetupDockNode();
 
@@ -835,53 +875,73 @@ private:
 			};
 
 #if WITH_EDITOR
-		if (bIsAddedToLevelViewport)
+		if (m_bIsAddedToLevelViewport)
 		{
-			// TODO: ImGui pushes Debug default window on first frame with focus enabled which dismisses the popup :(
-			// any workaround? For now just skip updates on first frame. 
-			// only an issue when widget is recreated. We could keep the widget alive all the time (instead of using weak ptr... ?)
-			if (ImGui::GetFrameCount() > 1)
+			// NOTE: 2 frames delay to make sure the widget has ticked atleast once to adjust viewport offset
+			// plus to make sure windows opening on the same frame doesn't dismiss the menu bar popup.
+			if (ImGui::GetFrameCount() > (m_MenuRequestedFrameIndex + 2))
 			{
-				const bool bCloseMenu = (GLevelEditorModeTools().IsViewportUIHidden() || bToggleMenu) && ImGui::IsPopupOpen("##ImGuiMenuPopup", ImGuiPopupFlags_None);
-				if (bCloseMenu)
+				// HACK: this should match the value in `UnrealPlatform_CreateWindow` for auto focus to work properly.
+				// the logic here manually calls ImGui::Begin to make sure the popup window name matches this value.
+				static const char* LevelEditorPopupMenuName = "##LevelViewportMenu";
+
+				if (m_bOpenMenu)
 				{
-					bToggleMenu = false;
+					ImGui::OpenPopup(LevelEditorPopupMenuName, ImGuiPopupFlags_NoReopen);
 				}
-				else if (bToggleMenu)
+				if (m_PendingMenuOffset)
 				{
-					ImGui::OpenPopup("##ImGuiMenuPopup", ImGuiPopupFlags_NoReopen);
+					m_MenuOffset = m_PendingMenuOffset.GetValue() - ImGui::GetMainViewport()->Pos + ImVec2(0.f, 2.f);
+					m_PendingMenuOffset.Reset();
 				}
 
-				if (PendingMenuOffset)
+				if (ImGui::IsPopupOpen(LevelEditorPopupMenuName, ImGuiPopupFlags_None))
 				{
-					MenuOffset = PendingMenuOffset.GetValue() - ImGui::GetMainViewport()->Pos + ImVec2(0.f, 2.f);
-					PendingMenuOffset.Reset();
-				}
-
-				ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + MenuOffset, ImGuiCond_Always);
-				if (ImGui::BeginPopup("##ImGuiMenuPopup", ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
-				{
-					if (bToggleMenu && ImGui::IsWindowAppearing())
+					ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + m_MenuOffset, ImGuiCond_Always);
+					if (ImGui::Begin(LevelEditorPopupMenuName, nullptr, ImGuiWindowFlags_Popup | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
 					{
-						bToggleMenu = false;
-					}
+						if (m_bOpenMenu && ImGui::IsWindowAppearing())
+						{
+							m_bOpenMenu = false;
+						}
 
-					RunMainMenuTickLogic();
+						RunMainMenuTickLogic();
 
-					if (bCloseMenu)
-					{
-						ImGui::CloseCurrentPopup();
+						if (GLevelEditorModeTools().IsViewportUIHidden())
+						{
+							ImGui::CloseCurrentPopup();
+						}
 					}
 					ImGui::EndPopup();
 				}
 			}
 
-			if (GLevelEditorModeTools().IsViewportUIHidden())
+			const bool bIsInPIE = GEditor && GEditor->PlayWorld && !GEditor->bIsSimulatingInEditor;
+			if (GLevelEditorModeTools().IsViewportUIHidden() && !bIsInPIE)
 			{
-				if (ImGui::BeginMainMenuBar())
+				// manually create menu bar here, can't use ImGui::BeginMenuBar as the widget is a 8x8 pixels dummy viewport
+				TSharedPtr<SLevelViewport> LevelViewport = GetLevelViewport();
+				if (LevelViewport.IsValid())
 				{
-					RunMainMenuTickLogic();
-					ImGui::EndMainMenuBar();
+					FVector2f LevelViewportPos = LevelViewport->GetTickSpaceGeometry().GetAbsolutePosition();
+					FVector2f LevelViewportSize = LevelViewport->GetTickSpaceGeometry().GetAbsoluteSize();
+
+					ImGui::SetNextWindowPos(ImVec2(LevelViewportPos.X, LevelViewportPos.Y));
+					ImGui::SetNextWindowSize(ImVec2(LevelViewportSize.X, ImGui::GetTextLineHeightWithSpacing()));
+
+					ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+					ImGui::PushStyleVarY(ImGuiStyleVar_WindowMinSize, ImGui::GetTextLineHeightWithSpacing());
+					const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBackground;
+					if (ImGui::Begin("##MainMenuBar", nullptr, WindowFlags))
+					{
+						if (ImGui::BeginMenuBar())
+						{
+							RunMainMenuTickLogic();
+							ImGui::EndMenuBar();
+						}
+					}
+					ImGui::End();
+					ImGui::PopStyleVar(2);
 				}
 			}
 		}
@@ -903,7 +963,7 @@ private:
 		// we are done with the dock node
 		// if we enter `TickImGuiInternal` again that would mean the event is coming from window resizing
 		// so will have to add the dock node again!
-		bIsDockNodeValid = false;
+		m_bIsDockNodeValid = false;
 	}
 };
 
@@ -934,6 +994,7 @@ public:
 	FReply OnClicked();
 
 	TWeakPtr<SLevelViewport> LevelViewport;
+	TWeakPtr<SWidget> OverlayWidget;
 };
 
 static FDelayedAutoRegisterHelper ImGuiViewportToolbar_DelayedAutoRegister(EDelayedRegisterRunPhase::EndOfEngineInit,
@@ -980,7 +1041,7 @@ private:
 			LOCTEXT("ImGuiGroupName", "ImGui"),
 			FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"), /*bSortChildren=*/true);
 
-		if (CVarAddImGuiWidgetToLevelViewport.GetValueOnGameThread() == false)
+		if (CVarAddImGuiWidgetToLevelViewport.GetValueOnGameThread() == false && GIsEditor)
 		{
 			FGlobalTabmanager::Get()->RegisterNomadTabSpawner(IMGUI_FNAME("ImGuiTab"), FOnSpawnTab::CreateRaw(this, &FImGuiRuntimeModule::SpawnImGuiTab))
 				.SetGroup(m_ImGuiTabGroup.ToSharedRef())
@@ -990,14 +1051,20 @@ private:
 		}
 
 		FWorldDelegates::OnWorldBeginTearDown.AddRaw(this, &FImGuiRuntimeModule::OnWorldBeginTearDown);
-#else
-		UGameViewportClient::OnViewportCreated().AddRaw(this, &FImGuiRuntimeModule::OnViewportCreated);
-#endif
 
 		m_OpenImGuiMenuCommand = MakeUnique<FAutoConsoleCommandWithWorld>(
 			TEXT("imgui.ToggleMenu"),
 			TEXT("Toggles ImGui menu."),
-			FConsoleCommandWithWorldDelegate::CreateRaw(this, &FImGuiRuntimeModule::ToggleImGuiMainMenu));
+			FConsoleCommandWithWorldDelegate::CreateRaw(this, &FImGuiRuntimeModule::TogglePIEImGuiContext));
+
+#else
+		UGameViewportClient::OnViewportCreated().AddRaw(this, &FImGuiRuntimeModule::OnViewportCreated);
+
+		m_OpenImGuiMenuCommand = MakeUnique<FAutoConsoleCommandWithWorld>(
+			TEXT("imgui.ToggleMenu"),
+			TEXT("Toggles ImGui menu."),
+			FConsoleCommandWithWorldDelegate::CreateRaw(this, &FImGuiRuntimeModule::TogglePrimaryImGuiContext));
+#endif
 	}
 
 	virtual void ShutdownModule() override
@@ -1015,11 +1082,9 @@ private:
 		{
 			FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(IMGUI_FNAME("ImGuiTab"));
 		}
-		m_MainMenuWidgets.Reset();
-		m_EditorMainMenuWidget.Reset();
-#else
-		m_MainMenuWidget.Reset();
+		m_PIEContextWidgets.Reset();
 #endif
+		m_PrimaryContextWidget.Reset();
 
 		UGameViewportClient::OnViewportCreated().RemoveAll(this);
 
@@ -1033,7 +1098,7 @@ private:
 
 		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = SNew(SImGuiMainMenuWidget)
 			.MainViewportWindow(SpawnTabArgs.GetOwnerWindow());
-		m_EditorMainMenuWidget = MainMenuWidget;
+		m_PrimaryContextWidget = MainMenuWidget;
 
 		return SNew(SDockTab)
 			.TabRole(ETabRole::NomadTab)
@@ -1044,7 +1109,7 @@ private:
 
 	void OnWorldBeginTearDown(UWorld* World)
 	{
-		for (auto Itr = m_MainMenuWidgets.CreateIterator(); Itr; ++Itr)
+		for (auto Itr = m_PIEContextWidgets.CreateIterator(); Itr; ++Itr)
 		{
 			TSharedPtr<SImGuiMainMenuWidget> Widget = Itr->Pin();
 			const UWorld* WidgetWorld = Widget.IsValid() ? Widget->GetWorld() : nullptr;
@@ -1063,21 +1128,25 @@ private:
 		}
 	}
 
-	void ToggleImGuiMainMenu(UWorld* World)
+	void TogglePIEImGuiContext(UWorld* World)
 	{
+		if (!GIsEditor)
+		{
+			TogglePrimaryImGuiContext(World);
+			return;
+		}
+
 		if (!World->IsGameWorld())
 		{
 			return;
 		}
 
-		int32 MainMenuWidgetIndex = INDEX_NONE;
 		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget;
-		for (int32 WidgetIndex = 0; WidgetIndex < m_MainMenuWidgets.Num(); ++WidgetIndex)
+		for (int32 WidgetIndex = 0; WidgetIndex < m_PIEContextWidgets.Num(); ++WidgetIndex)
 		{
-			MainMenuWidget = m_MainMenuWidgets[WidgetIndex].Pin();
+			MainMenuWidget = m_PIEContextWidgets[WidgetIndex].Pin();
 			if (MainMenuWidget.IsValid() && MainMenuWidget->GetWorld() == World)
 			{
-				MainMenuWidgetIndex = WidgetIndex;
 				break;
 			}
 			MainMenuWidget.Reset();
@@ -1092,28 +1161,24 @@ private:
 					.MainViewportWindow(GameViewport->GetWindow())
 					.OwningWorld(World);
 				GameViewport->AddViewportWidgetContent(MainMenuWidget.ToSharedRef(), TNumericLimits<int32>::Max());
-				m_MainMenuWidgets.Add(MainMenuWidget);
+				m_PIEContextWidgets.Add(MainMenuWidget);
 
-				// same logic as Shift+F1 , need to run on next tick as console will refocus the game viewport
-				World->GetTimerManager().SetTimerForNextTick(
-					[]()
-					{
-						FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
-						FSlateApplication::Get().ResetToDefaultInputSettings();
-					});
+				ImGuiFocusHandler::SetUIFocus(World);
 			}
+			return;
 		}
-		else
-		{
-			if (UGameViewportClient* GameViewport = World->GetGameViewport())
-			{
-				GameViewport->RemoveViewportWidgetContent(MainMenuWidget.ToSharedRef());
 
-				FSlateApplication::Get().SetAllUserFocusToGameViewport(EFocusCause::SetDirectly);
-			}
-			if (MainMenuWidgetIndex != INDEX_NONE)
+		if (MainMenuWidget.IsValid())
+		{
+			if (MainMenuWidget->GetVisibility() == EVisibility::Visible)
 			{
-				m_MainMenuWidgets.RemoveAt(MainMenuWidgetIndex);
+				MainMenuWidget->SetVisibility(EVisibility::Hidden);
+				ImGuiFocusHandler::ResetFocus();
+			}
+			else
+			{
+				MainMenuWidget->SetVisibility(EVisibility::Visible);
+				ImGuiFocusHandler::SetUIFocus(World);
 			}
 		}
 	}
@@ -1138,15 +1203,14 @@ private:
 		// take focus from viewport client and show the mouse cursor (similar to pressing Shift+F1 during PIE)
 		if (EventArgs.Key == EKeys::F1 && KeyState.IsShiftDown())
 		{
-			FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
-			FSlateApplication::Get().ResetToDefaultInputSettings();
+			ImGuiFocusHandler::SetUIFocus(nullptr);
 		}
 	}
+#endif //#if WITH_EDITOR
 
-	void ToggleImGuiMainMenu(UWorld* World)
+	void TogglePrimaryImGuiContext(UWorld* World)
 	{
-		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_MainMenuWidget.Pin();
-		
+		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_PrimaryContextWidget.Pin();
 		if (!MainMenuWidget.IsValid())
 		{
 			if (UGameViewportClient* GameViewport = World->GetGameViewport())
@@ -1154,28 +1218,27 @@ private:
 				MainMenuWidget = SNew(SImGuiMainMenuWidget)
 					.MainViewportWindow(GameViewport->GetWindow());
 				GameViewport->AddViewportWidgetContent(MainMenuWidget.ToSharedRef(), TNumericLimits<int32>::Max());
-				m_MainMenuWidget = MainMenuWidget;
+				m_PrimaryContextWidget = MainMenuWidget;
 
-				// same logic as Shift+F1 , need to run on next tick as console will refocus the game viewport
-				World->GetTimerManager().SetTimerForNextTick(
-					[]()
-					{
-						FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
-						FSlateApplication::Get().ResetToDefaultInputSettings();
-					});
+				ImGuiFocusHandler::SetUIFocus(World);
 			}
+			return;
 		}
-		else
+
+		if (MainMenuWidget.IsValid())
 		{
-			if (UGameViewportClient* GameViewport = World->GetGameViewport())
+			if (MainMenuWidget->GetVisibility() == EVisibility::Visible)
 			{
-				GameViewport->RemoveViewportWidgetContent(MainMenuWidget.ToSharedRef());
-				FSlateApplication::Get().SetAllUserFocusToGameViewport(EFocusCause::SetDirectly);
+				MainMenuWidget->SetVisibility(EVisibility::Hidden);
+				ImGuiFocusHandler::ResetFocus();
 			}
-			m_MainMenuWidget.Reset();
+			else
+			{
+				MainMenuWidget->SetVisibility(EVisibility::Visible);
+				ImGuiFocusHandler::SetUIFocus(World);
+			}
 		}
 	}
-#endif //#if WITH_EDITOR
 
 public:
 	FImGuiTickContext* GetWidgetTickContext(const UWorld* World) const
@@ -1197,7 +1260,7 @@ public:
 #if WITH_EDITOR
 		if (!World)
 		{
-			TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_EditorMainMenuWidget.Pin();
+			TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_PrimaryContextWidget.Pin();
 			if (MainMenuWidget.IsValid())
 			{
 				return GetTickContextFromWidget(MainMenuWidget.Get());
@@ -1205,9 +1268,9 @@ public:
 		}
 		else
 		{
-			for (int32 WidgetIndex = 0; WidgetIndex < m_MainMenuWidgets.Num(); ++WidgetIndex)
+			for (int32 WidgetIndex = 0; WidgetIndex < m_PIEContextWidgets.Num(); ++WidgetIndex)
 			{
-				TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_MainMenuWidgets[WidgetIndex].Pin();
+				TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_PIEContextWidgets[WidgetIndex].Pin();
 				if (MainMenuWidget.IsValid() && MainMenuWidget->GetWorld() == World)
 				{
 					return GetTickContextFromWidget(MainMenuWidget.Get());
@@ -1215,7 +1278,7 @@ public:
 			}
 		}
 #else
-		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_MainMenuWidget.Pin();
+		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_PrimaryContextWidget.Pin();
 		if (MainMenuWidget.IsValid())
 		{
 			return GetTickContextFromWidget(MainMenuWidget.Get());
@@ -1248,12 +1311,12 @@ public:
 	TSharedPtr<FWorkspaceItem> m_ImGuiTabGroup;
 
 	TArray<FImGuiMenuContainer> m_MenuContainers;
-	TWeakPtr<SImGuiMainMenuWidget> m_EditorMainMenuWidget;
-	TArray<TWeakPtr<SImGuiMainMenuWidget>> m_MainMenuWidgets;
+	TArray<TWeakPtr<SImGuiMainMenuWidget>> m_PIEContextWidgets;
 #else
 	FImGuiMenuContainer m_MenuContainer;
-	TWeakPtr<SImGuiMainMenuWidget> m_MainMenuWidget;
 #endif
+	// Editor/Game context widget
+	TWeakPtr<SImGuiMainMenuWidget> m_PrimaryContextWidget;
 
 	TUniquePtr<FAutoConsoleCommandWithWorld> m_OpenImGuiMenuCommand = nullptr;
 };
@@ -1274,36 +1337,56 @@ FReply SImGuiViewportToolBarButton::OnClicked()
 	{
 		TSharedPtr<SWindow> ViewportWindow = FSlateApplication::Get().FindWidgetWindow(Viewport.ToSharedRef());
 
-		auto MainMenuWidget = ImGuiModule.m_EditorMainMenuWidget.Pin();
+		auto MainMenuWidget = ImGuiModule.m_PrimaryContextWidget.Pin();
 		if (MainMenuWidget)
 		{
 			// handle split viewport switching!
-			TSharedPtr<SLevelViewport> CurrentViewport = MainMenuWidget->GetLevelViewport();
-			if (CurrentViewport != Viewport)
+			TSharedPtr<SWidget> PreviousOverlayWidget = MainMenuWidget->GetLevelViewportOverlayWidget();
+			TSharedPtr<SLevelViewport> PreviousLevelViewport = MainMenuWidget->GetLevelViewport();
+			if (PreviousLevelViewport != Viewport)
 			{
-				CurrentViewport->RemoveOverlayWidget(MainMenuWidget.ToSharedRef());
+				if (PreviousLevelViewport.IsValid() && PreviousOverlayWidget.IsValid())
+				{
+					PreviousLevelViewport->RemoveOverlayWidget(PreviousOverlayWidget.ToSharedRef());
+				}
 				MainMenuWidget.Reset();
 			}
 		}
 		
 		if (!MainMenuWidget)
 		{
-			MainMenuWidget = SNew(SImGuiMainMenuWidget).MainViewportWindow(ViewportWindow);
-			Viewport->AddOverlayWidget(MainMenuWidget.ToSharedRef(), 0);
+			// here we create a 8x8 widget with inputs disabled on the main ImGui widget
+			// the setup works by forcing separate platform windows for each ImGui window with input handling
+			// otherwise it interferes with PIE context and a lot of other input/focus related issues
 
-			MainMenuWidget->SetLevelViewport(Viewport);
-			ImGuiModule.m_EditorMainMenuWidget = MainMenuWidget;
+			MainMenuWidget = SNew(SImGuiMainMenuWidget).MainViewportWindow(ViewportWindow);
+			MainMenuWidget->SetVisibility(EVisibility::HitTestInvisible);
+
+			TSharedRef<SConstraintCanvas> Canvas = SNew(SConstraintCanvas);
+			Canvas->AddSlot()
+				.AutoSize(true)
+				.Anchors(FAnchors(0.5f))
+				.Offset(FMargin(0.f))
+				.Alignment(FVector2D(0.5, 0.5))
+				[
+					MainMenuWidget.ToSharedRef()
+				];
+			Viewport->AddOverlayWidget(Canvas, 0);
+
+			OverlayWidget = Canvas;
+			MainMenuWidget->SetLevelViewport(Viewport, Canvas);
+			ImGuiModule.m_PrimaryContextWidget = MainMenuWidget;
 		}
 		else
 		{
 			if (FSlateApplication::Get().GetModifierKeys().IsShiftDown())
 			{
-				Viewport->RemoveOverlayWidget(MainMenuWidget.ToSharedRef());
-				MainMenuWidget.Reset();
+				MainMenuWidget->SetVisibility(EVisibility::Hidden);
 			}
 			else
 			{
-				MainMenuWidget->ToggleMenu();
+				MainMenuWidget->SetVisibility(EVisibility::HitTestInvisible);
+				MainMenuWidget->OpenMenu();
 			}
 		}
 

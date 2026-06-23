@@ -381,6 +381,19 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 }
 
 #pragma region SLATE_INPUT
+FReply SImGuiWidgetBase::OnFocusReceived(const FGeometry& MyGeometry, const FFocusEvent& InFocusEvent)
+{
+	ImGuiIO& IO = m_ImGuiContext->IO;
+	IO.AddFocusEvent(true);
+	return FReply::Handled();
+}
+
+void SImGuiWidgetBase::OnFocusLost(const FFocusEvent& InFocusEvent)
+{
+	ImGuiIO& IO = m_ImGuiContext->IO;
+	IO.AddFocusEvent(false);
+}
+
 void SImGuiWidgetBase::AddKeyEvent(ImGuiIO& IO, FKeyEvent KeyEvent, bool IsDown)
 {
 	const ImGuiKey ImGuiKey = ImGuiUtils::UnrealToImGuiKey(KeyEvent.GetKey().GetFName());

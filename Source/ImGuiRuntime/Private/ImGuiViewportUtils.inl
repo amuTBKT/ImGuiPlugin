@@ -660,6 +660,10 @@ namespace ImGuiUtils
 
 		// to request viewport window recreation (for patching slate window references etc.)
 		bool bInvalidateManagedViewportWindows = false;
+
+		// flag to set focus on widget next time viewport updates
+		// kept it separate from widget logic as viewport widgets don't tick
+		bool bFocusRequested = false;
 	};
 
 	// Widget handling rendering and inputs (no Tick logic)
@@ -701,8 +705,8 @@ namespace ImGuiUtils
 		void UpdateWindowVisibility()
 		{
 			// slate doesn't update visibility for child windows, so a little workaround for it...
-			const FImGuiViewportData* ViewportData = (FImGuiViewportData*)m_ImGuiViewport->PlatformUserData;
-			if (ViewportData && ViewportData->ViewportWidget.IsValid())
+			const FImGuiViewportData* ViewportData = m_ImGuiViewport ? (FImGuiViewportData*)m_ImGuiViewport->PlatformUserData : nullptr;
+			if (ViewportData && ViewportData->ViewportWindow.IsValid())
 			{
 				TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin();
 				TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
@@ -748,6 +752,21 @@ namespace ImGuiUtils
 			// it's unsafe to make ImGui calls during OnPaint() so cache the drawer index here
 			WidgetDrawerToRenderThisFrame = ImGui::GetFrameCount() & 0x1;
 			m_WidgetDrawers[WidgetDrawerToRenderThisFrame]->SetDrawData(DrawData, ImGui::GetTime(), FVector2f::ZeroVector);
+		}
+
+		virtual FReply OnFocusReceived(const FGeometry& MyGeometry, const FFocusEvent& InFocusEvent) override
+		{
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
+			return RootWidget ? RootWidget->OnFocusReceived(RootWidget->GetCachedGeometry(), InFocusEvent) : FReply::Unhandled();
+		}
+
+		virtual void OnFocusLost(const FFocusEvent& InFocusEvent) override
+		{
+			TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
+			if (RootWidget)
+			{
+				RootWidget->OnFocusLost(InFocusEvent);
+			}
 		}
 
 		virtual FReply OnKeyChar(const FGeometry& WidgetGeometry, const FCharacterEvent& CharacterEvent) override
@@ -875,6 +894,11 @@ namespace ImGuiUtils
 			return RootWidget ? RootWidget->OnDrop(RootWidget->GetCachedGeometry(), DragDropEvent) : FReply::Unhandled();
 		}
 
+		void ResetImGuiViewportData()
+		{
+			m_ImGuiViewport = nullptr;
+		}
+
 	private:
 		const ImGuiViewport* m_ImGuiViewport = nullptr;
 		TSharedPtr<ImGuiUtils::FWidgetDrawer> m_WidgetDrawers[2];
@@ -913,10 +937,26 @@ namespace ImGuiUtils
 			return;
 		}
 
-		const bool bTooltipWindow = (Viewport->Flags & ImGuiViewportFlags_TopMost);
-		const bool bPopupWindow = (Viewport->Flags & ImGuiViewportFlags_NoTaskBarIcon);
+		bool bTooltipWindow = (Viewport->Flags & ImGuiViewportFlags_TopMost);
+		bool bPopupWindow = (Viewport->Flags & ImGuiViewportFlags_NoTaskBarIcon);
 		// don't activate the window as we would like to keep the focus at MainViewport window
-		const bool bFocusOnAppearing = false;// ((Viewport->Flags & ImGuiViewportFlags_NoFocusOnAppearing) == 0);
+		bool bFocusWindowOnAppearing = ((Viewport->Flags & ImGuiViewportFlags_NoFocusOnAppearing) == 0);
+		bool bFocusWidgetOnAppearing = ((Viewport->Flags & ImGuiViewportFlags_NoFocusOnAppearing) == 0);
+
+#if WITH_EDITOR
+		// HACK: popups don't support auto focus so a little hack for level editor menu
+		if (FCStringAnsi::Stricmp(((ImGuiViewportP*)Viewport)->Window->Name, "##LevelViewportMenu") == 0)
+		{
+			bFocusWindowOnAppearing = true;
+			bFocusWidgetOnAppearing = true;
+		}
+
+		// HACK: disable taskbar icon for menu bar, figure out a better way to handle this
+		if (FCStringAnsi::Stricmp(((ImGuiViewportP*)Viewport)->Window->Name, "##MainMenuBar") == 0)
+		{
+			bPopupWindow = true;
+		}
+#endif
 
 		TSharedPtr<ImGuiUtils::SImGuiViewportWidget> ViewportWidget = SNew(ImGuiUtils::SImGuiViewportWidget, MainViewportWidgetPtr, Viewport);
 		TSharedPtr<SWindow> ViewportWindow = 
@@ -932,8 +972,8 @@ namespace ImGuiUtils
 			.IsTopmostWindow(bTooltipWindow)
 			.Type(bTooltipWindow ? EWindowType::ToolTip : (bPopupWindow ? EWindowType::Menu : EWindowType::Normal))
 			.UseOSWindowBorder(false)
-			.FocusWhenFirstShown(bFocusOnAppearing)
-			.ActivationPolicy(bFocusOnAppearing ? EWindowActivationPolicy::Always : EWindowActivationPolicy::Never)
+			.FocusWhenFirstShown(bFocusWindowOnAppearing)
+			.ActivationPolicy(bFocusWindowOnAppearing ? EWindowActivationPolicy::Always : EWindowActivationPolicy::Never)
 			.Content()
 			[
 				ViewportWidget.ToSharedRef()
@@ -953,6 +993,7 @@ namespace ImGuiUtils
 		ViewportData->ViewportWidget = ViewportWidget;
 		ViewportData->ParentWindow = ParentWindowPtr;
 		ViewportData->MainViewportWidget = MainViewportWidgetPtr;
+		ViewportData->bFocusRequested = bFocusWidgetOnAppearing;
 
 		Viewport->PlatformRequestResize = false;
 		Viewport->PlatformUserData = ViewportData;
@@ -965,6 +1006,11 @@ namespace ImGuiUtils
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
 				ViewportWindow->RequestDestroyWindow();
+			}
+			if (ViewportData->ViewportWidget.IsValid())
+			{
+				// shared ptr can live around for a few frames, so make sure references to ImGui data is released
+				ViewportData->ViewportWidget->ResetImGuiViewportData();
 			}
 			ViewportData->ViewportWindow = nullptr;
 			ViewportData->ViewportWidget = nullptr;
@@ -1062,6 +1108,7 @@ namespace ImGuiUtils
 			{
 				NativeWindow->SetWindowFocus();
 			}
+			ViewportData->bFocusRequested = true;
 		}
 	}
 
@@ -1081,6 +1128,11 @@ namespace ImGuiUtils
 			}
 			else
 			{
+				if (ViewportData->ViewportWidget.IsValid())
+				{
+					return ViewportData->ViewportWidget->HasAnyUserFocus().IsSet();
+				}
+
 				TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin();
 				TSharedPtr<FGenericWindow> NativeWindow = ViewportWindow ? ViewportWindow->GetNativeWindow() : nullptr;
 				if (NativeWindow)
@@ -1140,6 +1192,12 @@ namespace ImGuiUtils
 				{
 					// TODO: maybe not ideal to access viewport as 'ImGuiViewportP', but there doesn't seem to be a way to request window recreation
 					ImGui::DestroyPlatformWindow((ImGuiViewportP*)Viewport);
+				}
+				else if (ViewportData->bFocusRequested)
+				{
+					// TODO: this could potentially spam if a lot of windows are created on the same frame.
+					ViewportData->bFocusRequested = false;
+					FSlateApplication::Get().SetAllUserFocus(ViewportData->ViewportWidget, EFocusCause::SetDirectly);
 				}
 			}
 		}

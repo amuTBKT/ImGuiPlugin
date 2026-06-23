@@ -45,6 +45,10 @@ public:
 
 	virtual bool SupportsKeyboardFocus() const override { return true; }
 
+	virtual FReply OnFocusReceived(const FGeometry& MyGeometry, const FFocusEvent& InFocusEvent) override;
+
+	virtual void OnFocusLost(const FFocusEvent& InFocusEvent) override;
+
 	virtual FReply OnKeyChar(const FGeometry& WidgetGeometry, const FCharacterEvent& CharacterEvent) override;
 
 	virtual FReply OnKeyDown(const FGeometry& WidgetGeometry, const FKeyEvent& KeyEvent) override;
