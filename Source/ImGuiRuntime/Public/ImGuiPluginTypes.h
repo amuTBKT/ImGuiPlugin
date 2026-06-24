@@ -81,7 +81,7 @@ struct FImGuiTickScope : FNoncopyable
 	FORCEINLINE static FImGuiTickContext* BeginContext(FImGuiTickContext* Context)
 	{
 		ImGuiContext* PrevImGuiContext = ImGui::GetCurrentContext();
-		
+
 		ImGui::SetCurrentContext(Context ? Context->ImguiContext : nullptr);
 		ImPlot::SetCurrentContext(Context ? Context->ImplotContext : nullptr);
 
@@ -146,7 +146,7 @@ namespace FImGui
 		// label name with padding for icon
 		char LabelBuffer[128];
 		FCStringAnsi::Sprintf(LabelBuffer, "        %s", Label, Label);
-		
+
 		ImGui::BeginGroup();
 		bool bPressed = ImGui::MenuItem(LabelBuffer, nullptr, bIsActive);
 
@@ -191,7 +191,7 @@ namespace FImGui
 			MenuFunc();
 			ImGui::EndMenu();
 		}
-		
+
 		ImGui::SameLine();
 		ImGui::SetCursorPosX(CursorPosX);
 		ImGui::SetCursorPos(ImGui::GetCursorPos() + IconOffset);
@@ -245,13 +245,13 @@ struct FImGuiWidgetRegisterParams
 
 	// ImGui widget tick function
 	void(*TickFunction)(FImGuiTickContext* Context);
-	
+
 	// optional icon to use for the widget menu item
 	FSlateIcon WidgetIcon;
-	
+
 	// full path to widget (example: "Tools.MyWidget")
 	const char* WidgetPath = nullptr;
-	
+
 	// widget tooltip
 	const char* WidgetDescription = "";
 

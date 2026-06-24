@@ -72,7 +72,7 @@ class UImGuiSubsystem : public UEngineSubsystem
 	GENERATED_BODY()
 
 public:
-	// USubsystem interface 
+	// USubsystem interface
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
@@ -89,7 +89,6 @@ public:
 	static FSimpleMulticastDelegate OnEndImGuiFrame;
 
 	const char* GetIniDirectoryPath()	const { return *m_IniDirectoryPath; }
-	const char* GetIniFilePath()		const { return *m_IniFilePath; }
 
 	IMGUIRUNTIME_API static const FString& GetSaveDataConfigFilepath();
 	FConfigFile* GetSaveDataConfigFile() const { return m_SaveDataConfigFile; }
@@ -134,11 +133,10 @@ private:
 	FConfigFile* m_SaveDataConfigFile = nullptr;
 
 	FAnsiString m_IniDirectoryPath;
-	FAnsiString m_IniFilePath;
 
 	UPROPERTY()
 	TArray<FImGuiFontTextureEntry> m_SharedFontAtlasTextures;
-	
+
 	UPROPERTY()
 	UTexture2D* m_MissingImageTexture = nullptr;
 

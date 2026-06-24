@@ -366,7 +366,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 	if (IO.WantSetMousePos)
 	{
 		TSharedPtr<ICursor> SlateCursor = FSlateApplication::Get().GetPlatformCursor();
-		if (SlateCursor.IsValid())
+		if (SlateCursor)
 		{
 			FVector2f MousePosition = FVector2f(IO.MousePos.x, IO.MousePos.y);
 			if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) == 0)

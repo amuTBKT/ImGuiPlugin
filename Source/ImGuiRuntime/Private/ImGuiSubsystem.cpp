@@ -64,6 +64,7 @@ FSimpleMulticastDelegate UImGuiSubsystem::OnEndImGuiFrame = {};
 
 const FString& UImGuiSubsystem::GetSaveDataConfigFilepath()
 {
+	// uses AppData folder to keep the widget data in sync b/w editor and packaged builds
 	const TCHAR* UserSettingsDir = FPlatformProcess::UserSettingsDir();
 	const FString EngineVersion = FEngineVersion::Current().ToString(EVersionComponent::Minor);
 	static const FString ConfigFilepath =
@@ -100,11 +101,9 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		}
 	}
 
-	// setup ini file path and directory
+	// setup ini file path directory
 	{
 		m_IniDirectoryPath = FAnsiString(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("ImGui")));
-		m_IniFilePath = FAnsiString(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("ImGui"), TEXT("ImGui.ini")));
-
 		IFileManager::Get().MakeDirectory(ANSI_TO_TCHAR(*m_IniDirectoryPath), true);
 	}
 
@@ -146,7 +145,7 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 	FCoreDelegates::OnBeginFrame.AddUObject(this, &UImGuiSubsystem::BeginImGuiFrame);
 	FCoreDelegates::OnEndFrame.AddUObject(this, &UImGuiSubsystem::EndImGuiFrame);
-	
+
 	// Need to ensure shared font atlas is released after all slate windows have exited
 	// Note: Subsystem is deinitialized before slate so copy the pointer for callback
 	FCoreDelegates::OnExit.AddLambda(
@@ -189,7 +188,7 @@ UImGuiSubsystem* UImGuiSubsystem::Get()
 }
 
 TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate)
-{	
+{
 	TSharedPtr<SWindow> Window = SNew(SWindow)
 		.Title(FText::FromString(WindowName))
 		.ClientSize(WindowSize)
@@ -318,7 +317,7 @@ int32 UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
 
 				m_SharedFontAtlasTextures[TextureIndex].Texture = Texture;
 				m_SharedFontAtlasTextures[TextureIndex].SlateBrush.SetResourceObject(Texture);
-				
+
 				m_OneFrameResources[FontAtlasTextureStartIndex + TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].SlateBrush.GetRenderingResource() };
 			}
 			m_SharedFontAtlasTextures[TextureIndex].bInUse = true;

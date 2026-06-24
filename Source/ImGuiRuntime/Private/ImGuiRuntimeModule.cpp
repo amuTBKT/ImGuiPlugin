@@ -18,12 +18,13 @@
 #include "Framework/Application/SlateApplication.h"
 
 #if WITH_EDITOR
-#include "SLevelViewport.h"
 #include "Widgets/SNullWidget.h"
-#include "ViewportToolBarContext.h"
+#include "Styling/ToolBarStyle.h"
+#include "Widgets/Input/SButton.h"
 #include "Widgets/Text/STextBlock.h"
-#include "SEditorViewportToolBarMenu.h"
-#include "SEditorViewportToolBarButton.h"
+
+#include "SLevelViewport.h"
+#include "ViewportToolBarContext.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
 #include "Subsystems/PanelExtensionSubsystem.h"
 
@@ -72,7 +73,7 @@ void ImGuiAssertHook(bool bCondition, const char* Expression, const char* File, 
 
 #ifdef IMGUI_DISABLE_DEFAULT_FILE_FUNCTIONS
 ImFileHandle ImFileOpen(const char* FileName, const char* Mode)
-{	
+{
 	bool bRead = false;
 	bool bWrite = false;
 	bool bAppend = false;
@@ -314,7 +315,7 @@ struct FImGuiMenuContainer
 		}
 
 		return { EFindSlotResult::Found, ParentSlot };
-	}	
+	}
 	FWidgetSlot* FindSlot(FAnsiStringView Path)
 	{
 		return FindOrCreateSlot_Internal(Path, /*bCreateHierarchy=*/false).Value;
@@ -368,7 +369,7 @@ struct FImGuiMenuContainer
 			{
 				FWidgetSlot NewSlot = FWidgetSlot{ FAnsiString(WidgetPath), FAnsiString(WidgetToolTip), WidgetIcon, TickDelegate, WidgetFlags };
 				LoadSlotState(NewSlot);
-				
+
 				AddSlotSorted(ParentSlot->GetChildren(), MoveTemp(NewSlot));
 			}
 		}
@@ -591,7 +592,7 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegiste
 	{
 		return;
 	}
-	
+
 	if (UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get())
 	{
 		RegisterParams.InitFunction();
@@ -675,6 +676,7 @@ public:
 	const UWorld* GetWorld() const { return m_OwningWorld.Get(); }
 
 #if WITH_EDITOR
+	bool IsMenuOpen() const { return m_bIsMenuOpen; }
 	void OpenMenu() { m_bOpenMenu = true; m_MenuRequestedFrameIndex = GetImGuiContext()->FrameCount; }
 	void SetMenuOffset(ImVec2 Offset) { m_PendingMenuOffset = Offset; }
 	TSharedPtr<SLevelViewport> GetLevelViewport() const { return m_LevelViewport.Pin(); }
@@ -736,6 +738,7 @@ private:
 	// when added to level viewport
 #if WITH_EDITOR
 	bool m_bOpenMenu = true;
+	bool m_bIsMenuOpen = false;
 	int32 m_MenuRequestedFrameIndex = 0;
 	bool m_bIsAddedToLevelViewport = false;
 	ImVec2 m_MenuOffset = ImVec2(0.f, 0.f);
@@ -878,12 +881,12 @@ private:
 		if (m_bIsAddedToLevelViewport)
 		{
 			// NOTE: 2 frames delay to make sure the widget has ticked atleast once to adjust viewport offset
-			// plus to make sure windows opening on the same frame doesn't dismiss the menu bar popup.
+			// plus to make sure windows opening on the same frame don't dismiss the menu bar popup.
 			if (ImGui::GetFrameCount() > (m_MenuRequestedFrameIndex + 2))
 			{
 				// HACK: this should match the value in `UnrealPlatform_CreateWindow` for auto focus to work properly.
 				// the logic here manually calls ImGui::Begin to make sure the popup window name matches this value.
-				static const char* LevelEditorPopupMenuName = "##LevelViewportMenu";
+				static const char* LevelEditorPopupMenuName = "Menu##LevelEditor";
 
 				if (m_bOpenMenu)
 				{
@@ -895,7 +898,8 @@ private:
 					m_PendingMenuOffset.Reset();
 				}
 
-				if (ImGui::IsPopupOpen(LevelEditorPopupMenuName, ImGuiPopupFlags_None))
+				m_bIsMenuOpen = ImGui::IsPopupOpen(LevelEditorPopupMenuName, ImGuiPopupFlags_None);
+				if (m_bIsMenuOpen)
 				{
 					ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + m_MenuOffset, ImGuiCond_Always);
 					if (ImGui::Begin(LevelEditorPopupMenuName, nullptr, ImGuiWindowFlags_Popup | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
@@ -921,7 +925,7 @@ private:
 			{
 				// manually create menu bar here, can't use ImGui::BeginMenuBar as the widget is a 8x8 pixels dummy viewport
 				TSharedPtr<SLevelViewport> LevelViewport = GetLevelViewport();
-				if (LevelViewport.IsValid())
+				if (LevelViewport)
 				{
 					FVector2f LevelViewportPos = LevelViewport->GetTickSpaceGeometry().GetAbsolutePosition();
 					FVector2f LevelViewportSize = LevelViewport->GetTickSpaceGeometry().GetAbsoluteSize();
@@ -970,7 +974,7 @@ private:
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if WITH_EDITOR
-class SImGuiViewportToolBarButton : public SViewportToolBar
+class SImGuiViewportToolBarButton : public SCompoundWidget
 {
 public:
 	SLATE_BEGIN_ARGS(SImGuiViewportToolBarButton) {}
@@ -982,8 +986,14 @@ public:
 		LevelViewport = InArgs._LevelViewport;
 		ChildSlot
 		[
-			SNew(SEditorViewportToolBarButton)
+			SNew(SButton)
+			.HAlign(HAlign_Center)
+			.VAlign(VAlign_Center)
+			.ContentPadding(FMargin(4.f, 0.f))
+			.PressMethod(EButtonPressMethod::ButtonPress)
+			.OnPressed(this, &SImGuiViewportToolBarButton::OnPressed)
 			.OnClicked(this, &SImGuiViewportToolBarButton::OnClicked)
+			.ButtonStyle(&FAppStyle::Get().GetWidgetStyle<FToolBarStyle>("EditorViewportToolBar").ButtonStyle)
 			[
 				SNew(STextBlock)
 				.Text(LOCTEXT("ImGuiMainTabTitle", "ImGui"))
@@ -991,10 +1001,17 @@ public:
 		];
 	}
 
+	void OnPressed();
 	FReply OnClicked();
 
-	TWeakPtr<SLevelViewport> LevelViewport;
+	// container for ImGui main menu widget
 	TWeakPtr<SWidget> OverlayWidget;
+
+	// parent level viewport
+	TWeakPtr<SLevelViewport> LevelViewport;
+
+	// should we open the menu on click?
+	bool bRequestMenuOnClick = false;
 };
 
 static FDelayedAutoRegisterHelper ImGuiViewportToolbar_DelayedAutoRegister(EDelayedRegisterRunPhase::EndOfEngineInit,
@@ -1112,7 +1129,7 @@ private:
 		for (auto Itr = m_PIEContextWidgets.CreateIterator(); Itr; ++Itr)
 		{
 			TSharedPtr<SImGuiMainMenuWidget> Widget = Itr->Pin();
-			const UWorld* WidgetWorld = Widget.IsValid() ? Widget->GetWorld() : nullptr;
+			const UWorld* WidgetWorld = Widget ? Widget->GetWorld() : nullptr;
 			if (!WidgetWorld || WidgetWorld == World)
 			{
 				Itr.RemoveCurrent();
@@ -1145,14 +1162,14 @@ private:
 		for (int32 WidgetIndex = 0; WidgetIndex < m_PIEContextWidgets.Num(); ++WidgetIndex)
 		{
 			MainMenuWidget = m_PIEContextWidgets[WidgetIndex].Pin();
-			if (MainMenuWidget.IsValid() && MainMenuWidget->GetWorld() == World)
+			if (MainMenuWidget && MainMenuWidget->GetWorld() == World)
 			{
 				break;
 			}
 			MainMenuWidget.Reset();
 		}
 
-		if (!MainMenuWidget.IsValid())
+		if (!MainMenuWidget)
 		{
 			UGameViewportClient* GameViewport = World->bIsTearingDown ? nullptr : World->GetGameViewport();
 			if (GameViewport)
@@ -1168,7 +1185,7 @@ private:
 			return;
 		}
 
-		if (MainMenuWidget.IsValid())
+		if (MainMenuWidget)
 		{
 			if (MainMenuWidget->GetVisibility() == EVisibility::Visible)
 			{
@@ -1211,7 +1228,7 @@ private:
 	void TogglePrimaryImGuiContext(UWorld* World)
 	{
 		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_PrimaryContextWidget.Pin();
-		if (!MainMenuWidget.IsValid())
+		if (!MainMenuWidget)
 		{
 			if (UGameViewportClient* GameViewport = World->GetGameViewport())
 			{
@@ -1225,7 +1242,7 @@ private:
 			return;
 		}
 
-		if (MainMenuWidget.IsValid())
+		if (MainMenuWidget)
 		{
 			if (MainMenuWidget->GetVisibility() == EVisibility::Visible)
 			{
@@ -1261,7 +1278,7 @@ public:
 		if (!World)
 		{
 			TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_PrimaryContextWidget.Pin();
-			if (MainMenuWidget.IsValid())
+			if (MainMenuWidget)
 			{
 				return GetTickContextFromWidget(MainMenuWidget.Get());
 			}
@@ -1271,7 +1288,7 @@ public:
 			for (int32 WidgetIndex = 0; WidgetIndex < m_PIEContextWidgets.Num(); ++WidgetIndex)
 			{
 				TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_PIEContextWidgets[WidgetIndex].Pin();
-				if (MainMenuWidget.IsValid() && MainMenuWidget->GetWorld() == World)
+				if (MainMenuWidget && MainMenuWidget->GetWorld() == World)
 				{
 					return GetTickContextFromWidget(MainMenuWidget.Get());
 				}
@@ -1279,7 +1296,7 @@ public:
 		}
 #else
 		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_PrimaryContextWidget.Pin();
-		if (MainMenuWidget.IsValid())
+		if (MainMenuWidget)
 		{
 			return GetTickContextFromWidget(MainMenuWidget.Get());
 		}
@@ -1328,6 +1345,21 @@ TSharedRef<FWorkspaceItem> GetImGuiTabGroup()
 	return ImGuiModule.m_ImGuiTabGroup.ToSharedRef();
 }
 
+void SImGuiViewportToolBarButton::OnPressed()
+{
+	static FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+
+	TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = ImGuiModule.m_PrimaryContextWidget.Pin();
+	if (MainMenuWidget)
+	{
+		bRequestMenuOnClick = !MainMenuWidget->IsMenuOpen();
+	}
+	else
+	{
+		bRequestMenuOnClick = true;
+	}
+}
+
 FReply SImGuiViewportToolBarButton::OnClicked()
 {
 	static FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
@@ -1337,7 +1369,7 @@ FReply SImGuiViewportToolBarButton::OnClicked()
 	{
 		TSharedPtr<SWindow> ViewportWindow = FSlateApplication::Get().FindWidgetWindow(Viewport.ToSharedRef());
 
-		auto MainMenuWidget = ImGuiModule.m_PrimaryContextWidget.Pin();
+		TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = ImGuiModule.m_PrimaryContextWidget.Pin();
 		if (MainMenuWidget)
 		{
 			// handle split viewport switching!
@@ -1345,14 +1377,14 @@ FReply SImGuiViewportToolBarButton::OnClicked()
 			TSharedPtr<SLevelViewport> PreviousLevelViewport = MainMenuWidget->GetLevelViewport();
 			if (PreviousLevelViewport != Viewport)
 			{
-				if (PreviousLevelViewport.IsValid() && PreviousOverlayWidget.IsValid())
+				if (PreviousLevelViewport && PreviousOverlayWidget)
 				{
 					PreviousLevelViewport->RemoveOverlayWidget(PreviousOverlayWidget.ToSharedRef());
 				}
 				MainMenuWidget.Reset();
 			}
 		}
-		
+
 		if (!MainMenuWidget)
 		{
 			// here we create a 8x8 widget with inputs disabled on the main ImGui widget
@@ -1386,12 +1418,15 @@ FReply SImGuiViewportToolBarButton::OnClicked()
 			else
 			{
 				MainMenuWidget->SetVisibility(EVisibility::HitTestInvisible);
-				MainMenuWidget->OpenMenu();
+				if (bRequestMenuOnClick)
+				{
+					MainMenuWidget->OpenMenu();
+				}
 			}
 		}
 
 		// adjust offset to match the viewport toolbar button
-		if (MainMenuWidget.IsValid())
+		if (MainMenuWidget)
 		{
 			FVector2f MenuOffset = GetTickSpaceGeometry().GetRenderBoundingRect().GetBottomLeft2f();
 			MainMenuWidget->SetMenuOffset(ImVec2(MenuOffset.X, MenuOffset.Y));

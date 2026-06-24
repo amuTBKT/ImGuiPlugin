@@ -711,7 +711,7 @@ namespace ImGuiUtils
 				TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin();
 				TSharedPtr<SImGuiWidgetBase> RootWidget = m_MainViewportWidget.Pin();
 
-				const bool bNewVisibility = RootWidget.IsValid() ? (RootWidget->GetLastPaintFrameCounter() >= GFrameCounter) : false;
+				const bool bNewVisibility = RootWidget ? (RootWidget->GetLastPaintFrameCounter() >= GFrameCounter) : false;
 				if (ViewportWindow && (bNewVisibility != ViewportWindow->IsVisible()))
 				{
 					if (bNewVisibility)
@@ -920,7 +920,7 @@ namespace ImGuiUtils
 			{
 				FImGuiViewportData* ParentViewportData = (FImGuiViewportData*)ParentViewport->PlatformUserData;
 				MainViewportWidgetPtr = ParentViewportData->MainViewportWidget;
-				
+
 				// prefer viewport window if available (otherwise we fallback to the main viewport widget window)
 				if (ParentViewportData->ViewportWindow.IsValid())
 				{
@@ -945,7 +945,7 @@ namespace ImGuiUtils
 
 #if WITH_EDITOR
 		// HACK: popups don't support auto focus so a little hack for level editor menu
-		if (FCStringAnsi::Stricmp(((ImGuiViewportP*)Viewport)->Window->Name, "##LevelViewportMenu") == 0)
+		if (FCStringAnsi::Stricmp(((ImGuiViewportP*)Viewport)->Window->Name, "Menu##LevelEditor") == 0)
 		{
 			bFocusWindowOnAppearing = true;
 			bFocusWidgetOnAppearing = true;
@@ -959,7 +959,7 @@ namespace ImGuiUtils
 #endif
 
 		TSharedPtr<ImGuiUtils::SImGuiViewportWidget> ViewportWidget = SNew(ImGuiUtils::SImGuiViewportWidget, MainViewportWidgetPtr, Viewport);
-		TSharedPtr<SWindow> ViewportWindow = 
+		TSharedPtr<SWindow> ViewportWindow =
 			SNew(SWindow)
 			.MinWidth(0.f)
 			.MinHeight(0.f)
@@ -1007,7 +1007,7 @@ namespace ImGuiUtils
 			{
 				ViewportWindow->RequestDestroyWindow();
 			}
-			if (ViewportData->ViewportWidget.IsValid())
+			if (ViewportData->ViewportWidget)
 			{
 				// shared ptr can live around for a few frames, so make sure references to ImGui data is released
 				ViewportData->ViewportWidget->ResetImGuiViewportData();
@@ -1037,7 +1037,7 @@ namespace ImGuiUtils
 	{
 		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			if (ViewportData->ViewportWidget.IsValid())
+			if (ViewportData->ViewportWidget)
 			{
 				FVector2f Position = ViewportData->ViewportWidget->GetCachedGeometry().GetAbsolutePosition();
 				return ImVec2{ Position.X, Position.Y };
@@ -1062,7 +1062,7 @@ namespace ImGuiUtils
 			}
 		}
 	}
-	
+
 	static ImVec2 UnrealPlatform_GetWindowSize(ImGuiViewport* Viewport)
 	{
 		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
@@ -1128,7 +1128,7 @@ namespace ImGuiUtils
 			}
 			else
 			{
-				if (ViewportData->ViewportWidget.IsValid())
+				if (ViewportData->ViewportWidget)
 				{
 					return ViewportData->ViewportWidget->HasAnyUserFocus().IsSet();
 				}
@@ -1171,7 +1171,7 @@ namespace ImGuiUtils
 	{
 		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			if (ViewportData->ViewportWidget.IsValid())
+			if (ViewportData->ViewportWidget)
 			{
 				// window was destroyed by platform, happens when MainViewportWindow is dragged invalidating all child windows
 				bool bInvalidateWindow = !ViewportData->ViewportWindow.IsValid();
@@ -1207,7 +1207,7 @@ namespace ImGuiUtils
 	{
 		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			if (Viewport->DrawData && ViewportData->ViewportWidget.IsValid())
+			if (Viewport->DrawData && ViewportData->ViewportWidget)
 			{
 				ViewportData->ViewportWidget->OnDrawDataGenerated(Viewport->DrawData);
 			}

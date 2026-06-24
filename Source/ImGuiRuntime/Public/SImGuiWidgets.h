@@ -136,7 +136,7 @@ public:
 		SLATE_ARGUMENT(bool, bEnableViewports);
 		SLATE_ARGUMENT(bool, bTickDelegateCreatesWindow);
 	SLATE_END_ARGS()
-	
+
 	void Construct(const FArguments& InArgs);
 
 private:
