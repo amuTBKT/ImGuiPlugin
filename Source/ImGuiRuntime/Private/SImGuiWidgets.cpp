@@ -280,8 +280,23 @@ void SImGuiWidgetBase::EndImGuiFrame()
 		return;
 	}
 
-	// the widget was not rendered this frame
-	ImGui::EndFrame();
+	if (!FApp::CanEverRender())
+	{
+		// slate widget doesn't process OnPaint/Tick logic when running headless
+
+		BeginImGuiFrame(GetCachedGeometry());
+		TickImGuiInternal(m_TickContext.Get());
+
+		ImGui::Render();
+		TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
+		WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetTime(), GetCachedGeometry().GetRenderBoundingRect().GetTopLeft2f());
+	}
+	else
+	{
+		// the widget was not rendered this frame
+		ImGui::EndFrame();
+	}
+
 	if ((m_ImGuiContext->IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
 	{
 		ImGui::UpdatePlatformWindows();

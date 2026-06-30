@@ -171,7 +171,7 @@ void UImGuiSubsystem::Deinitialize()
 
 bool UImGuiSubsystem::ShouldEnableImGui()
 {
-	if (!FApp::CanEverRender() || IsRunningCommandlet())
+	if (IsRunningCommandlet())
 	{
 		return false;
 	}
@@ -360,18 +360,21 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 			bReuploadTexture = true;
 		}
 
-		const ImTextureRect UpdateRect = bReuploadTexture ? ImTextureRect(0, 0, FontAtlasWidth, FontAtlasHeight) : TexData->UpdateRect;
-		ENQUEUE_RENDER_COMMAND(UpdateFontTexture)(
-			[this,
-			SrcPitch=TexData->GetPitch(),
-			SrcData=(uint8*)TexData->GetPixelsAt(UpdateRect.x, UpdateRect.y),
-			UpdateRegion=FUpdateTextureRegion2D(UpdateRect.x, UpdateRect.y, 0, 0, UpdateRect.w, UpdateRect.h),
-			TexResource=AtlasTexture->GameThread_GetRenderTargetResource()](FRHICommandListImmediate& RHICmdList)
-			{
-				RHICmdList.Transition(FRHITransitionInfo(TexResource->GetTexture2DRHI(), ERHIAccess::Unknown, ERHIAccess::CopyDest));
-				RHICmdList.UpdateTexture2D(TexResource->GetTexture2DRHI(), 0, UpdateRegion, SrcPitch, SrcData);
-				RHICmdList.Transition(FRHITransitionInfo(TexResource->GetTexture2DRHI(), ERHIAccess::CopyDest, ERHIAccess::SRVMask));
-			});
+		if (FApp::CanEverRender())
+		{
+			const ImTextureRect UpdateRect = bReuploadTexture ? ImTextureRect(0, 0, FontAtlasWidth, FontAtlasHeight) : TexData->UpdateRect;
+			ENQUEUE_RENDER_COMMAND(UpdateFontTexture)(
+				[this,
+				SrcPitch = TexData->GetPitch(),
+				SrcData = (uint8*)TexData->GetPixelsAt(UpdateRect.x, UpdateRect.y),
+				UpdateRegion = FUpdateTextureRegion2D(UpdateRect.x, UpdateRect.y, 0, 0, UpdateRect.w, UpdateRect.h),
+				TexResource = AtlasTexture->GameThread_GetRenderTargetResource()](FRHICommandListImmediate& RHICmdList)
+				{
+					RHICmdList.Transition(FRHITransitionInfo(TexResource->GetTexture2DRHI(), ERHIAccess::Unknown, ERHIAccess::CopyDest));
+					RHICmdList.UpdateTexture2D(TexResource->GetTexture2DRHI(), 0, UpdateRegion, SrcPitch, SrcData);
+					RHICmdList.Transition(FRHITransitionInfo(TexResource->GetTexture2DRHI(), ERHIAccess::CopyDest, ERHIAccess::SRVMask));
+				});
+		}
 
 		TexData->SetStatus(ImTextureStatus_OK);
 	}
@@ -394,7 +397,8 @@ bool UImGuiSubsystem::CaptureGpuFrame() const
 
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2f LocalSize, float DrawScale/*=1.f*/)
 {
-	FImGuiImageBindingParams Params = {};
+	FImGuiImageBindingParams Params{};
+	Params.Size = ImVec2(LocalSize.X, LocalSize.Y) * DrawScale;
 	if (SlateBrush)
 	{
 		const FSlateResourceHandle& ResourceHandle = SlateBrush->GetRenderingResource(LocalSize, DrawScale);
@@ -418,7 +422,6 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 				ResourceHandleIndex = m_OneFrameResources.Emplace(ResourceHandle);
 			}
 
-			Params.Size = ImVec2(LocalSize.X, LocalSize.Y) * DrawScale;
 			Params.UV0 = ImVec2(Proxy->StartUV.X, Proxy->StartUV.Y);
 			Params.UV1 = ImVec2(Proxy->StartUV.X + Proxy->SizeUV.X, Proxy->StartUV.Y + Proxy->SizeUV.Y);
 			Params.Id = IndexToImGuiID(ResourceHandleIndex);
