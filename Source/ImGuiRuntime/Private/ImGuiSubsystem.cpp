@@ -399,7 +399,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 {
 	FImGuiImageBindingParams Params{};
 	Params.Size = ImVec2(LocalSize.X, LocalSize.Y) * DrawScale;
-	if (SlateBrush)
+	if (SlateBrush && FApp::CanEverRender())
 	{
 		const FSlateResourceHandle& ResourceHandle = SlateBrush->GetRenderingResource(LocalSize, DrawScale);
 		const FSlateShaderResourceProxy* Proxy = ResourceHandle.GetResourceProxy();
@@ -432,6 +432,10 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
 {
+	if (!SlateBrush)
+	{
+		return {};
+	}
 	return RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f);
 }
 

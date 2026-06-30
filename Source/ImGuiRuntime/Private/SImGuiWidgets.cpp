@@ -288,8 +288,16 @@ void SImGuiWidgetBase::EndImGuiFrame()
 		TickImGuiInternal(m_TickContext.Get());
 
 		ImGui::Render();
-		TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
-		WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetTime(), GetCachedGeometry().GetRenderBoundingRect().GetTopLeft2f());
+
+		// just need to update the textures here.
+		UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
+		for (ImTextureData* TexData : *ImGui::GetDrawData()->Textures)
+		{
+			if (TexData->Status != ImTextureStatus_OK)
+			{
+				ImGuiSubsystem->UpdateFontAtlasTexture(TexData);
+			}
+		}
 	}
 	else
 	{
