@@ -100,7 +100,7 @@ namespace ImGuiUtils
 			{ EKeys::Up.GetFName(), ImGuiKey_UpArrow },
 			{ EKeys::Right.GetFName(), ImGuiKey_RightArrow },
 			{ EKeys::Down.GetFName(), ImGuiKey_DownArrow },
-			
+
 			{ EKeys::Insert.GetFName(), ImGuiKey_Insert },
 			{ EKeys::Delete.GetFName(), ImGuiKey_Delete },
 
@@ -183,7 +183,7 @@ namespace ImGuiUtils
 			{ EKeys::RightAlt.GetFName(), ImGuiKey_RightAlt },
 			{ EKeys::LeftCommand.GetFName(), ImGuiKey_None },
 			{ EKeys::RightCommand.GetFName(), ImGuiKey_None },
-			
+
 			{ EKeys::Semicolon.GetFName(), ImGuiKey_Semicolon },
 			{ EKeys::Equals.GetFName(), ImGuiKey_Equal },
 			{ EKeys::Comma.GetFName(), ImGuiKey_Comma },
@@ -196,7 +196,7 @@ namespace ImGuiUtils
 			{ EKeys::Backslash.GetFName(), ImGuiKey_Backslash },
 			{ EKeys::RightBracket.GetFName(), ImGuiKey_RightBracket },
 			{ EKeys::Apostrophe.GetFName(), ImGuiKey_Apostrophe },
-			
+
 			{ EKeys::Ampersand.GetFName(), ImGuiKey_None },
 			{ EKeys::Asterix.GetFName(), ImGuiKey_None },
 			{ EKeys::Caret.GetFName(), ImGuiKey_None },
@@ -225,7 +225,7 @@ namespace ImGuiUtils
 			{ EKeys::Gamepad_DPad_Down.GetFName(), ImGuiKey_GamepadDpadDown },
 			{ EKeys::Gamepad_DPad_Right.GetFName(), ImGuiKey_GamepadDpadRight },
 			{ EKeys::Gamepad_DPad_Left.GetFName(), ImGuiKey_GamepadDpadLeft },
-			
+
 			{ EKeys::Gamepad_LeftStick_Up.GetFName(), ImGuiKey_GamepadLStickUp },
 			{ EKeys::Gamepad_LeftStick_Down.GetFName(), ImGuiKey_GamepadLStickDown },
 			{ EKeys::Gamepad_LeftStick_Right.GetFName(), ImGuiKey_GamepadLStickRight },
@@ -1082,7 +1082,7 @@ namespace ImGuiUtils
 		{
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
-				ViewportWindow->SetTitle(FText::FromString(ANSI_TO_TCHAR(Title)));
+				ViewportWindow->SetTitle(FText::FromString(UTF8_TO_TCHAR(Title)));
 			}
 		}
 	}

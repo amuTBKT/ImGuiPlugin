@@ -104,7 +104,7 @@ void UImGuiSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	// setup ini file path directory
 	{
 		m_IniDirectoryPath = FAnsiString(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("ImGui")));
-		IFileManager::Get().MakeDirectory(ANSI_TO_TCHAR(*m_IniDirectoryPath), true);
+		IFileManager::Get().MakeDirectory(UTF8_TO_TCHAR(*m_IniDirectoryPath), true);
 	}
 
 	// NOTE: Add reference to make sure ImGuiContext destructor cannot release the font atlas

@@ -598,8 +598,8 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegiste
 		RegisterParams.InitFunction();
 		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.GetWidetName()), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
 			.SetGroup(GetImGuiTabGroup())
-			.SetDisplayName(FText::FromString(ANSI_TO_TCHAR(RegisterParams.GetWidetName())))
-			.SetTooltipText(FText::FromString(ANSI_TO_TCHAR(RegisterParams.WidgetDescription)))
+			.SetDisplayName(FText::FromString(UTF8_TO_TCHAR(RegisterParams.GetWidetName())))
+			.SetTooltipText(FText::FromString(UTF8_TO_TCHAR(RegisterParams.WidgetDescription)))
 			.SetIcon(RegisterParams.WidgetIcon);
 	}
 	else
@@ -610,8 +610,8 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegiste
 				RegisterParams.InitFunction();
 				FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.GetWidetName()), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
 					.SetGroup(GetImGuiTabGroup())
-					.SetDisplayName(FText::FromString(ANSI_TO_TCHAR(RegisterParams.GetWidetName())))
-					.SetTooltipText(FText::FromString(ANSI_TO_TCHAR(RegisterParams.WidgetDescription)))
+					.SetDisplayName(FText::FromString(UTF8_TO_TCHAR(RegisterParams.GetWidetName())))
+					.SetTooltipText(FText::FromString(UTF8_TO_TCHAR(RegisterParams.WidgetDescription)))
 					.SetIcon(RegisterParams.WidgetIcon);
 			});
 	}
