@@ -14,7 +14,7 @@
 #include "implot/implot.h"
 
 // since the module is built as DLL, we need to register allocators for each module that makes ImGui calls, usually at module startup
-#define SETUP_DEFAULT_IMGUI_ALLOCATOR()                                                         \
+#define IMGUI_SETUP_DEFAULT_ALLOCATOR()                                                         \
 	ImGui::SetAllocatorFunctions(                                                               \
 	/*Alloc*/    [](size_t Size, void* UserData = nullptr) { return FMemory::Malloc(Size); },   \
 	/*Free*/     [](void* Pointer, void* UserData = nullptr) { FMemory::Free(Pointer); },       \

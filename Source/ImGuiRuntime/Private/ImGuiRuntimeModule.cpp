@@ -1065,7 +1065,7 @@ private:
 		}
 
 		IMGUI_CHECKVERSION();
-		SETUP_DEFAULT_IMGUI_ALLOCATOR();
+		IMGUI_SETUP_DEFAULT_ALLOCATOR();
 
 #if WITH_EDITOR
 		m_ImGuiTabGroup = WorkspaceMenu::GetMenuStructure().GetToolsCategory()->AddGroup(
