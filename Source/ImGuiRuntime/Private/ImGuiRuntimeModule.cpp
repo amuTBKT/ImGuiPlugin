@@ -15,25 +15,40 @@
 #include "Misc/ConfigCacheIni.h"
 #include "HAL/PlatformFileManager.h"
 #include "Engine/GameViewportClient.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include "Framework/Application/SlateApplication.h"
 
 #if WITH_EDITOR
+
+// new tools menu api starting from 5.6
+#define USE_TOOLMENU_API ((ENGINE_MAJOR_VERSION * 100u + ENGINE_MINOR_VERSION) > 505)
+#if USE_TOOLMENU_API
+#include "ToolMenus.h"
+#include "Widgets/SBoxPanel.h"
+#include "Styling/StyleColors.h"
+#include "Widgets/Images/SImage.h"
+#include "LevelEditorMenuContext.h"
+#include "Brushes/SlateRoundedBoxBrush.h"
+#else
+#include "ViewportToolBarContext.h"
+#include "Subsystems/PanelExtensionSubsystem.h"
+#endif
+
 #include "Widgets/SNullWidget.h"
 #include "Styling/ToolBarStyle.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Text/STextBlock.h"
 
 #include "SLevelViewport.h"
-#include "ViewportToolBarContext.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
-#include "Subsystems/PanelExtensionSubsystem.h"
 
 #include "EditorStyleSet.h"
+#include "WorkspaceMenuStructure.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Framework/Docking/TabManager.h"
-#include "Editor/WorkspaceMenuStructure/Public/WorkspaceMenuStructure.h"
-#include "Editor/WorkspaceMenuStructure/Public/WorkspaceMenuStructureModule.h"
-#endif
+#include "WorkspaceMenuStructureModule.h"
+
+#endif //#if WITH_EDITOR
 
 #define LOCTEXT_NAMESPACE "ImGuiPlugin"
 
@@ -880,6 +895,13 @@ private:
 #if WITH_EDITOR
 		if (m_bIsAddedToLevelViewport)
 		{
+			TSharedPtr<SLevelViewport> LevelViewport = GetLevelViewport();
+#if USE_TOOLMENU_API
+			const bool bIsViewportToolbarHidden = LevelViewport && !LevelViewport->IsViewportToolbarVisible();
+#else
+			const bool bIsViewportToolbarHidden = GLevelEditorModeTools().IsViewportUIHidden();
+#endif
+
 			// NOTE: 2 frames delay to make sure the widget has ticked atleast once to adjust viewport offset
 			// plus to make sure windows opening on the same frame don't dismiss the menu bar popup.
 			if (ImGui::GetFrameCount() > (m_MenuRequestedFrameIndex + 2))
@@ -911,41 +933,12 @@ private:
 
 						RunMainMenuTickLogic();
 
-						if (GLevelEditorModeTools().IsViewportUIHidden())
+						if (bIsViewportToolbarHidden)
 						{
 							ImGui::CloseCurrentPopup();
 						}
 					}
 					ImGui::EndPopup();
-				}
-			}
-
-			const bool bIsInPIE = GEditor && GEditor->PlayWorld && !GEditor->bIsSimulatingInEditor;
-			if (GLevelEditorModeTools().IsViewportUIHidden() && !bIsInPIE)
-			{
-				// manually create menu bar here, can't use ImGui::BeginMenuBar as the widget is a 8x8 pixels dummy viewport
-				TSharedPtr<SLevelViewport> LevelViewport = GetLevelViewport();
-				if (LevelViewport)
-				{
-					FVector2f LevelViewportPos = LevelViewport->GetTickSpaceGeometry().GetAbsolutePosition();
-					FVector2f LevelViewportSize = LevelViewport->GetTickSpaceGeometry().GetAbsoluteSize();
-
-					ImGui::SetNextWindowPos(ImVec2(LevelViewportPos.X, LevelViewportPos.Y));
-					ImGui::SetNextWindowSize(ImVec2(LevelViewportSize.X, ImGui::GetTextLineHeightWithSpacing()));
-
-					ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
-					ImGui::PushStyleVarY(ImGuiStyleVar_WindowMinSize, ImGui::GetTextLineHeightWithSpacing());
-					const ImGuiWindowFlags WindowFlags = ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBackground;
-					if (ImGui::Begin("##MainMenuBar", nullptr, WindowFlags))
-					{
-						if (ImGui::BeginMenuBar())
-						{
-							RunMainMenuTickLogic();
-							ImGui::EndMenuBar();
-						}
-					}
-					ImGui::End();
-					ImGui::PopStyleVar(2);
 				}
 			}
 		}
@@ -984,6 +977,49 @@ public:
 	void Construct(const FArguments& InArgs)
 	{
 		LevelViewport = InArgs._LevelViewport;
+
+#if USE_TOOLMENU_API
+		ButtonStyle = FButtonStyle()
+			.SetNormal(FSlateRoundedBoxBrush(FStyleColors::Dropdown, 4.f))
+			.SetHovered(FSlateRoundedBoxBrush(FStyleColors::Hover, 4.f))
+			.SetPressed(FSlateRoundedBoxBrush(FStyleColors::Header, 4.f))
+			.SetDisabled(FSlateNoResource())
+			.SetNormalForeground(FStyleColors::Foreground)
+			.SetHoveredForeground(FStyleColors::ForegroundHover)
+			.SetPressedForeground(FStyleColors::ForegroundHover)
+			.SetDisabledForeground(FStyleColors::Foreground);
+		ChildSlot
+		[
+			SNew(SButton)
+			.HAlign(HAlign_Center)
+			.VAlign(VAlign_Center)
+			.ContentPadding(FMargin(4.f, 0.f))
+			.PressMethod(EButtonPressMethod::ButtonPress)
+			.OnPressed(this, &SImGuiViewportToolBarButton::OnPressed)
+			.OnClicked(this, &SImGuiViewportToolBarButton::OnClicked)
+			.ButtonStyle(&ButtonStyle)
+			[
+				SNew(SHorizontalBox)
+				+SHorizontalBox::Slot()
+				.FillWidth(1)
+				[
+					SNew(STextBlock)
+					.Text(LOCTEXT("ImGuiMainTabTitle", "ImGui"))
+				]
+				+SHorizontalBox::Slot()
+				.AutoWidth()
+				.HAlign(HAlign_Right)
+				.VAlign(VAlign_Center)
+				.Padding(2.f, 0.f, 0.f, 0.f)
+				[
+					SNew(SImage)
+					.Image(&FAppStyle::Get().GetWidgetStyle<FComboBoxStyle>("SimpleComboBox").ComboButtonStyle.DownArrowImage)
+					.DesiredSizeOverride(FVector2D(10., 12.))
+					.ColorAndOpacity(FSlateColor::UseForeground())
+				]
+			]
+		];
+#else
 		ChildSlot
 		[
 			SNew(SButton)
@@ -999,10 +1035,13 @@ public:
 				.Text(LOCTEXT("ImGuiMainTabTitle", "ImGui"))
 			]
 		];
+#endif
 	}
 
 	void OnPressed();
 	FReply OnClicked();
+
+	FButtonStyle ButtonStyle;
 
 	// container for ImGui main menu widget
 	TWeakPtr<SWidget> OverlayWidget;
@@ -1013,31 +1052,6 @@ public:
 	// should we open the menu on click?
 	bool bRequestMenuOnClick = false;
 };
-
-static FDelayedAutoRegisterHelper ImGuiViewportToolbar_DelayedAutoRegister(EDelayedRegisterRunPhase::EndOfEngineInit,
-	[]()
-	{
-		if (CVarAddImGuiWidgetToLevelViewport.GetValueOnGameThread() == false || !GEditor)
-		{
-			return;
-		}
-
-		if (UPanelExtensionSubsystem* PanelExtensionSubsystem = GEditor->GetEditorSubsystem<UPanelExtensionSubsystem>())
-		{
-			FPanelExtensionFactory MenuWidget;
-			MenuWidget.CreateExtensionWidget = FPanelExtensionFactory::FCreateExtensionWidget::CreateLambda(
-				[](FWeakObjectPtr ExtensionContext) -> TSharedRef<SWidget>
-				{
-					if (const UViewportToolBarContext* ExtensionContextObject = Cast<UViewportToolBarContext>(ExtensionContext.Get()); ensure(ExtensionContextObject))
-					{
-						return SNew(SImGuiViewportToolBarButton).LevelViewport(ExtensionContextObject->Viewport);
-					}
-					return SNullWidget::NullWidget;
-				});
-			MenuWidget.Identifier = IMGUI_FNAME("ImGuiPlugin_Menu");
-			PanelExtensionSubsystem->RegisterPanelFactory(IMGUI_FNAME("LevelViewportToolBar.LeftExtension"), MenuWidget);
-		}
-	});
 #endif //#if WITH_EDITOR
 
 class FImGuiRuntimeModule : public IModuleInterface
@@ -1089,10 +1103,14 @@ private:
 #if WITH_EDITOR
 		if (GEditor)
 		{
+#if USE_TOOLMENU_API
+			UToolMenus::UnregisterOwner(this);
+#else
 			if (UPanelExtensionSubsystem* PanelExtensionSubsystem = GEditor->GetEditorSubsystem<UPanelExtensionSubsystem>())
 			{
 				PanelExtensionSubsystem->UnregisterPanelFactory(IMGUI_FNAME("LevelViewportToolBar.LeftExtension"), IMGUI_FNAME("ImGuiPlugin_Menu"));
 			}
+#endif
 		}
 
 		if (FSlateApplication::IsInitialized())
@@ -1339,6 +1357,56 @@ public:
 };
 
 #if WITH_EDITOR
+static FDelayedAutoRegisterHelper ImGuiViewportToolbar_DelayedAutoRegister(EDelayedRegisterRunPhase::EndOfEngineInit,
+	[]()
+	{
+		if (CVarAddImGuiWidgetToLevelViewport.GetValueOnGameThread() == false || !GEditor)
+		{
+			return;
+		}
+
+#if USE_TOOLMENU_API
+		static FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
+		FToolMenuOwnerScoped ScopedOwner(&ImGuiModule);
+
+		// copy of `FToolMenuEntry::InitWidget` as the widget creation requires access to `ULevelViewportContext`
+		FToolMenuEntry Entry(UToolMenus::Get()->CurrentOwner(), "ImGuiTab", EMultiBlockType::Widget);
+		Entry.Label = LOCTEXT("ImGuiMainTabTitle", "ImGui");
+		Entry.ToolTip = LOCTEXT("ImGuiMainTabTitle", "ImGui");
+		Entry.MakeCustomWidget.BindLambda(
+			[](const FToolMenuContext& Context, const FToolMenuCustomWidgetContext&) -> TSharedRef<SWidget>
+			{
+				const ULevelViewportContext* LevelViewportContext = Context.FindContext<ULevelViewportContext>();
+				if (ensureAlways(LevelViewportContext))
+				{
+					return SNew(SImGuiViewportToolBarButton).LevelViewport(LevelViewportContext->LevelViewport);
+				}
+				return SNullWidget::NullWidget;
+			});
+		Entry.InsertPosition.Position = EToolMenuInsertType::First;
+
+		UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("LevelEditor.ViewportToolbar");
+		FToolMenuSection& RightSection = Menu->FindOrAddSection("Right");
+		RightSection.AddEntry(MoveTemp(Entry));
+#else
+		if (UPanelExtensionSubsystem* PanelExtensionSubsystem = GEditor->GetEditorSubsystem<UPanelExtensionSubsystem>())
+		{
+			FPanelExtensionFactory MenuWidget;
+			MenuWidget.CreateExtensionWidget = FPanelExtensionFactory::FCreateExtensionWidget::CreateLambda(
+				[](FWeakObjectPtr ExtensionContext) -> TSharedRef<SWidget>
+				{
+					if (const UViewportToolBarContext* ExtensionContextObject = Cast<UViewportToolBarContext>(ExtensionContext.Get()); ensure(ExtensionContextObject))
+					{
+						return SNew(SImGuiViewportToolBarButton).LevelViewport(ExtensionContextObject->Viewport);
+					}
+					return SNullWidget::NullWidget;
+				});
+			MenuWidget.Identifier = IMGUI_FNAME("ImGuiPlugin_Menu");
+			PanelExtensionSubsystem->RegisterPanelFactory(IMGUI_FNAME("LevelViewportToolBar.LeftExtension"), MenuWidget);
+		}
+#endif
+	});
+
 TSharedRef<FWorkspaceItem> GetImGuiTabGroup()
 {
 	static FImGuiRuntimeModule& ImGuiModule = FModuleManager::GetModuleChecked<FImGuiRuntimeModule>("ImGuiRuntime");
@@ -1403,7 +1471,7 @@ FReply SImGuiViewportToolBarButton::OnClicked()
 				[
 					MainMenuWidget.ToSharedRef()
 				];
-			Viewport->AddOverlayWidget(Canvas, 0);
+			Viewport->AddOverlayWidget(Canvas);
 
 			OverlayWidget = Canvas;
 			MainMenuWidget->SetLevelViewport(Viewport, Canvas);

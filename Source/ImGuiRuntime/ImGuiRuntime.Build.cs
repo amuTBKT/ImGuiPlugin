@@ -41,8 +41,10 @@ public class ImGuiRuntime : ModuleRules
 				new string[]
 				{
 					"UnrealEd",
+					"ToolMenus",
 					"EditorStyle",
 					"LevelEditor",
+					"WorkspaceMenuStructure",
 				}
 			);
 		}
