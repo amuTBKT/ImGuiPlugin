@@ -664,6 +664,10 @@ namespace ImGuiUtils
 		// flag to set focus on widget next time viewport updates
 		// kept it separate from widget logic as viewport widgets don't tick
 		bool bFocusRequested = false;
+
+		// handle to window closed event
+		// to cleanup ImGui viewport when Slate window is manually closed
+		FDelegateHandle OnWindowClosedHandle{};
 	};
 
 	// Widget handling rendering and inputs (no Tick logic)
@@ -994,6 +998,12 @@ namespace ImGuiUtils
 		ViewportData->ParentWindow = ParentWindowPtr;
 		ViewportData->MainViewportWidget = MainViewportWidgetPtr;
 		ViewportData->bFocusRequested = bFocusWidgetOnAppearing;
+		ViewportData->OnWindowClosedHandle = ViewportWindow->GetOnWindowClosedEvent().AddLambda(
+			[Viewport](TSharedPtr<SWindow> Window)
+			{
+				// NOTE: Viewport raw ptr accessed here, but should be fine as we remove the delegate if ImGui viewport gets destroyed first
+				Viewport->PlatformRequestClose = true;
+			});
 
 		Viewport->PlatformRequestResize = false;
 		Viewport->PlatformUserData = ViewportData;
@@ -1005,6 +1015,7 @@ namespace ImGuiUtils
 		{
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
+				ViewportWindow->GetOnWindowClosedEvent().Remove(ViewportData->OnWindowClosedHandle);
 				ViewportWindow->RequestDestroyWindow();
 			}
 			if (ViewportData->ViewportWidget)
@@ -1016,6 +1027,7 @@ namespace ImGuiUtils
 			ViewportData->ViewportWidget = nullptr;
 			ViewportData->ParentWindow = nullptr;
 			ViewportData->MainViewportWidget = nullptr;
+			ViewportData->OnWindowClosedHandle.Reset();
 			IM_DELETE(ViewportData);
 
 			Viewport->PlatformUserData = nullptr;
