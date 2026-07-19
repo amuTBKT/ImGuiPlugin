@@ -514,23 +514,14 @@ namespace ImGuiFocusHandler
 	}
 
 	// same logic as Shift+F1
-	void SetUIFocus(UWorld* World)
+	void SetUIFocus()
 	{
-		if (World)
-		{
-			// when called using console command we need to run on next tick as console will refocus the game viewport
-			World->GetTimerManager().SetTimerForNextTick(
-				[]()
-				{
-					FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
-					FSlateApplication::Get().ResetToDefaultInputSettings();
-				});
-		}
-		else
-		{
-			FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
-			FSlateApplication::Get().ResetToDefaultInputSettings();
-		}
+		ExecuteOnGameThread(TEXT("ImGui_RetainFocus"),
+			[]()
+			{
+				FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
+				FSlateApplication::Get().ResetToDefaultInputSettings();
+			});
 	}
 }
 
@@ -1198,7 +1189,7 @@ private:
 				GameViewport->AddViewportWidgetContent(MainMenuWidget.ToSharedRef(), TNumericLimits<int32>::Max());
 				m_PIEContextWidgets.Add(MainMenuWidget);
 
-				ImGuiFocusHandler::SetUIFocus(World);
+				ImGuiFocusHandler::SetUIFocus();
 			}
 			return;
 		}
@@ -1213,7 +1204,7 @@ private:
 			else
 			{
 				MainMenuWidget->SetVisibility(EVisibility::Visible);
-				ImGuiFocusHandler::SetUIFocus(World);
+				ImGuiFocusHandler::SetUIFocus();
 			}
 		}
 	}
@@ -1238,7 +1229,7 @@ private:
 		// take focus from viewport client and show the mouse cursor (similar to pressing Shift+F1 during PIE)
 		if (EventArgs.Key == EKeys::F1 && KeyState.IsShiftDown())
 		{
-			ImGuiFocusHandler::SetUIFocus(nullptr);
+			ImGuiFocusHandler::SetUIFocus();
 		}
 	}
 #endif //#if WITH_EDITOR
@@ -1255,7 +1246,7 @@ private:
 				GameViewport->AddViewportWidgetContent(MainMenuWidget.ToSharedRef(), TNumericLimits<int32>::Max());
 				m_PrimaryContextWidget = MainMenuWidget;
 
-				ImGuiFocusHandler::SetUIFocus(World);
+				ImGuiFocusHandler::SetUIFocus();
 			}
 			return;
 		}
@@ -1270,7 +1261,7 @@ private:
 			else
 			{
 				MainMenuWidget->SetVisibility(EVisibility::Visible);
-				ImGuiFocusHandler::SetUIFocus(World);
+				ImGuiFocusHandler::SetUIFocus();
 			}
 		}
 	}

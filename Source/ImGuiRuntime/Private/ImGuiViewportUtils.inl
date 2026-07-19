@@ -1031,6 +1031,16 @@ namespace ImGuiUtils
 			IM_DELETE(ViewportData);
 
 			Viewport->PlatformUserData = nullptr;
+
+#if !WITH_EDITOR
+			// try to keep UI focus
+			ExecuteOnGameThread(TEXT("ImGui_RetainFocus"),
+				[]()
+				{
+					FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
+					FSlateApplication::Get().ResetToDefaultInputSettings();
+				});
+#endif
 		}
 	}
 
