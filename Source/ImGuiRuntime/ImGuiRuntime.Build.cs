@@ -12,18 +12,27 @@ public class ImGuiRuntime : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"RHI",
 				"Core",
 				"Slate",
-				"Engine",
 				"SlateCore",
 				"InputCore",
 				"RenderCore",
 				"CoreUObject",
-				"ImGuiShaders",
 				"ApplicationCore",
 			}
 		);
+
+		if (Target.bCompileAgainstEngine)
+		{
+			PrivateDependencyModuleNames.AddRange(
+				new string[]
+				{
+					"Engine",
+					"RHI",
+					"ImGuiShaders"
+				}
+			);
+		}
 
 		if ((Target.Type != TargetType.Server) && Target.bCompileFreeType)
 		{

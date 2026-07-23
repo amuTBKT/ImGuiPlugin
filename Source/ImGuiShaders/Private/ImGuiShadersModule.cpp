@@ -17,7 +17,7 @@ class FImGuiShadersModule : public IModuleInterface
 		const FString PluginShaderDir = FPaths::Combine(IPluginManager::Get().FindPlugin(TEXT("ImGuiPlugin"))->GetBaseDir(), TEXT("Shaders"));
 		AddShaderSourceDirectoryMapping(TEXT("/Plugin/ImGui"), PluginShaderDir);
 	}
-	
+
 	virtual void ShutdownModule() override
 	{
 	}

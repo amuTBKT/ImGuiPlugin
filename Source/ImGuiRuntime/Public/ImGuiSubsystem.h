@@ -6,17 +6,14 @@
 #include "Styling/SlateBrush.h"
 #include "ImGuiPluginDelegates.h"
 #include "Containers/AnsiString.h"
-#include "Subsystems/EngineSubsystem.h"
 #include "Textures/SlateShaderResource.h"
 
 #include "ImGuiSubsystem.generated.h"
 
 class UWorld;
 class SWindow;
-class UTexture2D;
 class FConfigFile;
 class FSlateShaderResource;
-class UTextureRenderTarget2D;
 class FSlateShaderResourceProxy;
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
@@ -39,23 +36,10 @@ public:
 	bool UsesResourceHandle() const { return Storage.IsType<FSlateResourceHandle>(); }
 	bool UsesRawResource() const { return Storage.IsType<FSlateShaderResource*>(); }
 
+	FSlateResourceHandle GetResourceHandle() const { check(UsesResourceHandle()); return Storage.Get<FSlateResourceHandle>(); }
+
 private:
 	TVariant<FSlateResourceHandle, FSlateShaderResource*> Storage;
-};
-
-USTRUCT()
-struct FImGuiFontTextureEntry
-{
-	GENERATED_BODY()
-
-	UPROPERTY(Transient)
-	UTextureRenderTarget2D* Texture = nullptr;
-
-	UPROPERTY(Transient)
-	FSlateBrush SlateBrush;
-
-	UPROPERTY(Transient)
-	bool bInUse = false;
 };
 
 enum class EImGuiMainMenuWidgetFlags : uint8
@@ -67,20 +51,19 @@ enum class EImGuiMainMenuWidgetFlags : uint8
 ENUM_CLASS_FLAGS(EImGuiMainMenuWidgetFlags);
 
 UCLASS(MinimalAPI)
-class UImGuiSubsystem : public UEngineSubsystem
+class UImGuiSubsystem : public UObject
 {
 	GENERATED_BODY()
 
 public:
-	// USubsystem interface
-	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
-	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
-	virtual void Deinitialize() override;
-	// USubsystem interface END
+	bool ShouldCreateSubsystem() const;
+	void Initialize();
+	void Deinitialize();
 
 	// initialization
 	IMGUIRUNTIME_API static bool ShouldEnableImGui();
-	IMGUIRUNTIME_API static UImGuiSubsystem* Get();
+	static void InitializeSubsystem();
+	static UImGuiSubsystem* Get() { return SubsystemInstance; }
 
 	// events
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnSubsystemInitialized, UImGuiSubsystem* /*Subsystem*/)
@@ -98,18 +81,22 @@ public:
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2f LocalSize, float DrawScale = 1.f);
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, float UniformSize) { return RegisterOneFrameResource(SlateBrush, FVector2f(UniformSize)); }
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush);
-	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(UTexture2D* Texture);
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource);
 	const TArray<FImGuiTextureResource>&	  GetOneFrameResources() const { return m_OneFrameResources; }
 
 	// widget
 	IMGUIRUNTIME_API TSharedPtr<SWindow> CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
+
+#if WITH_ENGINE
+	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(class UTexture2D* Texture);
+
 	IMGUIRUNTIME_API void RegisterMainMenuWidget(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
 		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None) const;
 	IMGUIRUNTIME_API void UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath) const;
 	IMGUIRUNTIME_API bool* GetMainMenuWidgetActiveState(const UWorld* World, const char* WidgetPath) const;
 	IMGUIRUNTIME_API FImGuiTickContext* GetWidgetTickContext(const UWorld* World) const;
+#endif
 
 	void UpdateFontAtlasTexture(ImTextureData* TexData);
 	IMGUIRUNTIME_API ImTextureRef GetSharedFontTextureID() const;
@@ -130,20 +117,25 @@ private:
 	void ReleaseFontAtlasTexture(int32 Index);
 
 private:
+	IMGUIRUNTIME_API static UImGuiSubsystem* SubsystemInstance;
+
 	FConfigFile* m_SaveDataConfigFile = nullptr;
 
 	FAnsiString m_IniDirectoryPath;
 
-	UPROPERTY()
-	TArray<FImGuiFontTextureEntry> m_SharedFontAtlasTextures;
+	struct FImGuiFontTextureEntry
+	{
+		TSharedPtr<FSlateBrush> Brush = nullptr;
+		bool bInUse = false;
 
-	UPROPERTY()
-	UTexture2D* m_MissingImageTexture = nullptr;
+		~FImGuiFontTextureEntry();
+	};
+	TArray<FImGuiFontTextureEntry> m_SharedFontAtlasTextures;
+	TSharedPtr<FSlateBrush> m_MissingImageBrush = nullptr;
 
 	int32 m_FontAtlasBuilderFrameCount = 0;
 	TSharedPtr<ImFontAtlas, ESPMode::NotThreadSafe> m_SharedFontAtlas;
 
-	FSlateBrush m_MissingImageSlateBrush = {};
 	FImGuiImageBindingParams m_MissingImageParams = {};
 	static constexpr uint32 MissingImageTextureIndex = 0u;
 	static constexpr uint32 FontAtlasTextureStartIndex = MissingImageTextureIndex + 1u;

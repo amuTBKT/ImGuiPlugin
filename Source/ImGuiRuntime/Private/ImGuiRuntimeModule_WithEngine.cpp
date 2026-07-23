@@ -1,5 +1,7 @@
 // Copyright 2024-26 Amit Kumar Mehar. All Rights Reserved.
 
+#if WITH_ENGINE
+
 #include "Modules/ModuleManager.h"
 #include "Modules/ModuleInterface.h"
 
@@ -13,7 +15,6 @@
 #include "Algo/BinarySearch.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/ConfigCacheIni.h"
-#include "HAL/PlatformFileManager.h"
 #include "Engine/GameViewportClient.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "Framework/Application/SlateApplication.h"
@@ -58,120 +59,6 @@ static TAutoConsoleVariable<bool> CVarAddImGuiWidgetToLevelViewport(
 	TEXT("Prefer LevelViewport over Tabbed window for hosting ImGui editor widget.\n")
 	TEXT("This only applies for the Editor context, doesn't affect PIE or Game context."),
 	ECVF_ReadOnly);
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#ifdef WITH_IMGUI_STATIC_LIB
-void ImGuiAssertHook(bool bCondition, const char* Expression, const char* File, uint32 Line)
-{
-	if (bCondition)
-	{
-		return;
-	}
-
-	static TSet<uint32> EncounteredAsserts;
-	uint32 Key = HashCombine(PointerHash(File), GetTypeHash(Line));
-	if (!EncounteredAsserts.Contains(Key)) // fire once, similar to `ensure(expr)`
-	{
-		EncounteredAsserts.Add(Key);
-
-		FPlatformMisc::LowLevelOutputDebugString(*FString::Printf(TEXT("Ensure condition failed: %hs [File: %hs] [Line: %u]\n"), Expression, File, Line));
-		if (FPlatformMisc::IsDebuggerPresent())
-		{
-			PLATFORM_BREAK();
-		}
-	}
-}
-#else
-#include "ImGuiLib.cpp"
-#endif
-
-#ifdef IMGUI_DISABLE_DEFAULT_FILE_FUNCTIONS
-ImFileHandle ImFileOpen(const char* FileName, const char* Mode)
-{
-	bool bRead = false;
-	bool bWrite = false;
-	bool bAppend = false;
-	bool bExtended = false;
-
-	for (; *Mode; ++Mode)
-	{
-		if (*Mode == 'r')
-		{
-			bRead = true;
-		}
-		else if (*Mode == 'w')
-		{
-			bWrite = true;
-		}
-		else if (*Mode == 'a')
-		{
-			bAppend = true;
-		}
-		else if (*Mode == '+')
-		{
-			bExtended = true;
-		}
-	}
-
-	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
-
-	if (bWrite || bAppend || bExtended)
-	{
-		return PlatformFile.OpenWrite(UTF8_TO_TCHAR(FileName), bAppend, bExtended);
-	}
-
-	if (bRead)
-	{
-		return PlatformFile.OpenRead(UTF8_TO_TCHAR(FileName), true);
-	}
-
-	return nullptr;
-}
-
-bool ImFileClose(ImFileHandle File)
-{
-	if (File)
-	{
-		delete File;
-		return true;
-	}
-	return false;
-}
-
-uint64 ImFileGetSize(ImFileHandle File)
-{
-	return File ? File->Size() : MAX_uint64;
-}
-
-uint64 ImFileRead(void* Data, uint64 Size, uint64 Count, ImFileHandle File)
-{
-	if (!File)
-	{
-		return 0;
-	}
-
-	const int64 StartPos = File->Tell();
-	File->Read(static_cast<uint8*>(Data), Size * Count);
-
-	const uint64 ReadSize = File->Tell() - StartPos;
-	return ReadSize;
-}
-
-uint64 ImFileWrite(const void* Data, uint64 Size, uint64 Count, ImFileHandle File)
-{
-	if (!File)
-	{
-		return 0;
-	}
-
-	const int64 StartPos = File->Tell();
-	File->Write(static_cast<const uint8*>(Data), Size * Count);
-
-	const uint64 WriteSize = File->Tell() - StartPos;
-	return WriteSize;
-}
-#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1045,6 +932,12 @@ public:
 };
 #endif //#if WITH_EDITOR
 
+static FDelayedAutoRegisterHelper ImGuiSubsystem_DelayedAutoRegister(EDelayedRegisterRunPhase::EndOfEngineInit,
+	[]()
+	{
+		UImGuiSubsystem::InitializeSubsystem();
+	});
+
 class FImGuiRuntimeModule : public IModuleInterface
 {
 private:
@@ -1510,3 +1403,5 @@ FImGuiTickContext* GetWidgetTickContextForWorld(const UWorld* World)
 IMPLEMENT_MODULE(FImGuiRuntimeModule, ImGuiRuntime)
 
 #undef LOCTEXT_NAMESPACE
+
+#endif //#if WITH_ENGINE

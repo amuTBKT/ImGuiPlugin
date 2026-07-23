@@ -14,20 +14,10 @@ namespace UnrealBuildTool.Rules
 	            new string[]
 	            {
 	                "Core",
-	                "CoreUObject",
 	                "Projects",
-	                "Engine",
+					"RenderCore",
 				}
 	        );
-
-			PublicDependencyModuleNames.AddRange(
-				new string[]
-				{
-					"RHI",
-					"RenderCore",
-					"Renderer",
-				}
-			);
         }
 	}
 }

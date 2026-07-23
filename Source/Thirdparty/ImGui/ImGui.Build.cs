@@ -11,7 +11,7 @@ public class ImGui : ModuleRules
 
 		PublicDefinitions.Add("WITH_IMGUI=1");
 
-		if (Target.Type != TargetType.Editor)
+		if (Target.Type != TargetType.Editor && Target.Type != TargetType.Program)
 		{
 			PublicDefinitions.Add("WITH_NET_IMGUI=1");
 		}

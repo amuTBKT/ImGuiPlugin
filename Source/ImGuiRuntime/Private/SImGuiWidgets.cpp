@@ -2,27 +2,15 @@
 
 #include "SImGuiWidgets.h"
 
-#include "RHI.h"
-#include "RHIStaticStates.h"
-#include "RenderGraphUtils.h"
-#include "GlobalRenderResources.h"
-#include "CommonRenderResources.h"
-#include "SlateUTextureResource.h"
-#include "RenderCaptureInterface.h"
-#include "Rendering/RenderingCommon.h"
-
-#include "Input/Events.h"
-#include "InputCoreTypes.h"
 #include "Widgets/SWindow.h"
-#include "HAL/PlatformApplicationMisc.h"
 #include "Application/ThrottleManager.h"
-#include "Runtime/Launch/Resources/Version.h"
 #include "Framework/Application/SlateApplication.h"
 
-#include "ImGuiShaders.h"
 #include "ImGuiSubsystem.h"
-#include "imgui/misc/imgui_threaded_rendering.h"
-#include "ImGuiViewportUtils.inl"
+#include "Utils/ImGuiInputs.inl"
+#include "Utils/ImGuiDrawing.inl"
+#include "Utils/ImGuiViewport.inl"
+#include "Utils/ImGuiPlatform.inl"
 
 #ifdef WITH_NET_IMGUI
 #define NETIMGUI_IMPLEMENTATION
@@ -351,7 +339,11 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 	if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetTime(), WidgetGeometry.GetRenderBoundingRect().GetTopLeft2f()))
 	{
 		OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
+#if WITH_ENGINE
 		FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
+#else
+		WidgetDrawer->DrawSlateWidget(WidgetGeometry, OutDrawElements, LayerId);
+#endif
 		OutDrawElements.PopClip();
 	}
 
