@@ -8,7 +8,7 @@ namespace ImGuiUtils
 		FDeferredDeletionQueue()
 		{
 			UImGuiSubsystem::OnBeginImGuiFrame.AddRaw(this, &FDeferredDeletionQueue::ProcessObjects, /*bForceDestroy=*/false);
-			FCoreDelegates::OnPreExit.AddRaw(this, &FDeferredDeletionQueue::ProcessObjects, /*bForceDestroy=*/true);
+			UImGuiSubsystem::OnShutdown.AddRaw(this, &FDeferredDeletionQueue::ProcessObjects, /*bForceDestroy=*/true);
 		}
 
 		template <typename ...Args>

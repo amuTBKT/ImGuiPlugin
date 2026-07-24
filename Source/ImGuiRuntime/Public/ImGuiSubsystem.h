@@ -56,20 +56,21 @@ class UImGuiSubsystem : public UObject
 	GENERATED_BODY()
 
 public:
-	bool ShouldCreateSubsystem() const;
 	void Initialize();
 	void Deinitialize();
 
 	// initialization
+	IMGUIRUNTIME_API static UImGuiSubsystem* Get();
 	IMGUIRUNTIME_API static bool ShouldEnableImGui();
-	static void InitializeSubsystem();
-	static UImGuiSubsystem* Get() { return SubsystemInstance; }
+	static void InitializeSubsystemInstance();
+	static void ReleaseSubsystemInstance();
 
 	// events
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnSubsystemInitialized, UImGuiSubsystem* /*Subsystem*/)
 	IMGUIRUNTIME_API static FOnSubsystemInitialized OnSubsystemInitialized;
 	static FSimpleMulticastDelegate OnBeginImGuiFrame;
 	static FSimpleMulticastDelegate OnEndImGuiFrame;
+	static FSimpleMulticastDelegate OnShutdown;
 
 	const char* GetIniDirectoryPath()	const { return *m_IniDirectoryPath; }
 
@@ -117,7 +118,7 @@ private:
 	void ReleaseFontAtlasTexture(int32 Index);
 
 private:
-	IMGUIRUNTIME_API static UImGuiSubsystem* SubsystemInstance;
+	static UImGuiSubsystem* SubsystemInstance;
 
 	FConfigFile* m_SaveDataConfigFile = nullptr;
 

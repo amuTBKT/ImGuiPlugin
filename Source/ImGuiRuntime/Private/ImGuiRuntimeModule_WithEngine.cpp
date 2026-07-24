@@ -935,7 +935,7 @@ public:
 static FDelayedAutoRegisterHelper ImGuiSubsystem_DelayedAutoRegister(EDelayedRegisterRunPhase::EndOfEngineInit,
 	[]()
 	{
-		UImGuiSubsystem::InitializeSubsystem();
+		UImGuiSubsystem::InitializeSubsystemInstance();
 	});
 
 class FImGuiRuntimeModule : public IModuleInterface

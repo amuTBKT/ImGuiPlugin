@@ -54,7 +54,7 @@ private:
 		IMGUI_CHECKVERSION();
 		IMGUI_SETUP_DEFAULT_ALLOCATOR();
 
-		UImGuiSubsystem::InitializeSubsystem();
+		UImGuiSubsystem::InitializeSubsystemInstance();
 	}
 
 	virtual void ShutdownModule() override

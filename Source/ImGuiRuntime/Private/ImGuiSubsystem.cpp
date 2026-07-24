@@ -77,6 +77,7 @@ UImGuiSubsystem::FOnSubsystemInitialized UImGuiSubsystem::OnSubsystemInitialized
 UImGuiSubsystem* UImGuiSubsystem::SubsystemInstance = nullptr;
 FSimpleMulticastDelegate UImGuiSubsystem::OnBeginImGuiFrame = {};
 FSimpleMulticastDelegate UImGuiSubsystem::OnEndImGuiFrame = {};
+FSimpleMulticastDelegate UImGuiSubsystem::OnShutdown = {};
 
 const FString& UImGuiSubsystem::GetSaveDataConfigFilepath()
 {
@@ -88,19 +89,32 @@ const FString& UImGuiSubsystem::GetSaveDataConfigFilepath()
 	return ConfigFilepath;
 }
 
-bool UImGuiSubsystem::ShouldCreateSubsystem() const
-{
-	return ShouldEnableImGui();
-}
-
-void UImGuiSubsystem::InitializeSubsystem()
+void UImGuiSubsystem::InitializeSubsystemInstance()
 {
 	if (UImGuiSubsystem::ShouldEnableImGui())
 	{
-		UImGuiSubsystem::SubsystemInstance = NewObject<UImGuiSubsystem>();
-		UImGuiSubsystem::SubsystemInstance->Initialize();
-		UImGuiSubsystem::SubsystemInstance->AddToRoot();
+		SubsystemInstance = NewObject<UImGuiSubsystem>();
+		SubsystemInstance->Initialize();
+		SubsystemInstance->AddToRoot();
 	}
+}
+
+void UImGuiSubsystem::ReleaseSubsystemInstance()
+{
+	if (ensure(::IsValid(SubsystemInstance)))
+	{
+		OnShutdown.Broadcast();
+
+		SubsystemInstance->Deinitialize();
+		SubsystemInstance->RemoveFromRoot();
+		SubsystemInstance = nullptr;
+	}
+}
+
+UImGuiSubsystem* UImGuiSubsystem::Get()
+{
+	check(IsInGameThread());
+	return SubsystemInstance;
 }
 
 void UImGuiSubsystem::Initialize()
@@ -155,29 +169,21 @@ void UImGuiSubsystem::Initialize()
 
 	FCoreDelegates::OnBeginFrame.AddUObject(this, &UImGuiSubsystem::BeginImGuiFrame);
 	FCoreDelegates::OnEndFrame.AddUObject(this, &UImGuiSubsystem::EndImGuiFrame);
-	FCoreDelegates::OnExit.AddLambda(
-		[]() mutable
-		{
-			check(UImGuiSubsystem::SubsystemInstance->GetSharedFontAtlas()->RefCount == 1);
-			UImGuiSubsystem::SubsystemInstance->Deinitialize();
-			UImGuiSubsystem::SubsystemInstance->RemoveFromRoot();
-			UImGuiSubsystem::SubsystemInstance = nullptr;
-		});
+	FCoreDelegates::OnPreExit.AddStatic(&UImGuiSubsystem::ReleaseSubsystemInstance);
 }
 
 void UImGuiSubsystem::Deinitialize()
 {
+	// ensure all widgets have released the shared font reference (all slate widgets should be destroyed at this point)
+	check(m_SharedFontAtlas->RefCount == 1);
 	m_SharedFontAtlas = nullptr;
+
 	m_SharedFontAtlasTextures.Reset();
 }
 
 bool UImGuiSubsystem::ShouldEnableImGui()
 {
-	if (IsRunningCommandlet())
-	{
-		return false;
-	}
-	return true;
+	return !IsRunningCommandlet();
 }
 
 TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate)

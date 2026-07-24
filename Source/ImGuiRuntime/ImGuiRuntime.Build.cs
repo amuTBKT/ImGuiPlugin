@@ -27,8 +27,8 @@ public class ImGuiRuntime : ModuleRules
 			PrivateDependencyModuleNames.AddRange(
 				new string[]
 				{
-					"Engine",
 					"RHI",
+					"Engine",
 					"ImGuiShaders"
 				}
 			);
