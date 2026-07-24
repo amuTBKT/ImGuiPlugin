@@ -1,8 +1,9 @@
 // Copyright 2024-26 Amit Kumar Mehar. All Rights Reserved.
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////
+#include "Modules/ModuleManager.h"
+#include "Modules/ModuleInterface.h"
 
-#include "ImGuiPluginTypes.h"
+#include "ImGuiSubsystem.h"
 
 #ifdef WITH_IMGUI_STATIC_LIB
 void ImGuiAssertHook(bool bCondition, const char* Expression, const char* File, uint32 Line)
@@ -29,17 +30,16 @@ void ImGuiAssertHook(bool bCondition, const char* Expression, const char* File, 
 #include "ImGuiLib.cpp"
 #endif
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#if !WITH_ENGINE
-
-#include "Modules/ModuleManager.h"
-#include "Modules/ModuleInterface.h"
-
-#include "ImGuiSubsystem.h"
-
+#if WITH_ENGINE
+namespace ImGuiUtils
+{
+	extern void RegisterMenuExtensions();
+	extern void UnregisterMenuExtensions();
+}
+#else
 FAutoRegisterMainMenuWidget::FAutoRegisterMainMenuWidget(FImGuiWidgetRegisterParams RegisterParams) {}
 FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegisterParams RegisterParams) {}
+#endif
 
 class FImGuiRuntimeModule : public IModuleInterface
 {
@@ -54,13 +54,25 @@ private:
 		IMGUI_CHECKVERSION();
 		IMGUI_SETUP_DEFAULT_ALLOCATOR();
 
+#if WITH_ENGINE
+		ImGuiUtils::RegisterMenuExtensions();
+
+		FDelayedAutoRegisterHelper RegisterImGuiSubsystem(EDelayedRegisterRunPhase::EndOfEngineInit,
+			[]()
+			{
+				UImGuiSubsystem::InitializeSubsystemInstance();
+			});
+#else
 		UImGuiSubsystem::InitializeSubsystemInstance();
+#endif
 	}
 
 	virtual void ShutdownModule() override
 	{
+#if WITH_ENGINE
+		ImGuiUtils::UnregisterMenuExtensions();
+#endif
 	}
 };
-IMPLEMENT_MODULE(FImGuiRuntimeModule, ImGuiRuntime)
 
-#endif //#if WITH_ENGINE
+IMPLEMENT_MODULE(FImGuiRuntimeModule, ImGuiRuntime)

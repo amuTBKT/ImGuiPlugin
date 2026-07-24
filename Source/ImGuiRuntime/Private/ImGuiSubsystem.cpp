@@ -236,7 +236,7 @@ void UImGuiSubsystem::RegisterMainMenuWidget(
 	const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
 	FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags) const
 {
-	// defined in ImGuiRuntimeModule.cpp
+	// defined in ImGuiMenuExtension.cpp
 	extern void RegisterMainMenuWidgetForWorld(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush * WidgetIcon,
 		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags);
@@ -246,7 +246,7 @@ void UImGuiSubsystem::RegisterMainMenuWidget(
 
 void UImGuiSubsystem::UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath) const
 {
-	// defined in ImGuiRuntimeModule.cpp
+	// defined in ImGuiMenuExtension.cpp
 	extern void UnregisterMainMenuWidgetForWorld(const UWorld* World, const char* WidgetPath);
 
 	UnregisterMainMenuWidgetForWorld(World, WidgetPath);
@@ -254,7 +254,7 @@ void UImGuiSubsystem::UnregisterMainMenuWidget(const UWorld* World, const char* 
 
 bool* UImGuiSubsystem::GetMainMenuWidgetActiveState(const UWorld* World, const char* WidgetPath) const
 {
-	// defined in ImGuiRuntimeModule.cpp
+	// defined in ImGuiMenuExtension.cpp
 	extern bool* GetMainMenuWidgetActiveStateForWorld(const UWorld* World, const char* WidgetPath);
 
 	return GetMainMenuWidgetActiveStateForWorld(World, WidgetPath);
@@ -262,7 +262,7 @@ bool* UImGuiSubsystem::GetMainMenuWidgetActiveState(const UWorld* World, const c
 
 FImGuiTickContext* UImGuiSubsystem::GetWidgetTickContext(const UWorld* World) const
 {
-	// defined in ImGuiRuntimeModule.cpp
+	// defined in ImGuiMenuExtension.cpp
 	extern FImGuiTickContext* GetWidgetTickContextForWorld(const UWorld* World);
 
 	return GetWidgetTickContextForWorld(World);
