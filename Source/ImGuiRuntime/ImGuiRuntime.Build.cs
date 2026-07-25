@@ -19,19 +19,25 @@ public class ImGuiRuntime : ModuleRules
 				"RenderCore",
 				"CoreUObject",
 				"ApplicationCore",
-			}
-		);
+			});
 
 		if (Target.bCompileAgainstEngine)
 		{
-			PrivateDependencyModuleNames.AddRange(
-				new string[]
-				{
-					"RHI",
-					"Engine",
-					"ImGuiShaders"
-				}
-			);
+			PrivateDependencyModuleNames.Add("Engine");
+
+			if (Target.Type != TargetType.Server)
+			{
+				PrivateDependencyModuleNames.AddRange(
+					new string[]
+					{
+						"RHI",
+						"ImGuiShaders"
+					});
+
+				// need to include private header files for accessing slate resource
+				var EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
+				PrivateIncludePaths.Add(Path.Combine(EngineDir, "Source/Runtime/SlateRHIRenderer/Private"));
+			}
 		}
 
 		if ((Target.Type != TargetType.Server) && Target.bCompileFreeType)
@@ -39,10 +45,6 @@ public class ImGuiRuntime : ModuleRules
 			AddEngineThirdPartyPrivateStaticDependencies(Target, "FreeType2", "UElibPNG", "zlib");
 		}
 		PublicDependencyModuleNames.Add("ImGui");
-
-		// need to include private header files for accessing slate resource
-		var EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
-		PrivateIncludePaths.Add(Path.Combine(EngineDir, "Source/Runtime/SlateRHIRenderer/Private"));
 
 		if (Target.bBuildEditor)
 		{
@@ -54,8 +56,7 @@ public class ImGuiRuntime : ModuleRules
 					"EditorStyle",
 					"LevelEditor",
 					"WorkspaceMenuStructure",
-				}
-			);
+				});
 		}
 	}
 }

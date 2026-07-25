@@ -27,6 +27,9 @@
 // returns FSlateIcon for specified icon and style name
 #define IMGUI_STYLE_ICON(StyleName, IconName)  []() -> const FSlateIcon&  { static const FSlateIcon Icon = FSlateIcon(FName(StyleName), FName(IconName)); return Icon; }()
 
+// whether we can draw locally, disabled when running headless (NetImGui will be used for remote drawing if enabled)
+#define IMGUI_ALLOW_LOCAL_DRAWING (USE_NULL_RHI == 0)
+
 class FDragDropOperation;
 struct FImGuiTickContext
 {

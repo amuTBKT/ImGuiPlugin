@@ -16,8 +16,7 @@ namespace UnrealBuildTool.Rules
 	                "Core",
 	                "Projects",
 					"RenderCore",
-				}
-	        );
+				});
         }
 	}
 }

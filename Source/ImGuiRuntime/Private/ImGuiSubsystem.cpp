@@ -60,21 +60,10 @@ FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
 	return nullptr;
 }
 
-UImGuiSubsystem::FImGuiFontTextureEntry::~FImGuiFontTextureEntry()
-{
-#if WITH_ENGINE
-	UTextureRenderTarget2D* Texture = Brush ? (UTextureRenderTarget2D*)Brush->GetResourceObject() : nullptr;
-	if (::IsValid(Texture))
-	{
-		Texture->RemoveFromRoot();
-	}
-#endif
-}
-
 /*--------------------------------------------------------------------------------------------------------------------------*/
 
 UImGuiSubsystem::FOnSubsystemInitialized UImGuiSubsystem::OnSubsystemInitialized = {};
-UImGuiSubsystem* UImGuiSubsystem::SubsystemInstance = nullptr;
+TUniquePtr<UImGuiSubsystem> UImGuiSubsystem::SubsystemInstance;
 FSimpleMulticastDelegate UImGuiSubsystem::OnBeginImGuiFrame = {};
 FSimpleMulticastDelegate UImGuiSubsystem::OnEndImGuiFrame = {};
 FSimpleMulticastDelegate UImGuiSubsystem::OnShutdown = {};
@@ -93,20 +82,18 @@ void UImGuiSubsystem::InitializeSubsystemInstance()
 {
 	if (UImGuiSubsystem::ShouldEnableImGui())
 	{
-		SubsystemInstance = NewObject<UImGuiSubsystem>();
+		SubsystemInstance = MakeUnique<UImGuiSubsystem>();
 		SubsystemInstance->Initialize();
-		SubsystemInstance->AddToRoot();
 	}
 }
 
 void UImGuiSubsystem::ReleaseSubsystemInstance()
 {
-	if (ensure(::IsValid(SubsystemInstance)))
+	if (ensure(SubsystemInstance))
 	{
 		OnShutdown.Broadcast();
 
 		SubsystemInstance->Deinitialize();
-		SubsystemInstance->RemoveFromRoot();
 		SubsystemInstance = nullptr;
 	}
 }
@@ -114,7 +101,7 @@ void UImGuiSubsystem::ReleaseSubsystemInstance()
 UImGuiSubsystem* UImGuiSubsystem::Get()
 {
 	check(IsInGameThread());
-	return SubsystemInstance;
+	return SubsystemInstance.Get();
 }
 
 void UImGuiSubsystem::Initialize()
@@ -167,9 +154,8 @@ void UImGuiSubsystem::Initialize()
 	// first frame setup
 	BeginImGuiFrame();
 
-	FCoreDelegates::OnBeginFrame.AddUObject(this, &UImGuiSubsystem::BeginImGuiFrame);
-	FCoreDelegates::OnEndFrame.AddUObject(this, &UImGuiSubsystem::EndImGuiFrame);
-	FCoreDelegates::OnPreExit.AddStatic(&UImGuiSubsystem::ReleaseSubsystemInstance);
+	FCoreDelegates::OnBeginFrame.AddRaw(this, &UImGuiSubsystem::BeginImGuiFrame);
+	FCoreDelegates::OnEndFrame.AddRaw(this, &UImGuiSubsystem::EndImGuiFrame);
 }
 
 void UImGuiSubsystem::Deinitialize()
@@ -179,11 +165,31 @@ void UImGuiSubsystem::Deinitialize()
 	m_SharedFontAtlas = nullptr;
 
 	m_SharedFontAtlasTextures.Reset();
+
+	FCoreDelegates::OnBeginFrame.RemoveAll(this);
+	FCoreDelegates::OnEndFrame.RemoveAll(this);
 }
 
 bool UImGuiSubsystem::ShouldEnableImGui()
 {
 	return !IsRunningCommandlet();
+}
+
+void UImGuiSubsystem::AddReferencedObjects(FReferenceCollector& Collector)
+{
+#if WITH_ENGINE
+	for (const FImGuiFontTextureEntry& TextureEntry : m_SharedFontAtlasTextures)
+	{
+		if (TextureEntry.Brush)
+		{
+			UTextureRenderTarget2D* Texture = (UTextureRenderTarget2D*)TextureEntry.Brush->GetResourceObject();
+			if (Texture)
+			{
+				Collector.AddReferencedObject(Texture);
+			}
+		}
+	}
+#endif
 }
 
 TSharedPtr<SWindow> UImGuiSubsystem::CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate)
@@ -236,7 +242,7 @@ void UImGuiSubsystem::RegisterMainMenuWidget(
 	const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
 	FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags) const
 {
-	// defined in ImGuiMenuExtension.cpp
+	// defined in ImGuiRuntimeModule.cpp
 	extern void RegisterMainMenuWidgetForWorld(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush * WidgetIcon,
 		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags);
@@ -246,7 +252,7 @@ void UImGuiSubsystem::RegisterMainMenuWidget(
 
 void UImGuiSubsystem::UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath) const
 {
-	// defined in ImGuiMenuExtension.cpp
+	// defined in ImGuiRuntimeModule.cpp
 	extern void UnregisterMainMenuWidgetForWorld(const UWorld* World, const char* WidgetPath);
 
 	UnregisterMainMenuWidgetForWorld(World, WidgetPath);
@@ -254,7 +260,7 @@ void UImGuiSubsystem::UnregisterMainMenuWidget(const UWorld* World, const char* 
 
 bool* UImGuiSubsystem::GetMainMenuWidgetActiveState(const UWorld* World, const char* WidgetPath) const
 {
-	// defined in ImGuiMenuExtension.cpp
+	// defined in ImGuiRuntimeModule.cpp
 	extern bool* GetMainMenuWidgetActiveStateForWorld(const UWorld* World, const char* WidgetPath);
 
 	return GetMainMenuWidgetActiveStateForWorld(World, WidgetPath);
@@ -262,7 +268,7 @@ bool* UImGuiSubsystem::GetMainMenuWidgetActiveState(const UWorld* World, const c
 
 FImGuiTickContext* UImGuiSubsystem::GetWidgetTickContext(const UWorld* World) const
 {
-	// defined in ImGuiMenuExtension.cpp
+	// defined in ImGuiRuntimeModule.cpp
 	extern FImGuiTickContext* GetWidgetTickContextForWorld(const UWorld* World);
 
 	return GetWidgetTickContextForWorld(World);
@@ -317,27 +323,29 @@ int32 UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
 	{
 		if (!m_SharedFontAtlasTextures[TextureIndex].bInUse)
 		{
-#if WITH_ENGINE
-			if (!m_SharedFontAtlasTextures[TextureIndex].Brush)
+#if WITH_ENGINE && IMGUI_ALLOW_LOCAL_DRAWING
+			if (FSlateApplication::IsInitialized())
 			{
-				m_SharedFontAtlasTextures[TextureIndex].Brush = MakeShared<FSlateBrush>();
-			}
+				if (!m_SharedFontAtlasTextures[TextureIndex].Brush)
+				{
+					m_SharedFontAtlasTextures[TextureIndex].Brush = MakeShared<FSlateBrush>();
+				}
 
-			UTextureRenderTarget2D* Texture = (UTextureRenderTarget2D*)m_SharedFontAtlasTextures[TextureIndex].Brush->GetResourceObject();
-			if (!Texture)
-			{
-				Texture = NewObject<UTextureRenderTarget2D>(this, FName(FontTextureName, TextureIndex + 1));
-				Texture->Filter = TextureFilter::TF_Bilinear;
-				Texture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
-				Texture->OverrideFormat = PF_R8G8B8A8;
-				Texture->ClearColor = FLinearColor(0, 0, 0, 0);
-				Texture->bNoFastClear = true;
-				Texture->InitAutoFormat(SizeX, SizeY);
-				Texture->UpdateResourceImmediate(/*bClearRenderTarget=*/false);
+				UTextureRenderTarget2D* Texture = (UTextureRenderTarget2D*)m_SharedFontAtlasTextures[TextureIndex].Brush->GetResourceObject();
+				if (!Texture)
+				{
+					Texture = NewObject<UTextureRenderTarget2D>(GetTransientPackage(), FName(FontTextureName, TextureIndex + 1));
+					Texture->Filter = TextureFilter::TF_Bilinear;
+					Texture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
+					Texture->OverrideFormat = PF_R8G8B8A8;
+					Texture->ClearColor = FLinearColor(0, 0, 0, 0);
+					Texture->bNoFastClear = true;
+					Texture->InitAutoFormat(SizeX, SizeY);
+					Texture->UpdateResourceImmediate(/*bClearRenderTarget=*/false);
 
-				Texture->AddToRoot();
-				m_SharedFontAtlasTextures[TextureIndex].Brush->SetResourceObject(Texture);
-				m_OneFrameResources[FontAtlasTextureStartIndex + TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].Brush->GetRenderingResource() };
+					m_SharedFontAtlasTextures[TextureIndex].Brush->SetResourceObject(Texture);
+					m_OneFrameResources[FontAtlasTextureStartIndex + TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].Brush->GetRenderingResource() };
+				}
 			}
 #endif
 			m_SharedFontAtlasTextures[TextureIndex].bInUse = true;
@@ -368,41 +376,46 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 			TexData->SetTexID(AllocateFontAtlasTexture(FontAtlasWidth, FontAtlasHeight) + FontAtlasTextureStartIndex);
 		}
 
+#if IMGUI_ALLOW_LOCAL_DRAWING
+		if (FSlateApplication::IsInitialized())
+		{
 #if WITH_ENGINE
-		UTextureRenderTarget2D* AtlasTexture = (UTextureRenderTarget2D*)m_SharedFontAtlasTextures[ImGuiIDToIndex(TexData->GetTexID()) - FontAtlasTextureStartIndex].Brush->GetResourceObject();
+			UTextureRenderTarget2D* AtlasTexture = (UTextureRenderTarget2D*)m_SharedFontAtlasTextures[ImGuiIDToIndex(TexData->GetTexID()) - FontAtlasTextureStartIndex].Brush->GetResourceObject();
 
-		bool bReuploadTexture = (TexData->Status == ImTextureStatus_WantCreate);
-		if (AtlasTexture->SizeX != FontAtlasWidth || AtlasTexture->SizeY != FontAtlasHeight)
-		{
-			AtlasTexture->ResizeTarget(FontAtlasWidth, FontAtlasHeight);
-			bReuploadTexture = true;
-		}
+			bool bReuploadTexture = (TexData->Status == ImTextureStatus_WantCreate);
+			if (AtlasTexture->SizeX != FontAtlasWidth || AtlasTexture->SizeY != FontAtlasHeight)
+			{
+				AtlasTexture->ResizeTarget(FontAtlasWidth, FontAtlasHeight);
+				bReuploadTexture = true;
+			}
 
-		if (FApp::CanEverRender())
-		{
-			const ImTextureRect UpdateRect = bReuploadTexture ? ImTextureRect(0, 0, FontAtlasWidth, FontAtlasHeight) : TexData->UpdateRect;
-			ENQUEUE_RENDER_COMMAND(UpdateFontTexture)(
-				[this,
-				SrcPitch = TexData->GetPitch(),
-				SrcData = (uint8*)TexData->GetPixelsAt(UpdateRect.x, UpdateRect.y),
-				UpdateRegion = FUpdateTextureRegion2D(UpdateRect.x, UpdateRect.y, 0, 0, UpdateRect.w, UpdateRect.h),
-				TexResource = AtlasTexture->GameThread_GetRenderTargetResource()](FRHICommandListImmediate& RHICmdList)
-				{
-					RHICmdList.Transition(FRHITransitionInfo(TexResource->GetTexture2DRHI(), ERHIAccess::Unknown, ERHIAccess::CopyDest));
-					RHICmdList.UpdateTexture2D(TexResource->GetTexture2DRHI(), 0, UpdateRegion, SrcPitch, SrcData);
-					RHICmdList.Transition(FRHITransitionInfo(TexResource->GetTexture2DRHI(), ERHIAccess::CopyDest, ERHIAccess::SRVMask));
-				});
-		}
+			if (FApp::CanEverRender())
+			{
+				const ImTextureRect UpdateRect = bReuploadTexture ? ImTextureRect(0, 0, FontAtlasWidth, FontAtlasHeight) : TexData->UpdateRect;
+				ENQUEUE_RENDER_COMMAND(UpdateFontTexture)(
+					[this,
+					SrcPitch = TexData->GetPitch(),
+					SrcData = (uint8*)TexData->GetPixelsAt(UpdateRect.x, UpdateRect.y),
+					UpdateRegion = FUpdateTextureRegion2D(UpdateRect.x, UpdateRect.y, 0, 0, UpdateRect.w, UpdateRect.h),
+					TexResource = AtlasTexture->GameThread_GetRenderTargetResource()](FRHICommandListImmediate& RHICmdList)
+					{
+						RHICmdList.Transition(FRHITransitionInfo(TexResource->GetTexture2DRHI(), ERHIAccess::Unknown, ERHIAccess::CopyDest));
+						RHICmdList.UpdateTexture2D(TexResource->GetTexture2DRHI(), 0, UpdateRegion, SrcPitch, SrcData);
+						RHICmdList.Transition(FRHITransitionInfo(TexResource->GetTexture2DRHI(), ERHIAccess::CopyDest, ERHIAccess::SRVMask));
+					});
+			}
 #else
-		static const FName FontTextureName = TEXT("ImGui_SharedFontTexture");
-		static int32 FontTextureNameCounter = 0;
+			static const FName FontTextureName = TEXT("ImGui_SharedFontTexture");
+			static int32 FontTextureNameCounter = 0;
 
-		int32 TextureIndex = (ImGuiIDToIndex(TexData->GetTexID()) - FontAtlasTextureStartIndex);
-		m_SharedFontAtlasTextures[TextureIndex].Brush = FSlateDynamicImageBrush::CreateWithImageData(FName(FontTextureName, ++FontTextureNameCounter),
-			FVector2D(FontAtlasWidth, FontAtlasHeight),
-			TArray((uint8*)TexData->GetPixelsAt(0, 0), FontAtlasWidth * FontAtlasHeight * TexData->BytesPerPixel));
-		m_OneFrameResources[FontAtlasTextureStartIndex + TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].Brush->GetRenderingResource() };
+			int32 TextureIndex = (ImGuiIDToIndex(TexData->GetTexID()) - FontAtlasTextureStartIndex);
+			m_SharedFontAtlasTextures[TextureIndex].Brush = FSlateDynamicImageBrush::CreateWithImageData(FName(FontTextureName, ++FontTextureNameCounter),
+				FVector2D(FontAtlasWidth, FontAtlasHeight),
+				TArray((uint8*)TexData->GetPixelsAt(0, 0), FontAtlasWidth * FontAtlasHeight * TexData->BytesPerPixel));
+			m_OneFrameResources[FontAtlasTextureStartIndex + TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].Brush->GetRenderingResource() };
 #endif
+		}
+#endif //#if IMGUI_ALLOW_LOCAL_DRAWING
 
 		TexData->SetStatus(ImTextureStatus_OK);
 	}

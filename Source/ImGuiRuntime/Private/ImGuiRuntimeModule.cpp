@@ -72,6 +72,7 @@ private:
 #if WITH_ENGINE
 		ImGuiUtils::UnregisterMenuExtensions();
 #endif
+		UImGuiSubsystem::ReleaseSubsystemInstance();
 	}
 };
 

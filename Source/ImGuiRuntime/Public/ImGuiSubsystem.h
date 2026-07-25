@@ -3,12 +3,11 @@
 #pragma once
 
 #include "ImGuiPluginTypes.h"
+#include "UObject/GCObject.h"
 #include "Styling/SlateBrush.h"
 #include "ImGuiPluginDelegates.h"
 #include "Containers/AnsiString.h"
 #include "Textures/SlateShaderResource.h"
-
-#include "ImGuiSubsystem.generated.h"
 
 class UWorld;
 class SWindow;
@@ -50,11 +49,8 @@ enum class EImGuiMainMenuWidgetFlags : uint8
 };
 ENUM_CLASS_FLAGS(EImGuiMainMenuWidgetFlags);
 
-UCLASS(MinimalAPI)
-class UImGuiSubsystem : public UObject
+class UImGuiSubsystem : public FGCObject
 {
-	GENERATED_BODY()
-
 public:
 	void Initialize();
 	void Deinitialize();
@@ -64,6 +60,9 @@ public:
 	IMGUIRUNTIME_API static bool ShouldEnableImGui();
 	static void InitializeSubsystemInstance();
 	static void ReleaseSubsystemInstance();
+
+	virtual void AddReferencedObjects(FReferenceCollector& Collector) override;
+	virtual FString GetReferencerName() const override { return TEXT("UImGuiSubsystem"); }
 
 	// events
 	DECLARE_MULTICAST_DELEGATE_OneParam(FOnSubsystemInitialized, UImGuiSubsystem* /*Subsystem*/)
@@ -118,7 +117,7 @@ private:
 	void ReleaseFontAtlasTexture(int32 Index);
 
 private:
-	static UImGuiSubsystem* SubsystemInstance;
+	static TUniquePtr<UImGuiSubsystem> SubsystemInstance;
 
 	FConfigFile* m_SaveDataConfigFile = nullptr;
 
@@ -128,8 +127,6 @@ private:
 	{
 		TSharedPtr<FSlateBrush> Brush = nullptr;
 		bool bInUse = false;
-
-		~FImGuiFontTextureEntry();
 	};
 	TArray<FImGuiFontTextureEntry> m_SharedFontAtlasTextures;
 	TSharedPtr<FSlateBrush> m_MissingImageBrush = nullptr;

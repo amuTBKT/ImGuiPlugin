@@ -64,18 +64,24 @@ namespace ImGuiFocusHandler
 	// give focus back to game viewport
 	void ResetFocus()
 	{
-		FSlateApplication::Get().SetAllUserFocusToGameViewport(EFocusCause::SetDirectly);
+		if (FSlateApplication::IsInitialized())
+		{
+			FSlateApplication::Get().SetAllUserFocusToGameViewport(EFocusCause::SetDirectly);
+		}
 	}
 
 	// same logic as Shift+F1
 	void SetUIFocus()
 	{
-		ExecuteOnGameThread(TEXT("ImGui_RetainFocus"),
-			[]()
-			{
-				FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
-				FSlateApplication::Get().ResetToDefaultInputSettings();
-			});
+		if (FSlateApplication::IsInitialized())
+		{
+			ExecuteOnGameThread(TEXT("ImGui_RetainFocus"),
+				[]()
+				{
+					FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
+					FSlateApplication::Get().ResetToDefaultInputSettings();
+				});
+		}
 	}
 }
 
@@ -449,19 +455,34 @@ namespace ImGuiUtils
 		}
 #endif
 
+		void HideWidget()
+		{
+			m_PendingVisibilityState = EVisibility::Hidden;
+		}
+		void ShowWidget()
+		{
+			m_PendingVisibilityState = EVisibility::Visible;
+		}
+
 	private:
 		void BeginFrame()
 		{
-			if (!GetVisibility().IsVisible())
+			if (GetVisibility().IsVisible())
 			{
-				return;
+				FImGuiTickScope Scope{ GetTickContext() };
+
+				BeginImGuiFrame(GetCachedGeometry());
+
+				SetupDockNode();
 			}
 
-			FImGuiTickScope Scope{ GetTickContext() };
-
-			BeginImGuiFrame(GetCachedGeometry());
-
-			SetupDockNode();
+			// update visiibility after BeginFrame to ensure viewport windows get destroyed
+			// setting this before would mean nothing gets ticked and viewport windows will stay visible in unresponsive state
+			if (m_PendingVisibilityState.IsSet())
+			{
+				SetVisibility(m_PendingVisibilityState.GetValue());
+				m_PendingVisibilityState.Reset();
+			}
 		}
 
 		void EndFrame()
@@ -506,6 +527,8 @@ namespace ImGuiUtils
 		TWeakPtr<SLevelViewport> m_LevelViewport;
 		TWeakPtr<SWidget> m_LevelViewportOverlayWidget;
 #endif
+
+		TOptional<EVisibility> m_PendingVisibilityState;
 
 		// cached during tick for easier access
 		bool m_bIsDockNodeValid = false;
@@ -714,17 +737,20 @@ namespace ImGuiUtils
 		FImGuiMenuExtension()
 		{
 #if WITH_EDITOR
-			m_ImGuiTabGroup = WorkspaceMenu::GetMenuStructure().GetToolsCategory()->AddGroup(
-				LOCTEXT("ImGuiGroupName", "ImGui"),
-				FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"), /*bSortChildren=*/true);
-
-			if (CVarAddImGuiWidgetToLevelViewport.GetValueOnGameThread() == false && GIsEditor)
+			if (GIsEditor)
 			{
-				FGlobalTabmanager::Get()->RegisterNomadTabSpawner(IMGUI_FNAME("ImGuiTab"), FOnSpawnTab::CreateRaw(this, &FImGuiMenuExtension::SpawnImGuiTab))
-					.SetGroup(m_ImGuiTabGroup.ToSharedRef())
-					.SetDisplayName(LOCTEXT("ImGuiMainTabTitle", "ImGui"))
-					.SetTooltipText(LOCTEXT("ImGuiMainTabTooltip", "Window hosting static ImGui widgets"))
-					.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
+				m_ImGuiTabGroup = WorkspaceMenu::GetMenuStructure().GetToolsCategory()->AddGroup(
+					LOCTEXT("ImGuiGroupName", "ImGui"),
+					FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"), /*bSortChildren=*/true);
+
+				if (CVarAddImGuiWidgetToLevelViewport.GetValueOnGameThread() == false)
+				{
+					FGlobalTabmanager::Get()->RegisterNomadTabSpawner(IMGUI_FNAME("ImGuiTab"), FOnSpawnTab::CreateRaw(this, &FImGuiMenuExtension::SpawnImGuiTab))
+						.SetGroup(m_ImGuiTabGroup.ToSharedRef())
+						.SetDisplayName(LOCTEXT("ImGuiMainTabTitle", "ImGui"))
+						.SetTooltipText(LOCTEXT("ImGuiMainTabTooltip", "Window hosting static ImGui widgets"))
+						.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
+				}
 			}
 
 			FWorldDelegates::OnWorldBeginTearDown.AddRaw(this, &FImGuiMenuExtension::OnWorldBeginTearDown);
@@ -857,12 +883,12 @@ namespace ImGuiUtils
 			{
 				if (MainMenuWidget->GetVisibility() == EVisibility::Visible)
 				{
-					MainMenuWidget->SetVisibility(EVisibility::Hidden);
+					MainMenuWidget->HideWidget();
 					ImGuiFocusHandler::ResetFocus();
 				}
 				else
 				{
-					MainMenuWidget->SetVisibility(EVisibility::Visible);
+					MainMenuWidget->ShowWidget();
 					ImGuiFocusHandler::SetUIFocus();
 				}
 			}
@@ -898,7 +924,8 @@ namespace ImGuiUtils
 			TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = m_PrimaryContextWidget.Pin();
 			if (!MainMenuWidget)
 			{
-				if (UGameViewportClient* GameViewport = World->GetGameViewport())
+				UGameViewportClient* GameViewport = World ? World->GetGameViewport() : nullptr;
+				if (GameViewport)
 				{
 					MainMenuWidget = SNew(SImGuiMainMenuWidget)
 						.MainViewportWindow(GameViewport->GetWindow());
@@ -907,6 +934,12 @@ namespace ImGuiUtils
 
 					ImGuiFocusHandler::SetUIFocus();
 				}
+				else if (!FSlateApplication::IsInitialized()) //running headles without slate
+				{
+					MainMenuWidget = SNew(SImGuiMainMenuWidget);
+					m_PrimaryContextWidget = MainMenuWidget;
+					m_PinnedPrimaryContextWidget = MainMenuWidget;
+				}
 				return;
 			}
 
@@ -914,12 +947,12 @@ namespace ImGuiUtils
 			{
 				if (MainMenuWidget->GetVisibility() == EVisibility::Visible)
 				{
-					MainMenuWidget->SetVisibility(EVisibility::Hidden);
+					MainMenuWidget->HideWidget();
 					ImGuiFocusHandler::ResetFocus();
 				}
 				else
 				{
-					MainMenuWidget->SetVisibility(EVisibility::Visible);
+					MainMenuWidget->ShowWidget();
 					ImGuiFocusHandler::SetUIFocus();
 				}
 			}
@@ -998,6 +1031,9 @@ namespace ImGuiUtils
 #endif
 		// Editor/Game context widget
 		TWeakPtr<SImGuiMainMenuWidget> m_PrimaryContextWidget;
+
+		// Keep the widget around when running headless (no windows around to keep the widget alive)
+		TSharedPtr<SImGuiMainMenuWidget> m_PinnedPrimaryContextWidget;
 
 		TUniquePtr<FAutoConsoleCommandWithWorld> m_OpenImGuiMenuCommand = nullptr;
 	};

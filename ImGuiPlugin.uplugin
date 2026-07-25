@@ -18,6 +18,7 @@
 		{
 			"Name": "ImGuiShaders",
 			"Type": "Runtime",
+			"TargetDenyList": [ "Server" ],
 			"LoadingPhase": "PostConfigInit"
 		},
 		{

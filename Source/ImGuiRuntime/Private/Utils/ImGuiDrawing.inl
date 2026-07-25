@@ -1,6 +1,6 @@
 // Copyright 2024-26 Amit Kumar Mehar. All Rights Reserved.
 
-#include "imgui/misc/imgui_threaded_rendering.h"
+#if IMGUI_ALLOW_LOCAL_DRAWING
 
 #if WITH_ENGINE
 #include "RHI.h"
@@ -13,16 +13,17 @@
 #include "RenderCaptureInterface.h"
 #include "Rendering/RenderingCommon.h"
 #include "Runtime/Launch/Resources/Version.h"
+#include "imgui/misc/imgui_threaded_rendering.h"
 #endif
 
 namespace ImGuiUtils
 {
+#if WITH_ENGINE
 	static inline uint32 PackF16ToU32(const FVector2f& Value)
 	{
 		return uint32(FFloat16(Value.X).Encoded) | (uint32(FFloat16(Value.Y).Encoded) << 16);
 	}
 
-#if WITH_ENGINE
 	class FImGuiVertexDeclaration : public FRenderResource
 	{
 	public:
@@ -495,3 +496,26 @@ namespace ImGuiUtils
 	};
 #endif //#if WITH_ENGINE
 }
+
+#else
+
+namespace ImGuiUtils
+{
+	class FWidgetDrawer
+	{
+	public:
+		bool SetDrawData(ImDrawData* DrawData, double CurrentTime, FVector2f DrawRectOffset)
+		{
+			return false;
+		}
+		void SetDrawRectOffset(FVector2f DrawRectOffset)
+		{
+		}
+		bool HasDrawCommands() const
+		{
+			return false;
+		}
+	};
+}
+
+#endif //#if IMGUI_ALLOW_LOCAL_DRAWING

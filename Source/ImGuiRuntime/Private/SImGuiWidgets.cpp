@@ -88,7 +88,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 
-	if (InArgs._bEnableViewports)
+	if (InArgs._bEnableViewports && FSlateApplication::IsInitialized())
 	{
 		IO.ConfigFlags  |= ImGuiConfigFlags_ViewportsEnable;
 		IO.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
@@ -222,7 +222,7 @@ void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry)
 		return;
 	}
 
-	TSharedPtr<FDragDropOperation> CurrentDragDropOperation = FSlateApplication::Get().GetDragDroppingContent();
+	TSharedPtr<FDragDropOperation> CurrentDragDropOperation = FSlateApplication::IsInitialized() ? FSlateApplication::Get().GetDragDroppingContent() : nullptr;
 	if (LastDragDropOperation.IsValid() && !CurrentDragDropOperation.IsValid())
 	{
 		m_TickContext->bDragDropOperationReleasedThisFrame = true;
@@ -335,6 +335,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 		ImGui::UpdatePlatformWindows();
 	}
 
+#if IMGUI_ALLOW_LOCAL_DRAWING
 	TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[ImGui::GetFrameCount() & 0x1];
 	if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetTime(), WidgetGeometry.GetRenderBoundingRect().GetTopLeft2f()))
 	{
@@ -346,6 +347,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 #endif
 		OutDrawElements.PopClip();
 	}
+#endif //#if IMGUI_ALLOW_LOCAL_DRAWING
 
 	if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
 	{

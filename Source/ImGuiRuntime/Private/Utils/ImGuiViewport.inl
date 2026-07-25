@@ -165,6 +165,7 @@ namespace ImGuiUtils
 		{
 			DECLARE_SCOPE_CYCLE_COUNTER(TEXT("Render Widget [GT]"), STAT_ImGui_RenderWidget_GT, STATGROUP_ImGui);
 
+#if IMGUI_ALLOW_LOCAL_DRAWING
 			TSharedPtr<ImGuiUtils::FWidgetDrawer> WidgetDrawer = m_WidgetDrawers[WidgetDrawerToRenderThisFrame];
 			if (WidgetDrawer->HasDrawCommands())
 			{
@@ -179,6 +180,8 @@ namespace ImGuiUtils
 #endif
 				OutDrawElements.PopClip();
 			}
+#endif //#if IMGUI_ALLOW_LOCAL_DRAWING
+
 			return LayerId;
 		}
 
