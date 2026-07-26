@@ -14,6 +14,7 @@ class SWindow;
 class UTexture2D;
 class FConfigFile;
 class FSlateShaderResource;
+class UTextureRenderTarget2D;
 class FSlateShaderResourceProxy;
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
@@ -128,6 +129,10 @@ private:
 	struct FImGuiFontTextureEntry
 	{
 		TSharedPtr<FSlateBrush> Brush = nullptr;
+#if WITH_ENGINE
+		// need to store as TObjectPtr to fix incremental GC related warnings
+		TObjectPtr<UTextureRenderTarget2D> BrushTexture = nullptr;
+#endif
 		bool bInUse = false;
 	};
 	TArray<FImGuiFontTextureEntry> m_SharedFontAtlasTextures;

@@ -178,15 +178,11 @@ bool UImGuiSubsystem::ShouldEnableImGui()
 void UImGuiSubsystem::AddReferencedObjects(FReferenceCollector& Collector)
 {
 #if WITH_ENGINE
-	for (const FImGuiFontTextureEntry& TextureEntry : m_SharedFontAtlasTextures)
+	for (FImGuiFontTextureEntry& TextureEntry : m_SharedFontAtlasTextures)
 	{
-		if (TextureEntry.Brush)
+		if (TextureEntry.BrushTexture)
 		{
-			UTextureRenderTarget2D* Texture = (UTextureRenderTarget2D*)TextureEntry.Brush->GetResourceObject();
-			if (Texture)
-			{
-				Collector.AddReferencedObject(Texture);
-			}
+			Collector.AddReferencedObject(TextureEntry.BrushTexture);
 		}
 	}
 #endif
@@ -330,6 +326,7 @@ int32 UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
 					Texture->InitAutoFormat(SizeX, SizeY);
 					Texture->UpdateResourceImmediate(/*bClearRenderTarget=*/false);
 
+					m_SharedFontAtlasTextures[TextureIndex].BrushTexture = Texture;
 					m_SharedFontAtlasTextures[TextureIndex].Brush->SetResourceObject(Texture);
 					m_OneFrameResources[FontAtlasTextureStartIndex + TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].Brush->GetRenderingResource() };
 				}
