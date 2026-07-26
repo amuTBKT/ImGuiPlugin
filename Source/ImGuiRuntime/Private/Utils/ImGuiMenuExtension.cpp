@@ -1,6 +1,6 @@
 // Copyright 2024-26 Amit Kumar Mehar. All Rights Reserved.
 
-#if WITH_ENGINE
+#if IMGUI_ALLOW_MENUBAR_EXTENSION
 
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -1426,4 +1426,4 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegiste
 
 #undef LOCTEXT_NAMESPACE
 
-#endif //#if WITH_ENGINE
+#endif //#if IMGUI_ALLOW_MENUBAR_EXTENSION

@@ -224,25 +224,12 @@ bool UImGuiSubsystem::SaveConfigToDisk() const
 	return false;
 }
 
-#if WITH_ENGINE
-FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(UTexture2D* Texture)
-{
-	if (!Texture)
-	{
-		return {};
-	}
-
-	FSlateBrush& NewBrush = m_OneFrameSlateBrushes.AddDefaulted_GetRef();
-	NewBrush.SetResourceObject(Texture);
-
-	return RegisterOneFrameResource(&NewBrush);
-}
-
+#if IMGUI_ALLOW_MENUBAR_EXTENSION
 void UImGuiSubsystem::RegisterMainMenuWidget(
 	const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
 	FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags) const
 {
-	// defined in ImGuiRuntimeModule.cpp
+	// defined in ImGuiMenuExtension.cpp
 	extern void RegisterMainMenuWidgetForWorld(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush * WidgetIcon,
 		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags);
@@ -252,7 +239,7 @@ void UImGuiSubsystem::RegisterMainMenuWidget(
 
 void UImGuiSubsystem::UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath) const
 {
-	// defined in ImGuiRuntimeModule.cpp
+	// defined in ImGuiMenuExtension.cpp
 	extern void UnregisterMainMenuWidgetForWorld(const UWorld* World, const char* WidgetPath);
 
 	UnregisterMainMenuWidgetForWorld(World, WidgetPath);
@@ -260,7 +247,7 @@ void UImGuiSubsystem::UnregisterMainMenuWidget(const UWorld* World, const char* 
 
 bool* UImGuiSubsystem::GetMainMenuWidgetActiveState(const UWorld* World, const char* WidgetPath) const
 {
-	// defined in ImGuiRuntimeModule.cpp
+	// defined in ImGuiMenuExtension.cpp
 	extern bool* GetMainMenuWidgetActiveStateForWorld(const UWorld* World, const char* WidgetPath);
 
 	return GetMainMenuWidgetActiveStateForWorld(World, WidgetPath);
@@ -268,12 +255,12 @@ bool* UImGuiSubsystem::GetMainMenuWidgetActiveState(const UWorld* World, const c
 
 FImGuiTickContext* UImGuiSubsystem::GetWidgetTickContext(const UWorld* World) const
 {
-	// defined in ImGuiRuntimeModule.cpp
+	// defined in ImGuiMenuExtension.cpp
 	extern FImGuiTickContext* GetWidgetTickContextForWorld(const UWorld* World);
 
 	return GetWidgetTickContextForWorld(World);
 }
-#endif //#if WITH_ENGINE
+#endif //#if IMGUI_ALLOW_MENUBAR_EXTENSION
 
 void UImGuiSubsystem::BeginImGuiFrame()
 {
@@ -498,3 +485,18 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 	}
 	return Params;
 }
+
+#if WITH_ENGINE
+FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(UTexture2D* Texture)
+{
+	if (!Texture)
+	{
+		return {};
+	}
+
+	FSlateBrush& NewBrush = m_OneFrameSlateBrushes.AddDefaulted_GetRef();
+	NewBrush.SetResourceObject(Texture);
+
+	return RegisterOneFrameResource(&NewBrush);
+}
+#endif

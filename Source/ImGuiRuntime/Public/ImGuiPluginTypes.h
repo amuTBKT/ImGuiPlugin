@@ -30,6 +30,10 @@
 // whether we can draw locally, disabled when running headless (NetImGui will be used for remote drawing if enabled)
 #define IMGUI_ALLOW_LOCAL_DRAWING (USE_NULL_RHI == 0)
 
+#ifndef IMGUI_ALLOW_MENUBAR_EXTENSION
+#define IMGUI_ALLOW_MENUBAR_EXTENSION 0
+#endif
+
 class FDragDropOperation;
 struct FImGuiTickContext
 {

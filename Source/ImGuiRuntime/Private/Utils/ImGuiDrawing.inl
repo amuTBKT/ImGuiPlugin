@@ -461,6 +461,12 @@ namespace ImGuiUtils
 
 				for (const auto& DrawCmd : CmdList->CmdBuffer)
 				{
+					if (DrawCmd.UserCallback != NULL)
+					{
+						// TODO: callbacks not supported atm
+						continue;
+					}
+
 					SlateIndices.SetNum(DrawCmd.ElemCount, EAllowShrinking::No);
 					for (uint32 Index = 0; Index < DrawCmd.ElemCount; ++Index)
 					{

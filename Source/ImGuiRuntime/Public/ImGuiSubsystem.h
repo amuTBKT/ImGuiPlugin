@@ -11,6 +11,7 @@
 
 class UWorld;
 class SWindow;
+class UTexture2D;
 class FConfigFile;
 class FSlateShaderResource;
 class FSlateShaderResourceProxy;
@@ -82,14 +83,15 @@ public:
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, float UniformSize) { return RegisterOneFrameResource(SlateBrush, FVector2f(UniformSize)); }
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush);
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource);
+#if WITH_ENGINE
+	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(UTexture2D* Texture);
+#endif
 	const TArray<FImGuiTextureResource>&	  GetOneFrameResources() const { return m_OneFrameResources; }
 
 	// widget
 	IMGUIRUNTIME_API TSharedPtr<SWindow> CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
 
-#if WITH_ENGINE
-	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(class UTexture2D* Texture);
-
+#if IMGUI_ALLOW_MENUBAR_EXTENSION
 	IMGUIRUNTIME_API void RegisterMainMenuWidget(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
 		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None) const;

@@ -30,7 +30,7 @@ void ImGuiAssertHook(bool bCondition, const char* Expression, const char* File, 
 #include "ImGuiLib.cpp"
 #endif
 
-#if WITH_ENGINE
+#if IMGUI_ALLOW_MENUBAR_EXTENSION
 namespace ImGuiUtils
 {
 	extern void RegisterMenuExtensions();
@@ -54,9 +54,11 @@ private:
 		IMGUI_CHECKVERSION();
 		IMGUI_SETUP_DEFAULT_ALLOCATOR();
 
-#if WITH_ENGINE
+#if IMGUI_ALLOW_MENUBAR_EXTENSION
 		ImGuiUtils::RegisterMenuExtensions();
+#endif
 
+#if WITH_ENGINE
 		FDelayedAutoRegisterHelper RegisterImGuiSubsystem(EDelayedRegisterRunPhase::EndOfEngineInit,
 			[]()
 			{
@@ -69,7 +71,7 @@ private:
 
 	virtual void ShutdownModule() override
 	{
-#if WITH_ENGINE
+#if IMGUI_ALLOW_MENUBAR_EXTENSION
 		ImGuiUtils::UnregisterMenuExtensions();
 #endif
 		UImGuiSubsystem::ReleaseSubsystemInstance();

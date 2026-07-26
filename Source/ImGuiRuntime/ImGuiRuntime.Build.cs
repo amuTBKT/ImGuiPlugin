@@ -38,6 +38,11 @@ public class ImGuiRuntime : ModuleRules
 				var EngineDir = Path.GetFullPath(Target.RelativeEnginePath);
 				PrivateIncludePaths.Add(Path.Combine(EngineDir, "Source/Runtime/SlateRHIRenderer/Private"));
 			}
+
+			if (Target.Type != TargetType.Program)
+			{
+				PublicDefinitions.Add("IMGUI_ALLOW_MENUBAR_EXTENSION=1");
+			}
 		}
 
 		if ((Target.Type != TargetType.Server) && Target.bCompileFreeType)
