@@ -333,8 +333,8 @@ CmdDrawFrame* ConvertToCmdDrawFrame(const ImDrawData* pDearImguiData, ImGuiMouse
 	//-----------------------------------------------------------------------------------------
 	static_assert(sizeof(CmdDrawFrame) % ComDataSize == 0, "Make sure Command Data is aligned to com data type size");
 	size_t neededDataCount	 = DivUp(sizeof(CmdDrawFrame), ComDataSize);
-	neededDataCount			+= DivUp(static_cast<size_t>(pDearImguiData->CmdListsCount) * sizeof(ImguiDrawGroup), ComDataSize);
-	for(int n = 0; n < pDearImguiData->CmdListsCount; n++)
+	neededDataCount			+= DivUp(static_cast<size_t>(pDearImguiData->CmdLists.Size) * sizeof(ImguiDrawGroup), ComDataSize); //[amu_mhr] CHANGE
+	for(int n = 0; n < pDearImguiData->CmdLists.Size; n++)																		//[amu_mhr] CHANGE
 	{
 		const ImDrawList* pCmdList	= pDearImguiData->CmdLists[n];
 		bool is16Bit				= pCmdList->VtxBuffer.size() <= 0xFFFF;
@@ -353,7 +353,7 @@ CmdDrawFrame* ConvertToCmdDrawFrame(const ImDrawData* pDearImguiData, ImGuiMouse
 	pDrawFrame->mDisplayArea[1]		= pDearImguiData->DisplayPos.y;
 	pDrawFrame->mDisplayArea[2]		= pDearImguiData->DisplayPos.x + pDearImguiData->DisplaySize.x;
 	pDrawFrame->mDisplayArea[3]		= pDearImguiData->DisplayPos.y + pDearImguiData->DisplaySize.y;
-	pDrawFrame->mDrawGroupCount		= static_cast<uint32_t>(pDearImguiData->CmdListsCount);
+	pDrawFrame->mDrawGroupCount		= static_cast<uint32_t>(pDearImguiData->CmdLists.Size);											//[amu_mhr] CHANGE
 	SetAndIncreaseDataPointer(pDrawFrame->mpDrawGroups, static_cast<uint32_t>(pDrawFrame->mDrawGroupCount * sizeof(ImguiDrawGroup)), pDataOutput);
 	
 	//-----------------------------------------------------------------------------------------

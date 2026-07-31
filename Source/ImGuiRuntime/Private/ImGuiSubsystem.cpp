@@ -13,6 +13,7 @@
 #include "Framework/Application/SlateApplication.h"
 
 #if WITH_ENGINE
+#include "UObject/Package.h"
 #include "TextureResource.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -89,7 +90,7 @@ void UImGuiSubsystem::InitializeSubsystemInstance()
 
 void UImGuiSubsystem::ReleaseSubsystemInstance()
 {
-	if (ensure(SubsystemInstance))
+	if (SubsystemInstance)
 	{
 		OnShutdown.Broadcast();
 
@@ -220,7 +221,7 @@ bool UImGuiSubsystem::SaveConfigToDisk() const
 	return false;
 }
 
-#if IMGUI_ALLOW_MENUBAR_EXTENSION
+#ifdef IMGUI_ALLOW_MENUBAR_EXTENSION
 void UImGuiSubsystem::RegisterMainMenuWidget(
 	const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
 	FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags) const
@@ -249,14 +250,14 @@ bool* UImGuiSubsystem::GetMainMenuWidgetActiveState(const UWorld* World, const c
 	return GetMainMenuWidgetActiveStateForWorld(World, WidgetPath);
 }
 
-FImGuiTickContext* UImGuiSubsystem::GetWidgetTickContext(const UWorld* World) const
+FImGuiTickContext* UImGuiSubsystem::GetMainMenuWidgetTickContext(const UWorld* World) const
 {
 	// defined in ImGuiMenuExtension.cpp
-	extern FImGuiTickContext* GetWidgetTickContextForWorld(const UWorld* World);
+	extern FImGuiTickContext* GetMainMenuWidgetTickContextForWorld(const UWorld* World);
 
-	return GetWidgetTickContextForWorld(World);
+	return GetMainMenuWidgetTickContextForWorld(World);
 }
-#endif //#if IMGUI_ALLOW_MENUBAR_EXTENSION
+#endif //#ifdef IMGUI_ALLOW_MENUBAR_EXTENSION
 
 void UImGuiSubsystem::BeginImGuiFrame()
 {

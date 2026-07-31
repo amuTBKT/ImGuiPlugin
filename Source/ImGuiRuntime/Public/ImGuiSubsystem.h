@@ -51,7 +51,7 @@ enum class EImGuiMainMenuWidgetFlags : uint8
 };
 ENUM_CLASS_FLAGS(EImGuiMainMenuWidgetFlags);
 
-class UImGuiSubsystem : public FGCObject
+class UImGuiSubsystem : FNoncopyable, FGCObject
 {
 public:
 	void Initialize();
@@ -92,13 +92,13 @@ public:
 	// widget
 	IMGUIRUNTIME_API TSharedPtr<SWindow> CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
 
-#if IMGUI_ALLOW_MENUBAR_EXTENSION
+#ifdef IMGUI_ALLOW_MENUBAR_EXTENSION
 	IMGUIRUNTIME_API void RegisterMainMenuWidget(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
 		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None) const;
 	IMGUIRUNTIME_API void UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath) const;
 	IMGUIRUNTIME_API bool* GetMainMenuWidgetActiveState(const UWorld* World, const char* WidgetPath) const;
-	IMGUIRUNTIME_API FImGuiTickContext* GetWidgetTickContext(const UWorld* World) const;
+	IMGUIRUNTIME_API FImGuiTickContext* GetMainMenuWidgetTickContext(const UWorld* World) const;
 #endif
 
 	void UpdateFontAtlasTexture(ImTextureData* TexData);

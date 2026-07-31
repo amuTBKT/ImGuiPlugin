@@ -2,6 +2,7 @@
 
 #include "SImGuiWidgets.h"
 
+#include "Misc/App.h"
 #include "Widgets/SWindow.h"
 #include "Application/ThrottleManager.h"
 #include "Framework/Application/SlateApplication.h"

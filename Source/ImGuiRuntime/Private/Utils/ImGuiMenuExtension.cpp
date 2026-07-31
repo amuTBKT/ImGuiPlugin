@@ -1,6 +1,6 @@
 // Copyright 2024-26 Amit Kumar Mehar. All Rights Reserved.
 
-#if IMGUI_ALLOW_MENUBAR_EXTENSION
+#ifdef IMGUI_ALLOW_MENUBAR_EXTENSION
 
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -491,6 +491,35 @@ namespace ImGuiUtils
 
 			EndImGuiFrame();
 			m_bIsDockNodeValid = false;
+
+			// TODO: maybe move this to SImGuiWidgetBase? not sure this seems a bit hacky and not needed in general atm.
+			EVisibility CurrentVisibility = GetVisibility();
+			if (CurrentVisibility != EVisibility::Hidden)
+			{
+				if (GetImGuiContext()->IO.WantCaptureMouse)
+				{
+					SetVisibility(EVisibility::Visible);
+				}
+				else
+				{
+					SetVisibility(EVisibility::HitTestInvisible);
+				}
+
+				// we don't receive mouse position events when set to HitTestInvisible
+				if (CurrentVisibility == EVisibility::HitTestInvisible)
+				{
+					FVector2f MousePosition = FSlateApplication::Get().GetCursorPos();
+					if ((GetImGuiContext()->IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) == 0)
+					{
+						MousePosition = GetCachedGeometry().AbsoluteToLocal(MousePosition);
+					}
+					if (!LastMousePosition.Equals(MousePosition, 1.f))
+					{
+						LastMousePosition = MousePosition;
+						GetImGuiContext()->IO.AddMousePosEvent(MousePosition.X, MousePosition.Y);
+					}
+				}
+			}
 		}
 
 		void SetupDockNode()
@@ -527,7 +556,7 @@ namespace ImGuiUtils
 		TWeakPtr<SLevelViewport> m_LevelViewport;
 		TWeakPtr<SWidget> m_LevelViewportOverlayWidget;
 #endif
-
+		FVector2f LastMousePosition = FVector2f::ZeroVector;
 		TOptional<EVisibility> m_PendingVisibilityState;
 
 		// cached during tick for easier access
@@ -553,7 +582,10 @@ namespace ImGuiUtils
 					{
 						Slot.bIsActive = !Slot.bIsActive;
 					}
-					ImGui::SetItemTooltip(*Slot.ToolTip);
+					if (Slot.ToolTip.Len() > 0)
+					{
+						ImGui::SetItemTooltip(*Slot.ToolTip);
+					}
 				}
 
 				if (bWasSlotActive != Slot.bIsActive)
@@ -1279,7 +1311,7 @@ namespace ImGuiUtils
 	}
 }
 
-FImGuiTickContext* GetWidgetTickContextForWorld(const UWorld* World)
+FImGuiTickContext* GetMainMenuWidgetTickContextForWorld(const UWorld* World)
 {
 	return ImGuiUtils::MenuExtensionHandle ? ImGuiUtils::MenuExtensionHandle->GetWidgetTickContext(World) : nullptr;
 }
@@ -1426,4 +1458,4 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegiste
 
 #undef LOCTEXT_NAMESPACE
 
-#endif //#if IMGUI_ALLOW_MENUBAR_EXTENSION
+#endif //#ifdef IMGUI_ALLOW_MENUBAR_EXTENSION

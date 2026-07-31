@@ -319,7 +319,7 @@ void EndFrame(void)
 			if( imDrawData )
 			{
 				imDrawData->CmdLists.resize(0);
-				imDrawData->CmdListsCount = 0;
+				//imDrawData->CmdListsCount = 0; //[amu_mhr] CHANGE
 				imDrawData->TotalIdxCount = 0;
 				imDrawData->TotalVtxCount = 0;
 			}
