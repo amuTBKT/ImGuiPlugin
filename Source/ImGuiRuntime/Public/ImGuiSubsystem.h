@@ -102,6 +102,7 @@ public:
 #endif
 
 	void UpdateFontAtlasTexture(ImTextureData* TexData);
+	IMGUIRUNTIME_API void CommitSharedFontAtlasChanges();
 	IMGUIRUNTIME_API ImTextureRef GetSharedFontTextureID() const;
 	ImFontAtlas* GetSharedFontAtlas() const { return m_SharedFontAtlas.Get(); }
 

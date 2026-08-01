@@ -299,6 +299,11 @@ ImTextureRef UImGuiSubsystem::GetSharedFontTextureID() const
 	return m_SharedFontAtlas->TexRef;
 }
 
+void UImGuiSubsystem::CommitSharedFontAtlasChanges()
+{
+	ImFontAtlasUpdateNewFrame(m_SharedFontAtlas.Get(), ++m_FontAtlasBuilderFrameCount, true);
+}
+
 int32 UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
 {
 	static const FName FontTextureName = TEXT("ImGui_SharedFontTexture");
