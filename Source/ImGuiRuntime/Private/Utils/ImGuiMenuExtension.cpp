@@ -133,15 +133,15 @@ namespace ImGuiUtils
 				, WidgetFlags(InWidgetFlags)
 			{}
 
-			const char* GetName()			const { return *Path + SlotNameOffset; };
+			const char*							GetName()			const { return *Path + SlotNameOffset; };
 			bool								IsMenuItem()		const { return Storage.IsType<FOnTickImGuiWidgetDelegate>(); }
-			const FOnTickImGuiWidgetDelegate& GetTickDelegate()	const { check(IsMenuItem());  return Storage.Get<FOnTickImGuiWidgetDelegate>(); }
-			TArray<FWidgetSlot>& GetChildren() { check(!IsMenuItem()); return Storage.Get<TArray<FWidgetSlot>>(); }
-			const TArray<FWidgetSlot>& GetChildren()		const { check(!IsMenuItem()); return Storage.Get<TArray<FWidgetSlot>>(); }
+			const FOnTickImGuiWidgetDelegate&	GetTickDelegate()	const { check(IsMenuItem()); return Storage.Get<FOnTickImGuiWidgetDelegate>(); }
+			TArray<FWidgetSlot>&				GetChildren()			  { check(!IsMenuItem()); return Storage.Get<TArray<FWidgetSlot>>(); }
+			const TArray<FWidgetSlot>&			GetChildren()		const { check(!IsMenuItem()); return Storage.Get<TArray<FWidgetSlot>>(); }
 
-			bool operator==(const FAnsiStringView& Other)	const { return Other.Equals(*Path, ESearchCase::IgnoreCase); }
-			bool operator==(const FWidgetSlot& Other)		const { return FCStringAnsi::Stricmp(*Path, *Other.Path) == 0; }
-			bool operator<(const FWidgetSlot& Other)		const { return FCStringAnsi::Stricmp(*Path, *Other.Path) < 0; }
+			bool operator==(const FAnsiStringView& Other)			const { return Other.Equals(*Path, ESearchCase::IgnoreCase); }
+			bool operator==(const FWidgetSlot& Other)				const { return FCStringAnsi::Stricmp(*Path, *Other.Path) == 0; }
+			bool operator<(const FWidgetSlot& Other)				const { return FCStringAnsi::Stricmp(*Path, *Other.Path) < 0; }
 
 			FAnsiString Path;
 			FAnsiString ToolTip;
@@ -157,7 +157,7 @@ namespace ImGuiUtils
 		{
 			FAnsiString					WidgetPath;
 			FAnsiString					WidgetToolTip;
-			const FSlateBrush* WidgetIcon = nullptr;
+			const FSlateBrush*			WidgetIcon = nullptr;
 			FOnTickImGuiWidgetDelegate	TickDelegate;
 			EImGuiMainMenuWidgetFlags	WidgetFlags = EImGuiMainMenuWidgetFlags::None;
 
@@ -913,15 +913,15 @@ namespace ImGuiUtils
 
 			if (MainMenuWidget)
 			{
-				if (MainMenuWidget->GetVisibility() == EVisibility::Visible)
-				{
-					MainMenuWidget->HideWidget();
-					ImGuiFocusHandler::ResetFocus();
-				}
-				else
+				if (MainMenuWidget->GetVisibility() == EVisibility::Hidden)
 				{
 					MainMenuWidget->ShowWidget();
 					ImGuiFocusHandler::SetUIFocus();
+				}
+				else
+				{
+					MainMenuWidget->HideWidget();
+					ImGuiFocusHandler::ResetFocus();
 				}
 			}
 		}
@@ -977,15 +977,15 @@ namespace ImGuiUtils
 
 			if (MainMenuWidget)
 			{
-				if (MainMenuWidget->GetVisibility() == EVisibility::Visible)
-				{
-					MainMenuWidget->HideWidget();
-					ImGuiFocusHandler::ResetFocus();
-				}
-				else
+				if (MainMenuWidget->GetVisibility() == EVisibility::Hidden)
 				{
 					MainMenuWidget->ShowWidget();
 					ImGuiFocusHandler::SetUIFocus();
+				}
+				else
+				{
+					MainMenuWidget->HideWidget();
+					ImGuiFocusHandler::ResetFocus();
 				}
 			}
 		}
