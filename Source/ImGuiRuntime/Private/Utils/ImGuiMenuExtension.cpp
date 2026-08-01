@@ -480,7 +480,13 @@ namespace ImGuiUtils
 			// setting this before would mean nothing gets ticked and viewport windows will stay visible in unresponsive state
 			if (m_PendingVisibilityState.IsSet())
 			{
-				SetVisibility(m_PendingVisibilityState.GetValue());
+				EVisibility NewVisibility = m_PendingVisibilityState.GetValue();
+				if (NewVisibility != EVisibility::Hidden)
+				{
+					MenuBarAlpha = MenuBarVisibilityDuration;
+				}
+
+				SetVisibility(NewVisibility);
 				m_PendingVisibilityState.Reset();
 			}
 		}
@@ -556,6 +562,10 @@ namespace ImGuiUtils
 		TWeakPtr<SLevelViewport> m_LevelViewport;
 		TWeakPtr<SWidget> m_LevelViewportOverlayWidget;
 #endif
+		// TODO: hacky auto hiding menu bar (probably should use a curve or somethig? needs cleaning up at some point)
+		static constexpr float MenuBarVisibilityDuration = 4.f;
+		float MenuBarAlpha = MenuBarVisibilityDuration;
+
 		FVector2f LastMousePosition = FVector2f::ZeroVector;
 		TOptional<EVisibility> m_PendingVisibilityState;
 
@@ -745,10 +755,94 @@ namespace ImGuiUtils
 			else
 #endif
 			{
+				ImGuiViewport* MainViewport = ImGui::GetMainViewport();
+				ImVec2 MenuBarMin = MainViewport->Pos;
+				ImVec2 MenuBarMax = MenuBarMin + ImVec2(MainViewport->Size.x, ImGui::GetFrameHeight() * 0.5f);
+
+				bool bKeepMenuBarVisible = false;
+				if (ImGui::IsMouseHoveringRect(MenuBarMin, MenuBarMax, /*clip=*/false))
+				{
+					bKeepMenuBarVisible = true;
+				}
+				// make the menu visible when using Ctrl+Tab
+				if (GetImGuiContext()->NavWindowingTarget && FCStringAnsi::Strcmp(GetImGuiContext()->NavWindowingTarget->Name, "##MainMenuBar") == 0)
+				{
+					bKeepMenuBarVisible = true;
+				}
+
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, FMath::Min(1.f, MenuBarAlpha));
 				if (ImGui::BeginMainMenuBar())
 				{
 					RunMainMenuTickLogic();
+
+					auto IsAnyMenuItemActive = [&]()
+						{
+							bool bActive = false;
+							ImGuiWindow* CurrentWindow = ImGui::GetCurrentWindow();
+							ImGuiWindow* HoveredWindow = GetImGuiContext()->HoveredWindow;
+							ImGuiWindow* NavWindow = GetImGuiContext()->NavWindow;
+							ImGuiWindow* ActiveIdWindow = GetImGuiContext()->ActiveIdWindow;
+
+							// NOTE: this function will mostly likely be called when hovering the menus so check hovered windows first
+							ImGuiWindow* Window = HoveredWindow;
+							while (Window)
+							{
+								if (Window == CurrentWindow)
+								{
+									bActive = true;
+									break;
+								}
+								Window = Window->ParentWindow;
+							}
+
+							// check for nav window next (needed when using Ctrl+Tab)
+							if (!bActive && (HoveredWindow != NavWindow))
+							{
+								Window = NavWindow;
+								while (Window)
+								{
+									if (Window == CurrentWindow)
+									{
+										bActive = true;
+										break;
+									}
+									Window = Window->ParentWindow;
+								}
+							}
+
+							// check for active window next (needed to handle widgets like InputText)
+							if (!bActive && (NavWindow != ActiveIdWindow))
+							{
+								Window = ActiveIdWindow;
+								while (Window)
+								{
+									if (Window == CurrentWindow)
+									{
+										bActive = true;
+										break;
+									}
+									Window = Window->ParentWindow;
+								}
+							}
+							return bActive;
+						};
+
+					if (!bKeepMenuBarVisible && IsAnyMenuItemActive())
+					{
+						bKeepMenuBarVisible = true;
+					}
+
 					ImGui::EndMainMenuBar();
+				}
+				ImGui::PopStyleVar();
+
+				if (bKeepMenuBarVisible)
+				{
+					MenuBarAlpha = FMath::Min(MenuBarVisibilityDuration, MenuBarAlpha + ImGui::GetIO().DeltaTime * 16.f);
+				}
+				else
+				{
+					MenuBarAlpha = FMath::Max(0.f, MenuBarAlpha - ImGui::GetIO().DeltaTime * 4.f);
 				}
 			}
 
