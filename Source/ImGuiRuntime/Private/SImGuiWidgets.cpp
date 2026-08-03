@@ -296,6 +296,7 @@ void SImGuiWidgetBase::EndImGuiFrame()
 
 	if ((m_ImGuiContext->IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
 	{
+		ImGuiUtils::UnrealPlatform_UpdateWindow(ImGui::GetMainViewport());
 		ImGui::UpdatePlatformWindows();
 	}
 
@@ -331,8 +332,10 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 	ImGuiIO& IO = m_ImGuiContext->IO;
 
 	ImGui::Render();
+
 	if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
 	{
+		ImGuiUtils::UnrealPlatform_UpdateWindow(ImGui::GetMainViewport());
 		ImGui::UpdatePlatformWindows();
 	}
 

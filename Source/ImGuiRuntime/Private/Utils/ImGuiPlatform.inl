@@ -239,8 +239,17 @@ namespace ImGuiUtils
 	{
 		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin();
-			TSharedPtr<FGenericWindow> NativeWindow = ViewportWindow ? ViewportWindow->GetNativeWindow() : nullptr;
+			TSharedPtr<SWindow> Window;
+			if ((Viewport->Flags & ImGuiViewportFlags_OwnedByApp) > 0)
+			{
+				Window = ViewportData->ParentWindow.Pin();
+			}
+			else
+			{
+				Window = ViewportData->ViewportWindow.Pin();
+			}
+
+			TSharedPtr<FGenericWindow> NativeWindow = Window ? Window->GetNativeWindow() : nullptr;
 			if (NativeWindow)
 			{
 				NativeWindow->SetWindowFocus();
@@ -253,7 +262,6 @@ namespace ImGuiUtils
 	{
 		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
-			// Special handling for the main viewport
 			if ((Viewport->Flags & ImGuiViewportFlags_OwnedByApp) > 0)
 			{
 				TSharedPtr<SWindow> ViewportWindow = ViewportData->ParentWindow.Pin();
@@ -335,6 +343,14 @@ namespace ImGuiUtils
 					// TODO: this could potentially spam if a lot of windows are created on the same frame.
 					ViewportData->bFocusRequested = false;
 					FSlateApplication::Get().SetAllUserFocus(ViewportData->ViewportWidget, EFocusCause::SetDirectly);
+				}
+			}
+			else if (ViewportData->bFocusRequested)
+			{
+				ViewportData->bFocusRequested = false;
+				if (TSharedPtr<SImGuiWidgetBase> MainViewportWidget = ViewportData->MainViewportWidget.Pin())
+				{
+					FSlateApplication::Get().SetAllUserFocus(MainViewportWidget, EFocusCause::SetDirectly);
 				}
 			}
 		}
