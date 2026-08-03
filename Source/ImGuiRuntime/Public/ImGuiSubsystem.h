@@ -48,6 +48,7 @@ enum class EImGuiMainMenuWidgetFlags : uint8
 	None				= 0,
 	TickInMenuBar		= 1 << 0,	// allow ticking the widget in menu bar
 	SkipWindowCreation	= 1 << 1,	// widget callback handles window creation
+	RightAligned		= 1 << 2,	// draw the widget from right side of the window
 };
 ENUM_CLASS_FLAGS(EImGuiMainMenuWidgetFlags);
 

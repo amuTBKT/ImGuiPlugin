@@ -46,6 +46,54 @@ struct FImGuiTickContext
 	// updating the main menu bar
 	// TODO: is there a better way to detect if we are inside `BeginMainMenuBar`/`EndMainMenuBar` block?
 	bool bIsTickingMainMenuBar = false;
+	float MainMenuBar_Height = 0.f;
+	float MainMenuBar_RightDirOffsetX = 0.f;
+	float MainMenuBar_RightDirOffsetY = 0.f;
+	float MainMenuBar_RightDirCursorPosX = 0.f;
+
+	// this is different from `AddRightAlignedMainMenuBarWidget` as ImGui::BeginMenu has some custom logic to handle item spacing
+	bool AddRightAlignedMainMenuBarItem(const char* Label)
+	{
+		if (!ensure(bIsTickingMainMenuBar))
+		{
+			return false;
+		}
+
+		const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
+
+		float LabelSize = ImGui::CalcTextSize(Label, ImGui::FindRenderedTextEnd(Label), false).x;
+		LabelSize += ItemSpacing * 2.f - 1.f;
+		if (MainMenuBar_RightDirCursorPosX - LabelSize > MainMenuBar_RightDirOffsetX)
+		{
+			MainMenuBar_RightDirCursorPosX = MainMenuBar_RightDirCursorPosX - LabelSize;
+
+			ImGui::SetCursorPosX(MainMenuBar_RightDirCursorPosX + ItemSpacing - 1.f);
+			ImGui::SetCursorPosY(MainMenuBar_RightDirOffsetY);
+			return true;
+		}
+
+		return false;
+	}
+
+	bool AddRightAlignedMainMenuBarWidget(float RequestedWidth)
+	{
+		if (!ensure(bIsTickingMainMenuBar))
+		{
+			return false;
+		}
+
+		if (MainMenuBar_RightDirCursorPosX - RequestedWidth > MainMenuBar_RightDirOffsetX)
+		{
+			const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
+			MainMenuBar_RightDirCursorPosX = MainMenuBar_RightDirCursorPosX - RequestedWidth - ItemSpacing;
+
+			ImGui::SetCursorPosX(MainMenuBar_RightDirCursorPosX + ItemSpacing);
+			ImGui::SetCursorPosY(MainMenuBar_RightDirOffsetY);
+			return true;
+		}
+
+		return false;
+	}
 
 	TSharedPtr<FDragDropOperation> TryConsumeDragDropOperation()
 	{
@@ -266,6 +314,9 @@ struct FImGuiWidgetRegisterParams
 
 	// allow widget to customize menu bar item (only valid when adding widget to the main menu)
 	bool bTickInMenuBar = false;
+
+	// draw the widget from right side of the window
+	bool bRightAligned = false;
 
 	const char* GetWidetName() const
 	{

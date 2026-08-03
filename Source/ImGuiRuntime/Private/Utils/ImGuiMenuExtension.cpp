@@ -55,6 +55,11 @@ static TAutoConsoleVariable<bool> CVarAddImGuiWidgetToLevelViewport(
 	TEXT("This only applies for the Editor context, doesn't affect PIE or Game context."),
 	ECVF_ReadOnly);
 
+static TAutoConsoleVariable<bool> CVarAutoHideMainMenuBar(
+	TEXT("imgui.AutoHideMenuBar"),
+	true,
+	TEXT("Auto hide ImGui main menu bar"));
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define LOCTEXT_NAMESPACE "ImGuiPlugin"
@@ -118,10 +123,11 @@ namespace ImGuiUtils
 				int32 ItrOffset;
 			};
 
-			explicit FWidgetSlot(FAnsiString InPath)
+			explicit FWidgetSlot(FAnsiString InPath, EImGuiMainMenuWidgetFlags InWidgetFlags = EImGuiMainMenuWidgetFlags::None)
 				: Path(MoveTemp(InPath))
 				, Storage(TInPlaceType<TArray<FWidgetSlot>>(), TArray<FWidgetSlot>{})
 				, SlotNameOffset(Path.FindLastChar('.', SlotNameOffset) ? SlotNameOffset + 1 : 0)
+				, WidgetFlags(InWidgetFlags)
 			{}
 
 			explicit FWidgetSlot(FAnsiString InPath, FAnsiString InToolTip, const FSlateBrush* InIcon, FOnTickImGuiWidgetDelegate InTickDelegate, EImGuiMainMenuWidgetFlags InWidgetFlags)
@@ -135,6 +141,7 @@ namespace ImGuiUtils
 
 			const char*							GetName()			const { return *Path + SlotNameOffset; };
 			bool								IsMenuItem()		const { return Storage.IsType<FOnTickImGuiWidgetDelegate>(); }
+			bool								IsRightAligned()	const { return EnumHasAnyFlags(WidgetFlags, EImGuiMainMenuWidgetFlags::RightAligned); }
 			const FOnTickImGuiWidgetDelegate&	GetTickDelegate()	const { check(IsMenuItem()); return Storage.Get<FOnTickImGuiWidgetDelegate>(); }
 			TArray<FWidgetSlot>&				GetChildren()			  { check(!IsMenuItem()); return Storage.Get<TArray<FWidgetSlot>>(); }
 			const TArray<FWidgetSlot>&			GetChildren()		const { check(!IsMenuItem()); return Storage.Get<TArray<FWidgetSlot>>(); }
@@ -185,7 +192,7 @@ namespace ImGuiUtils
 			return &Container[InsertIndex];
 		}
 
-		TPair<EFindSlotResult, FWidgetSlot*> FindOrCreateSlot_Internal(FAnsiStringView Path, bool bCreateHierarchy)
+		TPair<EFindSlotResult, FWidgetSlot*> FindOrCreateSlot_Internal(FAnsiStringView Path, bool bCreateHierarchy, TOptional<EImGuiMainMenuWidgetFlags> Flags)
 		{
 			FWidgetSlot::FPathIterator PathItr{ Path };
 
@@ -200,7 +207,7 @@ namespace ImGuiUtils
 			{
 				if (bCreateHierarchy)
 				{
-					ParentSlot = AddSlotSorted(WidgetSlots, FWidgetSlot(FAnsiString(SubPath)));
+					ParentSlot = AddSlotSorted(WidgetSlots, FWidgetSlot(FAnsiString(SubPath), Flags.Get(EImGuiMainMenuWidgetFlags::None)));
 				}
 				else
 				{
@@ -211,6 +218,10 @@ namespace ImGuiUtils
 			{
 				ensureAlwaysMsgf(false, TEXT("Path(%hs) points to an active menu item (%hs)"), Path.GetData(), *ParentSlot->Path);
 				return { EFindSlotResult::ConflictingID, nullptr };
+			}
+			else if (Flags.IsSet() && ParentSlot->IsRightAligned() != (EnumHasAnyFlags(Flags.GetValue(), EImGuiMainMenuWidgetFlags::RightAligned)))
+			{
+				ensureAlwaysMsgf(false, TEXT("ParentSlot(%hs) was previously added using a different alignment, widget(%hs) will render incorrectly"), *ParentSlot->Path, Path.GetData());
 			}
 
 			while (PathItr)
@@ -245,11 +256,11 @@ namespace ImGuiUtils
 		}
 		FWidgetSlot* FindSlot(FAnsiStringView Path)
 		{
-			return FindOrCreateSlot_Internal(Path, /*bCreateHierarchy=*/false).Value;
+			return FindOrCreateSlot_Internal(Path, /*bCreateHierarchy=*/false, TOptional<EImGuiMainMenuWidgetFlags>{}).Value;
 		}
-		TPair<EFindSlotResult, FWidgetSlot*> FindOrCreateSlot(FAnsiStringView Path)
+		TPair<EFindSlotResult, FWidgetSlot*> FindOrCreateSlot(FAnsiStringView Path, EImGuiMainMenuWidgetFlags Flags)
 		{
-			return FindOrCreateSlot_Internal(Path, /*bCreateHierarchy=*/true);
+			return FindOrCreateSlot_Internal(Path, /*bCreateHierarchy=*/true, Flags);
 		}
 
 		void ProcessQueuedMainWidgetSlots()
@@ -285,7 +296,7 @@ namespace ImGuiUtils
 				return;
 			}
 
-			auto FoundSlot = FindOrCreateSlot(WidgetPath);
+			auto FoundSlot = FindOrCreateSlot(WidgetPath, WidgetFlags);
 			if (FWidgetSlot* ParentSlot = FoundSlot.Value)
 			{
 				if (ParentSlot->GetChildren().Contains(WidgetPath))
@@ -483,7 +494,7 @@ namespace ImGuiUtils
 				EVisibility NewVisibility = m_PendingVisibilityState.GetValue();
 				if (NewVisibility != EVisibility::Hidden)
 				{
-					MenuBarAlpha = MenuBarVisibilityDuration;
+					m_MenuBarAlpha = MenuBarVisibilityDuration;
 				}
 
 				SetVisibility(NewVisibility);
@@ -564,7 +575,7 @@ namespace ImGuiUtils
 #endif
 		// TODO: hacky auto hiding menu bar (probably should use a curve or somethig? needs cleaning up at some point)
 		static constexpr float MenuBarVisibilityDuration = 4.f;
-		float MenuBarAlpha = MenuBarVisibilityDuration;
+		float m_MenuBarAlpha = MenuBarVisibilityDuration;
 
 		FVector2f LastMousePosition = FVector2f::ZeroVector;
 		TOptional<EVisibility> m_PendingVisibilityState;
@@ -651,6 +662,29 @@ namespace ImGuiUtils
 			}
 		}
 
+		bool AddRightAlignedMainMenuBarItem(FImGuiTickContext* TickContext, const char* Label)
+		{
+			if (!ensure(TickContext->bIsTickingMainMenuBar))
+			{
+				return false;
+			}
+
+			float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
+
+			float LabelSize = ImGui::CalcTextSize(Label, ImGui::FindRenderedTextEnd(Label), false).x;
+			LabelSize += ItemSpacing * 2.f - 1.f;
+			if (TickContext->MainMenuBar_RightDirCursorPosX - LabelSize > TickContext->MainMenuBar_RightDirOffsetX)
+			{
+				TickContext->MainMenuBar_RightDirCursorPosX = TickContext->MainMenuBar_RightDirCursorPosX - LabelSize;
+
+				ImGui::SetCursorPosX(TickContext->MainMenuBar_RightDirCursorPosX + ItemSpacing - 1.f);
+				ImGui::SetCursorPosY(TickContext->MainMenuBar_RightDirOffsetY);
+				return true;
+			}
+
+			return false;
+		}
+
 		virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override
 		{
 			m_ImGuiSubsystem = UImGuiSubsystem::Get();
@@ -681,11 +715,16 @@ namespace ImGuiUtils
 
 			SetupDockNode();
 
-			auto RunMainMenuTickLogic = [&]()
+			auto RunMainMenuTickLogic = [&](bool bDrawRightAlignedItems)
 				{
 					TickContext->bIsTickingMainMenuBar = true;
+					TickContext->MainMenuBar_Height = ImGui::GetFrameHeight();
+
 					for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
 					{
+						if (Slot.IsRightAligned())
+							continue;
+
 						if (Slot.IsMenuItem())
 						{
 							Slot.GetTickDelegate().ExecuteIfBound(TickContext);
@@ -699,6 +738,43 @@ namespace ImGuiUtils
 							ImGui::EndMenu();
 						}
 					}
+
+					// draw right aligned menu items
+					if (bDrawRightAlignedItems)
+					{
+						TickContext->MainMenuBar_RightDirOffsetX = ImGui::GetCursorPosX();
+						TickContext->MainMenuBar_RightDirOffsetY = ImGui::GetCursorPosY();
+						TickContext->MainMenuBar_RightDirCursorPosX = ImGui::GetMainViewport()->WorkSize.x - ImGui::GetCurrentWindow()->DC.MenuBarOffset.x;
+
+						for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
+						{
+							if (!Slot.IsRightAligned())
+								continue;
+
+							if (Slot.IsMenuItem())
+							{
+								Slot.GetTickDelegate().ExecuteIfBound(TickContext);
+							}
+							else if (!Slot.GetChildren().IsEmpty())
+							{
+								if (!AddRightAlignedMainMenuBarItem(TickContext, Slot.GetName()))
+								{
+									// won't be able to add any more items
+									break;
+								}
+
+								if (ImGui::BeginMenu(Slot.GetName()))
+								{
+									for (auto& ChildSlot : Slot.GetChildren())
+									{
+										TickMainMenuBar(MenuContainer, ChildSlot, TickContext);
+									}
+									ImGui::EndMenu();
+								}
+							}
+						}
+					}
+
 					TickContext->bIsTickingMainMenuBar = false;
 				};
 
@@ -741,7 +817,7 @@ namespace ImGuiUtils
 								m_bOpenMenu = false;
 							}
 
-							RunMainMenuTickLogic();
+							RunMainMenuTickLogic(false);
 
 							if (bIsViewportToolbarHidden)
 							{
@@ -755,25 +831,28 @@ namespace ImGuiUtils
 			else
 #endif
 			{
-				ImGuiViewport* MainViewport = ImGui::GetMainViewport();
-				ImVec2 MenuBarMin = MainViewport->Pos;
-				ImVec2 MenuBarMax = MenuBarMin + ImVec2(MainViewport->Size.x, ImGui::GetFrameHeight() * 0.5f);
-
-				bool bKeepMenuBarVisible = false;
-				if (ImGui::IsMouseHoveringRect(MenuBarMin, MenuBarMax, /*clip=*/false))
+				bool bKeepMenuBarVisible = CVarAutoHideMainMenuBar.GetValueOnGameThread() == false;
+				if (!bKeepMenuBarVisible)
 				{
-					bKeepMenuBarVisible = true;
-				}
-				// make the menu visible when using Ctrl+Tab
-				if (GetImGuiContext()->NavWindowingTarget && FCStringAnsi::Strcmp(GetImGuiContext()->NavWindowingTarget->Name, "##MainMenuBar") == 0)
-				{
-					bKeepMenuBarVisible = true;
+					ImGuiViewport* MainViewport = ImGui::GetMainViewport();
+					ImVec2 MenuBarMin = MainViewport->Pos;
+					ImVec2 MenuBarMax = MenuBarMin + ImVec2(MainViewport->Size.x, ImGui::GetFrameHeight() * 0.5f);
+
+					if (ImGui::IsMouseHoveringRect(MenuBarMin, MenuBarMax, /*clip=*/false))
+					{
+						bKeepMenuBarVisible = true;
+					}
+					// make the menu visible when using Ctrl+Tab
+					if (GetImGuiContext()->NavWindowingTarget && FCStringAnsi::Strcmp(GetImGuiContext()->NavWindowingTarget->Name, "##MainMenuBar") == 0)
+					{
+						bKeepMenuBarVisible = true;
+					}
 				}
 
-				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, FMath::Min(1.f, MenuBarAlpha));
+				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, FMath::Min(1.f, m_MenuBarAlpha));
 				if (ImGui::BeginMainMenuBar())
 				{
-					RunMainMenuTickLogic();
+					RunMainMenuTickLogic(true);
 
 					auto IsAnyMenuItemActive = [&]()
 						{
@@ -796,7 +875,7 @@ namespace ImGuiUtils
 							}
 
 							// check for nav window next (needed when using Ctrl+Tab)
-							if (!bActive && (HoveredWindow != NavWindow))
+							if (!bActive && (HoveredWindow != NavWindow) && HasAnyUserFocus())
 							{
 								Window = NavWindow;
 								while (Window)
@@ -811,7 +890,7 @@ namespace ImGuiUtils
 							}
 
 							// check for active window next (needed to handle widgets like InputText)
-							if (!bActive && (NavWindow != ActiveIdWindow))
+							if (!bActive)
 							{
 								Window = ActiveIdWindow;
 								while (Window)
@@ -838,11 +917,11 @@ namespace ImGuiUtils
 
 				if (bKeepMenuBarVisible)
 				{
-					MenuBarAlpha = FMath::Min(MenuBarVisibilityDuration, MenuBarAlpha + ImGui::GetIO().DeltaTime * 16.f);
+					m_MenuBarAlpha = FMath::Min(MenuBarVisibilityDuration, m_MenuBarAlpha + ImGui::GetIO().DeltaTime * 16.f);
 				}
 				else
 				{
-					MenuBarAlpha = FMath::Max(0.f, MenuBarAlpha - ImGui::GetIO().DeltaTime * 4.f);
+					m_MenuBarAlpha = FMath::Max(0.f, m_MenuBarAlpha - ImGui::GetIO().DeltaTime * 4.f);
 				}
 			}
 
@@ -1470,6 +1549,10 @@ FAutoRegisterMainMenuWidget::FAutoRegisterMainMenuWidget(FImGuiWidgetRegisterPar
 	if (RegisterParams.bSkipWindowCreation)
 	{
 		WidgetFlags |= EImGuiMainMenuWidgetFlags::SkipWindowCreation;
+	}
+	if (RegisterParams.bRightAligned)
+	{
+		WidgetFlags |= EImGuiMainMenuWidgetFlags::RightAligned;
 	}
 
 	if (UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get())
