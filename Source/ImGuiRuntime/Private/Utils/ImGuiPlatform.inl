@@ -242,7 +242,9 @@ namespace ImGuiUtils
 			TSharedPtr<SWindow> Window;
 			if ((Viewport->Flags & ImGuiViewportFlags_OwnedByApp) > 0)
 			{
-				Window = ViewportData->ParentWindow.Pin();
+				// NOTE: updating Parent window is not ideal in package builds
+				// it tries to set the focus on gameviewport stealing mouse capture from ImGui widgets.
+				//Window = ViewportData->ParentWindow.Pin();
 			}
 			else
 			{
