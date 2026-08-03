@@ -89,7 +89,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 
-	if (InArgs._bEnableViewports && FSlateApplication::IsInitialized())
+	if (InArgs._bEnableViewports && FSlateApplication::IsInitialized() && FPlatformProperties::SupportsWindowedMode())
 	{
 		IO.ConfigFlags  |= ImGuiConfigFlags_ViewportsEnable;
 		IO.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;
@@ -134,25 +134,40 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 
 		FDisplayMetrics DisplayMetrics;
 		FDisplayMetrics::RebuildDisplayMetrics(DisplayMetrics);
-		for (const FMonitorInfo& MonitorInfo : DisplayMetrics.MonitorInfo)
+		if (DisplayMetrics.MonitorInfo.IsEmpty())
 		{
 			ImGuiPlatformMonitor ImguiMonitor;
-			ImguiMonitor.MainPos = ImVec2((float)MonitorInfo.DisplayRect.Left, (float)MonitorInfo.DisplayRect.Top);
-			ImguiMonitor.MainSize = ImVec2((float)(MonitorInfo.DisplayRect.Right - MonitorInfo.DisplayRect.Left),
-				(float)(MonitorInfo.DisplayRect.Bottom - MonitorInfo.DisplayRect.Top));
-			ImguiMonitor.WorkPos = ImVec2((float)MonitorInfo.WorkArea.Left, (float)MonitorInfo.WorkArea.Top);
-			ImguiMonitor.WorkSize = ImVec2((float)(MonitorInfo.WorkArea.Right - MonitorInfo.WorkArea.Left),
-				(float)(MonitorInfo.WorkArea.Bottom - MonitorInfo.WorkArea.Top));
-			ImguiMonitor.DpiScale = MonitorInfo.DPI / 96.f;
+			ImguiMonitor.MainPos = ImVec2(0.f, 0.f);
+			ImguiMonitor.MainSize = ImVec2(DisplayMetrics.PrimaryDisplayWidth, DisplayMetrics.PrimaryDisplayHeight);
+			ImguiMonitor.WorkPos = ImVec2(DisplayMetrics.PrimaryDisplayWorkAreaRect.Left, DisplayMetrics.PrimaryDisplayWorkAreaRect.Top);
+			ImguiMonitor.WorkSize = ImVec2(DisplayMetrics.PrimaryDisplayWorkAreaRect.Right - DisplayMetrics.PrimaryDisplayWorkAreaRect.Left, DisplayMetrics.PrimaryDisplayWorkAreaRect.Bottom - DisplayMetrics.PrimaryDisplayWorkAreaRect.Top);
+			ImguiMonitor.DpiScale = 1.f;
 			ImguiMonitor.PlatformHandle = nullptr;
 
-			if (MonitorInfo.bIsPrimary)
+			PlatformIO.Monitors.push_back(ImguiMonitor);
+		}
+		else
+		{
+			for (const FMonitorInfo& MonitorInfo : DisplayMetrics.MonitorInfo)
 			{
-				PlatformIO.Monitors.push_front(ImguiMonitor);
-			}
-			else
-			{
-				PlatformIO.Monitors.push_back(ImguiMonitor);
+				ImGuiPlatformMonitor ImguiMonitor;
+				ImguiMonitor.MainPos = ImVec2((float)MonitorInfo.DisplayRect.Left, (float)MonitorInfo.DisplayRect.Top);
+				ImguiMonitor.MainSize = ImVec2((float)(MonitorInfo.DisplayRect.Right - MonitorInfo.DisplayRect.Left),
+					(float)(MonitorInfo.DisplayRect.Bottom - MonitorInfo.DisplayRect.Top));
+				ImguiMonitor.WorkPos = ImVec2((float)MonitorInfo.WorkArea.Left, (float)MonitorInfo.WorkArea.Top);
+				ImguiMonitor.WorkSize = ImVec2((float)(MonitorInfo.WorkArea.Right - MonitorInfo.WorkArea.Left),
+					(float)(MonitorInfo.WorkArea.Bottom - MonitorInfo.WorkArea.Top));
+				ImguiMonitor.DpiScale = MonitorInfo.DPI / 96.f;
+				ImguiMonitor.PlatformHandle = nullptr;
+
+				if (MonitorInfo.bIsPrimary)
+				{
+					PlatformIO.Monitors.push_front(ImguiMonitor);
+				}
+				else
+				{
+					PlatformIO.Monitors.push_back(ImguiMonitor);
+				}
 			}
 		}
 

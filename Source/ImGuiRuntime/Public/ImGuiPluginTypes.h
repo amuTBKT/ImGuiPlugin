@@ -52,7 +52,7 @@ struct FImGuiTickContext
 	float MainMenuBar_RightDirCursorPosX = 0.f;
 
 	// this is different from `AddRightAlignedMainMenuBarWidget` as ImGui::BeginMenu has some custom logic to handle item spacing
-	bool AddRightAlignedMainMenuBarItem(const char* Label)
+	bool AllocateSpaceForRightAlignedMenuItem(const char* Label)
 	{
 		if (!ensure(bIsTickingMainMenuBar))
 		{
@@ -75,7 +75,7 @@ struct FImGuiTickContext
 		return false;
 	}
 
-	bool AddRightAlignedMainMenuBarWidget(float RequestedWidth)
+	bool AllocateSpaceForRightAlignedMenuWidget(float RequestedWidth)
 	{
 		if (!ensure(bIsTickingMainMenuBar))
 		{

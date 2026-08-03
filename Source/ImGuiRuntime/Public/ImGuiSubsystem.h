@@ -97,6 +97,12 @@ public:
 	IMGUIRUNTIME_API void RegisterMainMenuWidget(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
 		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None) const;
+	void RegisterMainMenuWidget(
+		const UWorld* World, const char* WidgetPath,
+		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None) const
+	{
+		RegisterMainMenuWidget(World, WidgetPath, "", nullptr, MoveTemp(TickDelegate), WidgetFlags);
+	}
 	IMGUIRUNTIME_API void UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath) const;
 	IMGUIRUNTIME_API bool* GetMainMenuWidgetActiveState(const UWorld* World, const char* WidgetPath) const;
 	IMGUIRUNTIME_API FImGuiTickContext* GetMainMenuWidgetTickContext(const UWorld* World) const;

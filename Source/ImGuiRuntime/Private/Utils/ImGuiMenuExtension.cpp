@@ -406,9 +406,11 @@ namespace ImGuiUtils
 		SLATE_BEGIN_ARGS(SImGuiMainMenuWidget)
 			: _MainViewportWindow(nullptr)
 			, _OwningWorld(nullptr)
+			, _AutoHideMenuBar(true)
 			{}
 			SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
 			SLATE_ARGUMENT(const UWorld*, OwningWorld);
+			SLATE_ARGUMENT(bool, AutoHideMenuBar);
 		SLATE_END_ARGS()
 
 		void Construct(const FArguments& InArgs)
@@ -429,7 +431,7 @@ namespace ImGuiUtils
 				.ConfigFileName(*ConfigFileName));
 
 			m_OwningWorld = InArgs._OwningWorld;
-
+			m_AutoHideMenuBar = InArgs._AutoHideMenuBar;
 			UImGuiSubsystem::OnBeginImGuiFrame.AddRaw(this, &SImGuiMainMenuWidget::BeginFrame);
 			UImGuiSubsystem::OnEndImGuiFrame.AddRaw(this, &SImGuiMainMenuWidget::EndFrame);
 		}
@@ -575,6 +577,7 @@ namespace ImGuiUtils
 #endif
 		// TODO: hacky auto hiding menu bar (probably should use a curve or somethig? needs cleaning up at some point)
 		static constexpr float MenuBarVisibilityDuration = 4.f;
+		bool m_AutoHideMenuBar = true;
 		float m_MenuBarAlpha = MenuBarVisibilityDuration;
 
 		FVector2f LastMousePosition = FVector2f::ZeroVector;
@@ -662,29 +665,6 @@ namespace ImGuiUtils
 			}
 		}
 
-		bool AddRightAlignedMainMenuBarItem(FImGuiTickContext* TickContext, const char* Label)
-		{
-			if (!ensure(TickContext->bIsTickingMainMenuBar))
-			{
-				return false;
-			}
-
-			float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
-
-			float LabelSize = ImGui::CalcTextSize(Label, ImGui::FindRenderedTextEnd(Label), false).x;
-			LabelSize += ItemSpacing * 2.f - 1.f;
-			if (TickContext->MainMenuBar_RightDirCursorPosX - LabelSize > TickContext->MainMenuBar_RightDirOffsetX)
-			{
-				TickContext->MainMenuBar_RightDirCursorPosX = TickContext->MainMenuBar_RightDirCursorPosX - LabelSize;
-
-				ImGui::SetCursorPosX(TickContext->MainMenuBar_RightDirCursorPosX + ItemSpacing - 1.f);
-				ImGui::SetCursorPosY(TickContext->MainMenuBar_RightDirOffsetY);
-				return true;
-			}
-
-			return false;
-		}
-
 		virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override
 		{
 			m_ImGuiSubsystem = UImGuiSubsystem::Get();
@@ -746,6 +726,11 @@ namespace ImGuiUtils
 						TickContext->MainMenuBar_RightDirOffsetY = ImGui::GetCursorPosY();
 						TickContext->MainMenuBar_RightDirCursorPosX = ImGui::GetMainViewport()->WorkSize.x - ImGui::GetCurrentWindow()->DC.MenuBarOffset.x;
 
+						if (TickContext->AllocateSpaceForRightAlignedMenuItem("Search"))
+						{
+							ImGui::MenuItem("Search");
+						}
+
 						for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
 						{
 							if (!Slot.IsRightAligned())
@@ -757,7 +742,7 @@ namespace ImGuiUtils
 							}
 							else if (!Slot.GetChildren().IsEmpty())
 							{
-								if (!AddRightAlignedMainMenuBarItem(TickContext, Slot.GetName()))
+								if (!TickContext->AllocateSpaceForRightAlignedMenuItem(Slot.GetName()))
 								{
 									// won't be able to add any more items
 									break;
@@ -831,7 +816,7 @@ namespace ImGuiUtils
 			else
 #endif
 			{
-				bool bKeepMenuBarVisible = CVarAutoHideMainMenuBar.GetValueOnGameThread() == false;
+				bool bKeepMenuBarVisible = !m_AutoHideMenuBar || (CVarAutoHideMainMenuBar.GetValueOnGameThread() == false);
 				if (!bKeepMenuBarVisible)
 				{
 					ImGuiViewport* MainViewport = ImGui::GetMainViewport();
@@ -956,6 +941,17 @@ namespace ImGuiUtils
 						.SetTooltipText(LOCTEXT("ImGuiMainTabTooltip", "Window hosting static ImGui widgets"))
 						.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"));
 				}
+
+				FEditorDelegates::EndPIE.AddLambda(
+					[this](bool bSimulating)
+					{
+						// make sure server window is closed (in case world teardown somehow misses it)
+						TSharedPtr<SWindow> Window = m_PIEDedicatedServerWindow.Pin();
+						if (Window)
+						{
+							Window->RequestDestroyWindow();
+						}
+					});
 			}
 
 			FWorldDelegates::OnWorldBeginTearDown.AddRaw(this, &FImGuiMenuExtension::OnWorldBeginTearDown);
@@ -987,6 +983,8 @@ namespace ImGuiUtils
 					PanelExtensionSubsystem->UnregisterPanelFactory(IMGUI_FNAME("LevelViewportToolBar.LeftExtension"), IMGUI_FNAME("ImGuiPlugin_Menu"));
 				}
 #endif
+
+				FEditorDelegates::EndPIE.RemoveAll(this);
 			}
 
 			if (FSlateApplication::IsInitialized())
@@ -1013,7 +1011,8 @@ namespace ImGuiUtils
 			check(CVarAddImGuiWidgetToLevelViewport.GetValueOnGameThread() == false);
 
 			TSharedPtr<SImGuiMainMenuWidget> MainMenuWidget = SNew(SImGuiMainMenuWidget)
-				.MainViewportWindow(SpawnTabArgs.GetOwnerWindow());
+				.MainViewportWindow(SpawnTabArgs.GetOwnerWindow())
+				.AutoHideMenuBar(false);
 			m_PrimaryContextWidget = MainMenuWidget;
 
 			return SNew(SDockTab)
@@ -1040,6 +1039,15 @@ namespace ImGuiUtils
 				if (Itr->GetWorld() == World)
 				{
 					Itr.RemoveCurrent();
+				}
+			}
+
+			if (World->GetNetMode() == NM_DedicatedServer)
+			{
+				TSharedPtr<SWindow> Window = m_PIEDedicatedServerWindow.Pin();
+				if (Window)
+				{
+					Window->RequestDestroyWindow();
 				}
 			}
 		}
@@ -1081,10 +1089,42 @@ namespace ImGuiUtils
 
 					ImGuiFocusHandler::SetUIFocus();
 				}
+				else if (World->GetNetMode() == NM_DedicatedServer)
+				{
+					TSharedPtr<SWindow> Window = m_PIEDedicatedServerWindow.Pin();
+					if (!Window)
+					{
+						Window = SNew(SWindow)
+							.Title(FText::FromString("Server"))
+							.ClientSize(FVector2f(512.f, 512.f))
+							.AutoCenter(EAutoCenter::PrimaryWorkArea)
+							.SupportsMaximize(true)
+							.SupportsMinimize(true)
+							.SizingRule(ESizingRule::UserSized);
+						FSlateApplication::Get().AddWindow(Window.ToSharedRef());
+						m_PIEDedicatedServerWindow = Window;
+					}
+					MainMenuWidget = SNew(SImGuiMainMenuWidget)
+						.MainViewportWindow(Window)
+						.OwningWorld(World)
+						.AutoHideMenuBar(false);
+					Window->SetContent(MainMenuWidget.ToSharedRef());
+					m_PIEContextWidgets.Add(MainMenuWidget);
+
+					ImGuiFocusHandler::SetUIFocus();
+				}
 				return;
 			}
 
-			if (MainMenuWidget)
+			if (World->GetNetMode() == NM_DedicatedServer)
+			{
+				TSharedPtr<SWindow> Window = m_PIEDedicatedServerWindow.Pin();
+				if (Window)
+				{
+					Window->RequestDestroyWindow();
+				}
+			}
+			else if (MainMenuWidget)
 			{
 				if (MainMenuWidget->GetVisibility() == EVisibility::Hidden)
 				{
@@ -1231,6 +1271,7 @@ namespace ImGuiUtils
 		TSharedPtr<FWorkspaceItem> m_ImGuiTabGroup;
 		TArray<FImGuiMenuContainer> m_MenuContainers;
 		TArray<TWeakPtr<SImGuiMainMenuWidget>> m_PIEContextWidgets;
+		TWeakPtr<SWindow> m_PIEDedicatedServerWindow;
 #else
 		FImGuiMenuContainer m_MenuContainer;
 #endif
