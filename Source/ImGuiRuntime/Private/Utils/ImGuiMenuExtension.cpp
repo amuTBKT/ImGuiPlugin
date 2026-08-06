@@ -3,7 +3,6 @@
 #ifdef IMGUI_ALLOW_MENUBAR_EXTENSION
 
 #include "Engine/World.h"
-#include "TimerManager.h"
 #include "Engine/Engine.h"
 #include "SImGuiWidgets.h"
 #include "ImGuiSubsystem.h"
@@ -13,7 +12,9 @@
 #include "HAL/IConsoleManager.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Engine/GameViewportClient.h"
+#include "Framework/Commands/InputChord.h"
 #include "Runtime/Launch/Resources/Version.h"
+#include "Framework/Application/IInputProcessor.h"
 #include "Framework/Application/SlateApplication.h"
 
 #if WITH_EDITOR
@@ -126,18 +127,34 @@ namespace ImGuiUtils
 			explicit FWidgetSlot(FAnsiString InPath, EImGuiMainMenuWidgetFlags InWidgetFlags = EImGuiMainMenuWidgetFlags::None)
 				: Path(MoveTemp(InPath))
 				, Storage(TInPlaceType<TArray<FWidgetSlot>>(), TArray<FWidgetSlot>{})
-				, SlotNameOffset(Path.FindLastChar('.', SlotNameOffset) ? SlotNameOffset + 1 : 0)
 				, WidgetFlags(InWidgetFlags)
-			{}
+			{
+				if (Path.FindLastChar('.', SlotNameOffset))
+				{
+					SlotNameOffset += 1;
+				}
+				else
+				{
+					SlotNameOffset = 0;
+				}
+			}
 
 			explicit FWidgetSlot(FAnsiString InPath, FAnsiString InToolTip, const FSlateBrush* InIcon, FOnTickImGuiWidgetDelegate InTickDelegate, EImGuiMainMenuWidgetFlags InWidgetFlags)
 				: Path(MoveTemp(InPath))
 				, ToolTip(MoveTemp(InToolTip))
 				, Icon(InIcon)
 				, Storage(TInPlaceType<FOnTickImGuiWidgetDelegate>(), MoveTemp(InTickDelegate))
-				, SlotNameOffset(Path.FindLastChar('.', SlotNameOffset) ? SlotNameOffset + 1 : 0)
 				, WidgetFlags(InWidgetFlags)
-			{}
+			{
+				if (Path.FindLastChar('.', SlotNameOffset))
+				{
+					SlotNameOffset += 1;
+				}
+				else
+				{
+					SlotNameOffset = 0;
+				}
+			}
 
 			const char*							GetName()			const { return *Path + SlotNameOffset; };
 			bool								IsMenuItem()		const { return Storage.IsType<FOnTickImGuiWidgetDelegate>(); }
@@ -515,11 +532,14 @@ namespace ImGuiUtils
 			EVisibility CurrentVisibility = GetVisibility();
 			if (CurrentVisibility != EVisibility::Hidden)
 			{
-				if (GetImGuiContext()->IO.WantCaptureMouse)
+				// give a few frames before disabling inputs (otherwise it just keeps flipping b/w the two states)
+				HitTestInvisibilityCounter += GetImGuiContext()->IO.WantCaptureMouse ? 4 : -1;
+				HitTestInvisibilityCounter = FMath::Clamp(HitTestInvisibilityCounter, -4, 4);
+				if (HitTestInvisibilityCounter == 4)
 				{
 					SetVisibility(EVisibility::Visible);
 				}
-				else
+				else if (HitTestInvisibilityCounter == -4)
 				{
 					SetVisibility(EVisibility::HitTestInvisible);
 				}
@@ -580,6 +600,7 @@ namespace ImGuiUtils
 		bool m_AutoHideMenuBar = true;
 		float m_MenuBarAlpha = MenuBarVisibilityDuration;
 
+		int32 HitTestInvisibilityCounter = 0;
 		FVector2f LastMousePosition = FVector2f::ZeroVector;
 		TOptional<EVisibility> m_PendingVisibilityState;
 
@@ -816,7 +837,7 @@ namespace ImGuiUtils
 			else
 #endif
 			{
-				bool bKeepMenuBarVisible = !m_AutoHideMenuBar || (CVarAutoHideMainMenuBar.GetValueOnGameThread() == false);
+				bool bKeepMenuBarVisible = TickContext->bIsDrawingRemotely || !m_AutoHideMenuBar || (CVarAutoHideMainMenuBar.GetValueOnGameThread() == false);
 				if (!bKeepMenuBarVisible)
 				{
 					ImGuiViewport* MainViewport = ImGui::GetMainViewport();
@@ -922,7 +943,7 @@ namespace ImGuiUtils
 		}
 	};
 
-	struct FImGuiMenuExtension
+	struct FImGuiMenuExtension : public IInputProcessor
 	{
 		FImGuiMenuExtension()
 		{
@@ -962,13 +983,23 @@ namespace ImGuiUtils
 				FConsoleCommandWithWorldDelegate::CreateRaw(this, &FImGuiMenuExtension::TogglePIEImGuiContext));
 
 #else
-			UGameViewportClient::OnViewportCreated().AddRaw(this, &FImGuiMenuExtension::OnViewportCreated);
-
 			m_OpenImGuiMenuCommand = MakeUnique<FAutoConsoleCommandWithWorld>(
 				TEXT("imgui.ToggleMenu"),
 				TEXT("Toggles ImGui menu."),
 				FConsoleCommandWithWorldDelegate::CreateRaw(this, &FImGuiMenuExtension::TogglePrimaryImGuiContext));
 #endif
+
+			FString RawChordString;
+			if (GConfig && GConfig->GetString(TEXT("ImGuiPlugin"), TEXT("ToggleMenuKeyChord"), RawChordString, GInputIni))
+			{
+				UScriptStruct* StructReflection = FInputChord::StaticStruct();
+				StructReflection->ImportText(*RawChordString, &ToggleMenuKeyChord, nullptr, EPropertyPortFlags::PPF_None, nullptr, FInputChord::StaticStruct()->GetName(), true);
+			}
+			if (GConfig && GConfig->GetString(TEXT("ImGuiPlugin"), TEXT("SetFocusKeyChord"), RawChordString, GInputIni))
+			{
+				UScriptStruct* StructReflection = FInputChord::StaticStruct();
+				StructReflection->ImportText(*RawChordString, &SetFocusKeyChord, nullptr, EPropertyPortFlags::PPF_None, nullptr, FInputChord::StaticStruct()->GetName(), true);
+			}
 		}
 		~FImGuiMenuExtension()
 		{
@@ -995,10 +1026,69 @@ namespace ImGuiUtils
 #endif
 			m_PrimaryContextWidget.Reset();
 
-			UGameViewportClient::OnViewportCreated().RemoveAll(this);
-
 			m_OpenImGuiMenuCommand.Reset();
 		}
+
+		virtual void Tick(const float DeltaTime, FSlateApplication& SlateApp, TSharedRef<ICursor> Cursor) override
+		{
+
+		}
+		virtual bool HandleKeyDownEvent(FSlateApplication& SlateApp, const FKeyEvent& InKeyEvent) override
+		{
+			if (!GEngine)
+			{
+				return false;
+			}
+
+			auto IsEventBoundToKey = [](const FKeyEvent& KeyEvent, const FInputChord& InputChord) -> bool
+				{
+					if (KeyEvent.GetKey() != InputChord.Key)
+						return false;
+
+					const uint8 KeyEventModifierState =
+						((uint8)KeyEvent.IsControlDown() << 0) | ((uint8)KeyEvent.IsShiftDown() << 1) | ((uint8)KeyEvent.IsAltDown() << 2) | ((uint8)KeyEvent.IsCommandDown() << 3);
+					const uint8 InputChordModifierState =
+						((uint8)InputChord.NeedsControl() << 0) | ((uint8)InputChord.NeedsShift() << 1) | ((uint8)InputChord.NeedsAlt() << 2) | ((uint8)InputChord.NeedsCommand() << 3);
+
+					return KeyEventModifierState == InputChordModifierState;
+				};
+
+			if (IsEventBoundToKey(InKeyEvent, SetFocusKeyChord))
+			{
+				ImGuiFocusHandler::SetUIFocus();
+			}
+
+			if (IsEventBoundToKey(InKeyEvent, ToggleMenuKeyChord))
+			{
+#if WITH_EDITOR
+				TSharedPtr<SWidget> FocusedWidget = SlateApp.GetUserFocusedWidget(InKeyEvent.GetUserIndex());
+				if (FocusedWidget.IsValid())
+				{
+					TSharedPtr<SWindow> WidgetWindow = SlateApp.FindWidgetWindow(FocusedWidget.ToSharedRef());
+					// find the PIE world associated with the widget window
+					for (const FWorldContext& Context : GEngine->GetWorldContexts())
+					{
+						UGameViewportClient* ViewportClient = Context.GameViewport;
+						if (IsValid(ViewportClient) && ViewportClient->GetWindow() == WidgetWindow)
+						{
+							TogglePIEImGuiContext(ViewportClient->GetWorld());
+							return true;
+						}
+					}
+				}
+#else
+				UGameViewportClient* GameViewport = GEngine->GameViewport;
+				if (IsValid(GameViewport))
+				{
+					TogglePrimaryImGuiContext(GameViewport->GetWorld());
+					return true;
+				}
+#endif
+			}
+
+			return false;
+		}
+		virtual const TCHAR* GetDebugName() const { return TEXT("ImGuiMenuExtension"); }
 
 #if WITH_EDITOR
 		TSharedRef<FWorkspaceItem> GetImGuiTabGroup()
@@ -1036,7 +1126,8 @@ namespace ImGuiUtils
 
 			for (auto Itr = m_MenuContainers.CreateIterator(); Itr; ++Itr)
 			{
-				if (Itr->GetWorld() == World)
+				const UWorld* MenuContainerWorld = Itr->GetWorld();
+				if (!MenuContainerWorld || MenuContainerWorld == World)
 				{
 					Itr.RemoveCurrent();
 				}
@@ -1060,7 +1151,7 @@ namespace ImGuiUtils
 				return;
 			}
 
-			if (!World->IsGameWorld())
+			if (!World || !World->IsGameWorld())
 			{
 				return;
 			}
@@ -1136,30 +1227,6 @@ namespace ImGuiUtils
 					MainMenuWidget->HideWidget();
 					ImGuiFocusHandler::ResetFocus();
 				}
-			}
-		}
-#else
-		void OnViewportCreated()
-		{
-			UGameViewportClient* GameViewport = GEngine->GameViewport;
-			if (IsValid(GameViewport))
-			{
-				GameViewport->OnInputKey().AddRaw(this, &FImGuiMenuExtension::HandleViewportInputKeyEvent);
-			}
-		}
-
-		void HandleViewportInputKeyEvent(const FInputKeyEventArgs& EventArgs)
-		{
-			if (EventArgs.Event != EInputEvent::IE_Pressed)
-			{
-				return;
-			}
-
-			FModifierKeysState KeyState = FSlateApplication::Get().GetModifierKeys();
-			// take focus from viewport client and show the mouse cursor (similar to pressing Shift+F1 during PIE)
-			if (EventArgs.Key == EKeys::F1 && KeyState.IsShiftDown())
-			{
-				ImGuiFocusHandler::SetUIFocus();
 			}
 		}
 #endif //#if WITH_EDITOR
@@ -1270,20 +1337,23 @@ namespace ImGuiUtils
 #if WITH_EDITOR
 		TSharedPtr<FWorkspaceItem> m_ImGuiTabGroup;
 		TArray<FImGuiMenuContainer> m_MenuContainers;
-		TArray<TWeakPtr<SImGuiMainMenuWidget>> m_PIEContextWidgets;
 		TWeakPtr<SWindow> m_PIEDedicatedServerWindow;
+		TArray<TWeakPtr<SImGuiMainMenuWidget>> m_PIEContextWidgets;
 #else
 		FImGuiMenuContainer m_MenuContainer;
 #endif
 		// Editor/Game context widget
 		TWeakPtr<SImGuiMainMenuWidget> m_PrimaryContextWidget;
 
-		// Keep the widget around when running headless (no windows around to keep the widget alive)
+		// Keep the widget pinned when running headless (no windows around to keep the widget alive)
 		TSharedPtr<SImGuiMainMenuWidget> m_PinnedPrimaryContextWidget;
 
 		TUniquePtr<FAutoConsoleCommandWithWorld> m_OpenImGuiMenuCommand = nullptr;
+
+		FInputChord ToggleMenuKeyChord;
+		FInputChord SetFocusKeyChord;
 	};
-	static TUniquePtr<FImGuiMenuExtension> MenuExtensionHandle = nullptr;
+	static TSharedPtr<FImGuiMenuExtension> MenuExtensionHandle = nullptr;
 
 	FImGuiMenuContainer& GetMenuContainerForWorld(const UWorld* World)
 	{
@@ -1516,7 +1586,12 @@ namespace ImGuiUtils
 
 	void RegisterMenuExtensions()
 	{
-		MenuExtensionHandle = MakeUnique<FImGuiMenuExtension>();
+		MenuExtensionHandle = MakeShared<FImGuiMenuExtension>();
+		if (FSlateApplication::IsInitialized() &&
+			(MenuExtensionHandle->ToggleMenuKeyChord.IsValidChord() || MenuExtensionHandle->SetFocusKeyChord.IsValidChord()))
+		{
+			FSlateApplication::Get().RegisterInputPreProcessor(MenuExtensionHandle);
+		}
 	}
 
 	void UnregisterMenuExtensions()
