@@ -11,9 +11,14 @@ public class ImGui : ModuleRules
 
 		PublicDefinitions.Add("WITH_IMGUI=1");
 
-		if (Target.Type != TargetType.Editor && Target.Type != TargetType.Program)
+		if (Target.bCompileAgainstEngine && Target.Type != TargetType.Editor && Target.Type != TargetType.Program)
 		{
 			PublicDefinitions.Add("WITH_NET_IMGUI=1");
+			PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/net_imgui"));
+
+			// use unreal socket
+			PrivateDefinitions.Add("NETIMGUI_WINSOCKET_ENABLED=0");
+			PrivateDefinitions.Add("NETIMGUI_POSIX_SOCKETS_ENABLED=0");
 		}
 
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui"));

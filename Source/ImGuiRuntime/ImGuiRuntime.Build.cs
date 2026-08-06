@@ -49,6 +49,8 @@ public class ImGuiRuntime : ModuleRules
 		{
 			AddEngineThirdPartyPrivateStaticDependencies(Target, "FreeType2", "UElibPNG", "zlib");
 		}
+		AddEngineThirdPartyPrivateStaticDependencies(Target, "Nanosvg");
+
 		PublicDependencyModuleNames.Add("ImGui");
 
 		if (Target.bBuildEditor)

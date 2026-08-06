@@ -76,13 +76,7 @@ namespace ImGuiUtils
 			m_DrawRectOffset = DrawRectOffset;
 
 			UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
-			for (ImTextureData* TexData : *DrawData->Textures)
-			{
-				if (TexData->Status != ImTextureStatus_OK)
-				{
-					ImGuiSubsystem->UpdateFontAtlasTexture(TexData);
-				}
-			}
+			ImGuiSubsystem->UpdateFontAtlasTextures(DrawData->Textures->Data, DrawData->Textures->Size);
 			m_BoundTextureResources.Reset(ImGuiSubsystem->GetOneFrameResources().Num());
 
 			m_bHasDrawCommands = DrawData->TotalVtxCount > 0 &&
@@ -402,13 +396,7 @@ namespace ImGuiUtils
 			m_DrawRectOffset = DrawRectOffset;
 
 			UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
-			for (ImTextureData* TexData : *DrawData->Textures)
-			{
-				if (TexData->Status != ImTextureStatus_OK)
-				{
-					ImGuiSubsystem->UpdateFontAtlasTexture(TexData);
-				}
-			}
+			ImGuiSubsystem->UpdateFontAtlasTextures(DrawData->Textures->Data, DrawData->Textures->Size);
 
 			m_bHasDrawCommands = DrawData->TotalVtxCount > 0 &&
 				DrawData->TotalIdxCount > 0 &&

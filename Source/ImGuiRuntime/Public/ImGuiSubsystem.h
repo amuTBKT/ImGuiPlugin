@@ -17,6 +17,11 @@ class FSlateShaderResource;
 class UTextureRenderTarget2D;
 class FSlateShaderResourceProxy;
 
+namespace ImGuiUtils
+{
+	class FImGuiVectorGraphicsCache;
+}
+
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
 
 class FImGuiTextureResource
@@ -108,7 +113,7 @@ public:
 	IMGUIRUNTIME_API FImGuiTickContext* GetMainMenuWidgetTickContext(const UWorld* World) const;
 #endif
 
-	void UpdateFontAtlasTexture(ImTextureData* TexData);
+	void UpdateFontAtlasTextures(ImTextureData** Textures, int32 TextureCount);
 	IMGUIRUNTIME_API void CommitSharedFontAtlasChanges();
 	IMGUIRUNTIME_API ImTextureRef GetSharedFontTextureID() const;
 	ImFontAtlas* GetSharedFontAtlas() const { return m_SharedFontAtlas.Get(); }
@@ -124,6 +129,7 @@ private:
 	void BeginImGuiFrame();
 	void EndImGuiFrame();
 
+	void UpdateFontAtlasTexture(ImTextureData* TexData);
 	int32 AllocateFontAtlasTexture(int32 SizeX, int32 SizeY);
 	void ReleaseFontAtlasTexture(int32 Index);
 
@@ -148,6 +154,7 @@ private:
 
 	int32 m_FontAtlasBuilderFrameCount = 0;
 	TSharedPtr<ImFontAtlas, ESPMode::NotThreadSafe> m_SharedFontAtlas;
+	TUniquePtr<ImGuiUtils::FImGuiVectorGraphicsCache> m_VectorGraphicsCache;
 
 	FImGuiImageBindingParams m_MissingImageParams = {};
 	static constexpr uint32 MissingImageTextureIndex = 0u;

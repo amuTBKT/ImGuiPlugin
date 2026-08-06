@@ -182,7 +182,9 @@ struct FImGuiImageBindingParams
 	ImVec2 Size = ImVec2(1.f, 1.f);
 	ImVec2 UV0 = ImVec2(0.f, 0.f);
 	ImVec2 UV1 = ImVec2(1.f, 1.f);
-	ImTextureID Id = ImTextureID_Invalid;
+	ImTextureRef Id;
+
+	ImTextureID GetTexID() const { return Id.GetTexID(); }
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -203,7 +205,7 @@ namespace FImGui
 
 		ImGui::SameLine();
 		ImGui::SetCursorPosX(CursorPosX);
-		if (Icon.Id != ImTextureID_Invalid)
+		if (Icon.GetTexID() != ImTextureID_Invalid)
 		{
 			ImGui::Image(Icon.Id, Icon.Size, Icon.UV0, Icon.UV1);
 		}

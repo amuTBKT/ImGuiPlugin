@@ -10,6 +10,7 @@
 #include "Misc/EngineVersion.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Brushes/SlateDynamicImageBrush.h"
+#include "Utils/ImGuiVectorGraphicsCache.h"
 #include "Framework/Application/SlateApplication.h"
 
 #if WITH_ENGINE
@@ -128,8 +129,10 @@ void UImGuiSubsystem::Initialize()
 		IFileManager::Get().MakeDirectory(UTF8_TO_TCHAR(*m_IniDirectoryPath), true);
 	}
 
-	// NOTE: Add reference to make sure ImGuiContext destructor cannot release the font atlas
+	// NOTE: Add reference to make sure ImGuiContext cannot release the font atlas
 	m_SharedFontAtlas = MakeShared<ImFontAtlas, ESPMode::NotThreadSafe>();
+	m_SharedFontAtlas->TexMinWidth  = 512;
+	m_SharedFontAtlas->TexMinHeight = 512;
 	m_SharedFontAtlas->RefCount = 1;
 #if WITH_FREETYPE
 	if (CVarEnableFreeType.GetValueOnAnyThread())
@@ -141,6 +144,12 @@ void UImGuiSubsystem::Initialize()
 	{
 		m_SharedFontAtlas->AddFontDefaultBitmap();
 	}
+
+#ifdef WITH_NET_IMGUI
+	// SVG cache which writes directly into ImGuiFontAtlas
+	// allows showing vector FSlateBrush on NetImGui server (would be nice to support image brushes too but no idea how)
+	m_VectorGraphicsCache = MakeUnique<ImGuiUtils::FImGuiVectorGraphicsCache>(m_SharedFontAtlas);
+#endif
 
 	// upto 8 shared font textures at a time (to account for repacking)
 	// when spammed ImGui can cycle through a lot of atlases (most I encountered was 5)
@@ -161,6 +170,8 @@ void UImGuiSubsystem::Initialize()
 
 void UImGuiSubsystem::Deinitialize()
 {
+	m_VectorGraphicsCache.Reset();
+
 	// ensure all widgets have released the shared font reference (all slate widgets should be destroyed at this point)
 	check(m_SharedFontAtlas->RefCount == 1);
 	m_SharedFontAtlas = nullptr;
@@ -268,7 +279,7 @@ void UImGuiSubsystem::BeginImGuiFrame()
 	ImFontAtlasUpdateNewFrame(m_SharedFontAtlas.Get(), ++m_FontAtlasBuilderFrameCount, true);
 
 	m_MissingImageParams = RegisterOneFrameResource(m_MissingImageBrush.Get());
-	check(MissingImageTextureIndex == ImGuiIDToIndex(m_MissingImageParams.Id));
+	check(MissingImageTextureIndex == ImGuiIDToIndex(m_MissingImageParams.GetTexID()));
 
 	// register all font altases
 	for (const FImGuiFontTextureEntry& TextureEntry : m_SharedFontAtlasTextures)
@@ -285,6 +296,11 @@ void UImGuiSubsystem::BeginImGuiFrame()
 	}
 
 	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);
+
+	if (m_VectorGraphicsCache)
+	{
+		m_VectorGraphicsCache->OnBeginFrame();
+	}
 
 	OnBeginImGuiFrame.Broadcast();
 }
@@ -351,6 +367,23 @@ void UImGuiSubsystem::ReleaseFontAtlasTexture(int32 Index)
 {
 	// TODO: maybe add some logic to release unused textures after a few frames
 	m_SharedFontAtlasTextures[Index].bInUse = false;
+}
+
+void UImGuiSubsystem::UpdateFontAtlasTextures(ImTextureData** Textures, int32 TextureCount)
+{
+	if (m_VectorGraphicsCache)
+	{
+		m_VectorGraphicsCache->RasterizeImages();
+	}
+
+	for (int32 TextureIndex = 0; TextureIndex < TextureCount; ++TextureIndex)
+	{
+		ImTextureData* TexData = Textures[TextureIndex];
+		if (TexData->Status != ImTextureStatus_OK)
+		{
+			UpdateFontAtlasTexture(TexData);
+		}
+	}
 }
 
 void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
@@ -430,7 +463,17 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 {
 	FImGuiImageBindingParams Params{};
 	Params.Size = ImVec2(LocalSize.X, LocalSize.Y) * DrawScale;
-	if (SlateBrush && FApp::CanEverRender())
+	if (!SlateBrush)
+	{
+		return Params;
+	}
+
+	if (SlateBrush->GetImageType() == ESlateBrushImageType::Vector && m_VectorGraphicsCache)
+	{
+		return m_VectorGraphicsCache->GetOrLoadBrush(*SlateBrush, LocalSize, DrawScale);
+	}
+
+	if (FApp::CanEverRender())
 	{
 		const FSlateResourceHandle& ResourceHandle = SlateBrush->GetRenderingResource(LocalSize, DrawScale);
 		const FSlateShaderResourceProxy* Proxy = ResourceHandle.GetResourceProxy();

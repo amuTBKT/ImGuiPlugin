@@ -15,7 +15,7 @@
 
 #ifdef WITH_NET_IMGUI
 #define NETIMGUI_IMPLEMENTATION
-#include "net_imgui/NetImgui_Api.h"
+#include "NetImgui_Api.h"
 
 static TAutoConsoleVariable<int32> CVarNetImGuiPort(
 	TEXT("imgui.NetImGuiPort"),
@@ -88,6 +88,8 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	IO.BackendFlags |= ImGuiBackendFlags_HasSetMousePos;
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+	IO.BackendPlatformName = "Unreal Engine";
+	IO.BackendRendererName = "Unreal Engine";
 
 	if (InArgs._bEnableViewports && FSlateApplication::IsInitialized() && FPlatformProperties::SupportsWindowedMode())
 	{
@@ -295,13 +297,7 @@ void SImGuiWidgetBase::EndImGuiFrame()
 
 		// just need to update the textures here.
 		UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
-		for (ImTextureData* TexData : *ImGui::GetDrawData()->Textures)
-		{
-			if (TexData->Status != ImTextureStatus_OK)
-			{
-				ImGuiSubsystem->UpdateFontAtlasTexture(TexData);
-			}
-		}
+		ImGuiSubsystem->UpdateFontAtlasTextures(ImGui::GetDrawData()->Textures->Data, ImGui::GetDrawData()->Textures->Size);
 	}
 	else
 	{
