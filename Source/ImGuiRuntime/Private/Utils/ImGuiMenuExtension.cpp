@@ -391,10 +391,17 @@ namespace ImGuiUtils
 			OwningWorld = World;
 			if (World)
 			{
-				int32 PIEInstanceId = World->GetOutermost()->GetPIEInstanceID();
-				if (PIEInstanceId != INDEX_NONE)
+				if (World->GetNetMode() == NM_DedicatedServer)
 				{
-					SaveDataSectionName = FString::Printf(TEXT("MainMenuBar_%i"), PIEInstanceId);
+					SaveDataSectionName = "MainMenuBar_Server";
+				}
+				else
+				{
+					int32 PIEInstanceId = World->GetOutermost()->GetPIEInstanceID();
+					if (PIEInstanceId != INDEX_NONE)
+					{
+						SaveDataSectionName = FString::Printf(TEXT("MainMenuBar_%i"), PIEInstanceId);
+					}
 				}
 			}
 		}
@@ -404,6 +411,8 @@ namespace ImGuiUtils
 
 #if WITH_EDITOR
 		FString						 SaveDataSectionName = TEXT("MainMenuBar_Editor");
+#elif UE_SERVER
+		FString						 SaveDataSectionName = TEXT("MainMenuBar_Server");
 #else
 		FString						 SaveDataSectionName = TEXT("MainMenuBar_Game");
 #endif
@@ -432,14 +441,27 @@ namespace ImGuiUtils
 
 		void Construct(const FArguments& InArgs)
 		{
+			const UWorld* World = InArgs._OwningWorld;
+
 			FAnsiString ConfigFileName = "ImGui";
-			if (InArgs._OwningWorld)
+			if (World)
 			{
-				int32 PIEInstanceId = InArgs._OwningWorld->GetOutermost()->GetPIEInstanceID();
-				if (PIEInstanceId != INDEX_NONE)
+				if (World->GetNetMode() == NM_DedicatedServer)
 				{
-					ConfigFileName = FAnsiString::Printf("ImGui_%i", PIEInstanceId);
+					ConfigFileName = "ImGui_Server";
 				}
+				else
+				{
+					int32 PIEInstanceId = World->GetOutermost()->GetPIEInstanceID();
+					if (PIEInstanceId != INDEX_NONE)
+					{
+						ConfigFileName = FAnsiString::Printf("ImGui_%i", PIEInstanceId);
+					}
+				}
+			}
+			else if (IsRunningDedicatedServer())
+			{
+				ConfigFileName = "ImGui_Server";
 			}
 
 			Super::Construct(
@@ -447,7 +469,7 @@ namespace ImGuiUtils
 				.MainViewportWindow(InArgs._MainViewportWindow)
 				.ConfigFileName(*ConfigFileName));
 
-			m_OwningWorld = InArgs._OwningWorld;
+			m_OwningWorld = World;
 			m_AutoHideMenuBar = InArgs._AutoHideMenuBar;
 			UImGuiSubsystem::OnBeginImGuiFrame.AddRaw(this, &SImGuiMainMenuWidget::BeginFrame);
 			UImGuiSubsystem::OnEndImGuiFrame.AddRaw(this, &SImGuiMainMenuWidget::EndFrame);
@@ -528,34 +550,37 @@ namespace ImGuiUtils
 			EndImGuiFrame();
 			m_bIsDockNodeValid = false;
 
-			// TODO: maybe move this to SImGuiWidgetBase? not sure this seems a bit hacky and not needed in general atm.
-			EVisibility CurrentVisibility = GetVisibility();
-			if (CurrentVisibility != EVisibility::Hidden)
+			if (FSlateApplication::IsInitialized())
 			{
-				// give a few frames before disabling inputs (otherwise it just keeps flipping b/w the two states)
-				HitTestInvisibilityCounter += GetImGuiContext()->IO.WantCaptureMouse ? 4 : -1;
-				HitTestInvisibilityCounter = FMath::Clamp(HitTestInvisibilityCounter, -4, 4);
-				if (HitTestInvisibilityCounter == 4)
+				// TODO: maybe move this to SImGuiWidgetBase? not sure this seems a bit hacky and not needed in general atm.
+				EVisibility CurrentVisibility = GetVisibility();
+				if (CurrentVisibility != EVisibility::Hidden)
 				{
-					SetVisibility(EVisibility::Visible);
-				}
-				else if (HitTestInvisibilityCounter == -4)
-				{
-					SetVisibility(EVisibility::HitTestInvisible);
-				}
-
-				// we don't receive mouse position events when set to HitTestInvisible
-				if (CurrentVisibility == EVisibility::HitTestInvisible)
-				{
-					FVector2f MousePosition = FSlateApplication::Get().GetCursorPos();
-					if ((GetImGuiContext()->IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) == 0)
+					// give a few frames before disabling inputs (otherwise it just keeps flipping b/w the two states)
+					HitTestInvisibilityCounter += GetImGuiContext()->IO.WantCaptureMouse ? 4 : -1;
+					HitTestInvisibilityCounter = FMath::Clamp(HitTestInvisibilityCounter, -4, 4);
+					if (HitTestInvisibilityCounter == 4)
 					{
-						MousePosition = GetCachedGeometry().AbsoluteToLocal(MousePosition);
+						SetVisibility(EVisibility::Visible);
 					}
-					if (!LastMousePosition.Equals(MousePosition, 1.f))
+					else if (HitTestInvisibilityCounter == -4)
 					{
-						LastMousePosition = MousePosition;
-						GetImGuiContext()->IO.AddMousePosEvent(MousePosition.X, MousePosition.Y);
+						SetVisibility(EVisibility::HitTestInvisible);
+					}
+
+					// we don't receive mouse position events when set to HitTestInvisible
+					if (CurrentVisibility == EVisibility::HitTestInvisible)
+					{
+						FVector2f MousePosition = FSlateApplication::Get().GetCursorPos();
+						if ((GetImGuiContext()->IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) == 0)
+						{
+							MousePosition = GetCachedGeometry().AbsoluteToLocal(MousePosition);
+						}
+						if (!LastMousePosition.Equals(MousePosition, 1.f))
+						{
+							LastMousePosition = MousePosition;
+							GetImGuiContext()->IO.AddMousePosEvent(MousePosition.X, MousePosition.Y);
+						}
 					}
 				}
 			}
@@ -837,7 +862,7 @@ namespace ImGuiUtils
 			else
 #endif
 			{
-				bool bKeepMenuBarVisible = TickContext->bIsDrawingRemotely || !m_AutoHideMenuBar || (CVarAutoHideMainMenuBar.GetValueOnGameThread() == false);
+				bool bKeepMenuBarVisible = (!FSlateApplication::IsInitialized() || TickContext->bIsDrawingRemotely) || !m_AutoHideMenuBar || (CVarAutoHideMainMenuBar.GetValueOnGameThread() == false);
 				if (!bKeepMenuBarVisible)
 				{
 					ImGuiViewport* MainViewport = ImGui::GetMainViewport();
