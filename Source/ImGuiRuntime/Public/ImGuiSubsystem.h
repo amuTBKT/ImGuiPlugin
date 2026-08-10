@@ -88,7 +88,7 @@ public:
 	// resources
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2f LocalSize, float DrawScale = 1.f);
 	FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, float UniformSize) { return RegisterOneFrameResource(SlateBrush, FVector2f(UniformSize)); }
-	FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush) { return RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f); }
+	FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush) { return SlateBrush ? RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f) : FImGuiImageBindingParams(); }
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource);
 #if WITH_ENGINE
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(UTexture2D* Texture);
