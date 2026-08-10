@@ -18,6 +18,7 @@ public class ImGuiRuntime : ModuleRules
 				"InputCore",
 				"RenderCore",
 				"CoreUObject",
+				"ImageWrapper",
 				"ApplicationCore",
 			});
 

@@ -9,8 +9,8 @@
 #include "RenderingThread.h"
 #include "Misc/EngineVersion.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Utils/ImGuiImageCache.h"
 #include "Brushes/SlateDynamicImageBrush.h"
-#include "Utils/ImGuiVectorGraphicsCache.h"
 #include "Framework/Application/SlateApplication.h"
 
 #if WITH_ENGINE
@@ -146,9 +146,9 @@ void UImGuiSubsystem::Initialize()
 	}
 
 #ifdef WITH_NET_IMGUI
-	// SVG cache which writes directly into ImGuiFontAtlas
-	// allows showing vector FSlateBrush on NetImGui server (would be nice to support image brushes too but no idea how)
-	m_VectorGraphicsCache = MakeUnique<ImGuiUtils::FImGuiVectorGraphicsCache>(m_SharedFontAtlas);
+	// Slate brush cache which writes directly into ImGuiFontAtlas
+	// allows showing FSlateBrush on NetImGui server
+	m_ImageCache = MakeUnique<ImGuiUtils::FImGuiImageCache>(m_SharedFontAtlas);
 #endif
 
 	// upto 8 shared font textures at a time (to account for repacking)
@@ -170,7 +170,9 @@ void UImGuiSubsystem::Initialize()
 
 void UImGuiSubsystem::Deinitialize()
 {
-	m_VectorGraphicsCache.Reset();
+#ifdef WITH_NET_IMGUI
+	m_ImageCache.Reset();
+#endif
 
 	// ensure all widgets have released the shared font reference (all slate widgets should be destroyed at this point)
 	check(m_SharedFontAtlas->RefCount == 1);
@@ -297,10 +299,12 @@ void UImGuiSubsystem::BeginImGuiFrame()
 
 	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);
 
-	if (m_VectorGraphicsCache)
+#ifdef WITH_NET_IMGUI
+	if (m_ImageCache)
 	{
-		m_VectorGraphicsCache->OnBeginFrame();
+		m_ImageCache->OnBeginFrame();
 	}
+#endif
 
 	OnBeginImGuiFrame.Broadcast();
 }
@@ -371,11 +375,6 @@ void UImGuiSubsystem::ReleaseFontAtlasTexture(int32 Index)
 
 void UImGuiSubsystem::UpdateFontAtlasTextures(ImTextureData** Textures, int32 TextureCount)
 {
-	if (m_VectorGraphicsCache)
-	{
-		m_VectorGraphicsCache->RasterizeImages();
-	}
-
 	for (int32 TextureIndex = 0; TextureIndex < TextureCount; ++TextureIndex)
 	{
 		ImTextureData* TexData = Textures[TextureIndex];
@@ -468,10 +467,18 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 		return Params;
 	}
 
-	if (SlateBrush->GetImageType() == ESlateBrushImageType::Vector && m_VectorGraphicsCache)
+	const bool bIsValidImageBrush = (SlateBrush->GetImageType() != ESlateBrushImageType::NoImage) || ::IsValid(SlateBrush->GetResourceObject());
+	if (!ensureMsgf(bIsValidImageBrush, TEXT("Prefer primitive drawing for colored slate brushes.")))
 	{
-		return m_VectorGraphicsCache->GetOrLoadBrush(*SlateBrush, LocalSize, DrawScale);
+		return Params;
 	}
+
+#ifdef WITH_NET_IMGUI
+	if (m_ImageCache && ImGuiUtils::FImGuiImageCache::CanLoadBrush(*SlateBrush))
+	{
+		return m_ImageCache->GetOrLoadBrush(*SlateBrush, LocalSize, DrawScale);
+	}
+#endif
 
 	if (FApp::CanEverRender())
 	{
@@ -502,15 +509,6 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 		}
 	}
 	return Params;
-}
-
-FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush)
-{
-	if (!SlateBrush)
-	{
-		return {};
-	}
-	return RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f);
 }
 
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource)

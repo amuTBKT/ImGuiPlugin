@@ -19,7 +19,7 @@ class FSlateShaderResourceProxy;
 
 namespace ImGuiUtils
 {
-	class FImGuiVectorGraphicsCache;
+	class FImGuiImageCache;
 }
 
 DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
@@ -87,8 +87,8 @@ public:
 
 	// resources
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2f LocalSize, float DrawScale = 1.f);
-	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, float UniformSize) { return RegisterOneFrameResource(SlateBrush, FVector2f(UniformSize)); }
-	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush);
+	FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, float UniformSize) { return RegisterOneFrameResource(SlateBrush, FVector2f(UniformSize)); }
+	FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush) { return RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f); }
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource);
 #if WITH_ENGINE
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(UTexture2D* Texture);
@@ -154,7 +154,7 @@ private:
 
 	int32 m_FontAtlasBuilderFrameCount = 0;
 	TSharedPtr<ImFontAtlas, ESPMode::NotThreadSafe> m_SharedFontAtlas;
-	TUniquePtr<ImGuiUtils::FImGuiVectorGraphicsCache> m_VectorGraphicsCache;
+	TUniquePtr<ImGuiUtils::FImGuiImageCache> m_ImageCache;
 
 	FImGuiImageBindingParams m_MissingImageParams = {};
 	static constexpr uint32 MissingImageTextureIndex = 0u;
