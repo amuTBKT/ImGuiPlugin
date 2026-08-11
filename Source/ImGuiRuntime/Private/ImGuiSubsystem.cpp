@@ -10,7 +10,6 @@
 #include "Misc/EngineVersion.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Utils/ImGuiImageCache.h"
-#include "Brushes/SlateDynamicImageBrush.h"
 #include "Framework/Application/SlateApplication.h"
 
 #if WITH_ENGINE
@@ -155,10 +154,6 @@ void UImGuiSubsystem::Initialize()
 	// when spammed ImGui can cycle through a lot of atlases (most I encountered was 5)
 	m_SharedFontAtlasTextures.SetNum(8);
 
-	uint32 MagentaColor = FColor::Magenta.DWColor();
-	m_MissingImageBrush = FSlateDynamicImageBrush::CreateWithImageData(FName("ImGui_MissingImage"), FVector2D(1, 1), TArray((uint8*)&MagentaColor, sizeof(MagentaColor)));
-	static_assert(ImTextureID_Invalid == MissingImageTextureIndex);
-
 	OnSubsystemInitialized.Broadcast(this);
 
 	// first frame setup
@@ -280,9 +275,6 @@ void UImGuiSubsystem::BeginImGuiFrame()
 	// queue font updates
 	ImFontAtlasUpdateNewFrame(m_SharedFontAtlas.Get(), ++m_FontAtlasBuilderFrameCount, true);
 
-	m_MissingImageParams = RegisterOneFrameResource(m_MissingImageBrush.Get());
-	check(MissingImageTextureIndex == ImGuiIDToIndex(m_MissingImageParams.GetTexID()));
-
 	// register all font altases
 	for (const FImGuiFontTextureEntry& TextureEntry : m_SharedFontAtlasTextures)
 	{
@@ -354,7 +346,7 @@ int32 UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
 
 					m_SharedFontAtlasTextures[TextureIndex].BrushTexture = Texture;
 					m_SharedFontAtlasTextures[TextureIndex].Brush->SetResourceObject(Texture);
-					m_OneFrameResources[FontAtlasTextureStartIndex + TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].Brush->GetRenderingResource() };
+					m_OneFrameResources[TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].Brush->GetRenderingResource() };
 				}
 			}
 #endif
@@ -395,14 +387,14 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 		if (TexData->Status == ImTextureStatus_WantCreate)
 		{
 			check(TexData->BytesPerPixel == GPixelFormats[PF_R8G8B8A8].BlockBytes);
-			TexData->SetTexID(AllocateFontAtlasTexture(FontAtlasWidth, FontAtlasHeight) + FontAtlasTextureStartIndex);
+			TexData->SetTexID(AllocateFontAtlasTexture(FontAtlasWidth, FontAtlasHeight));
 		}
 
 #if IMGUI_ALLOW_LOCAL_DRAWING
 		if (FSlateApplication::IsInitialized())
 		{
 #if WITH_ENGINE
-			UTextureRenderTarget2D* AtlasTexture = (UTextureRenderTarget2D*)m_SharedFontAtlasTextures[ImGuiIDToIndex(TexData->GetTexID()) - FontAtlasTextureStartIndex].Brush->GetResourceObject();
+			UTextureRenderTarget2D* AtlasTexture = (UTextureRenderTarget2D*)m_SharedFontAtlasTextures[ImGuiIDToIndex(TexData->GetTexID())].Brush->GetResourceObject();
 
 			bool bReuploadTexture = (TexData->Status == ImTextureStatus_WantCreate);
 			if (AtlasTexture->SizeX != FontAtlasWidth || AtlasTexture->SizeY != FontAtlasHeight)
@@ -430,11 +422,11 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 			static const FName FontTextureName = TEXT("ImGui_SharedFontTexture");
 			static int32 FontTextureNameCounter = 0;
 
-			int32 TextureIndex = (ImGuiIDToIndex(TexData->GetTexID()) - FontAtlasTextureStartIndex);
+			int32 TextureIndex = ImGuiIDToIndex(TexData->GetTexID());
 			m_SharedFontAtlasTextures[TextureIndex].Brush = FSlateDynamicImageBrush::CreateWithImageData(FName(FontTextureName, ++FontTextureNameCounter),
 				FVector2D(FontAtlasWidth, FontAtlasHeight),
 				TArray((uint8*)TexData->GetPixelsAt(0, 0), FontAtlasWidth * FontAtlasHeight * TexData->BytesPerPixel));
-			m_OneFrameResources[FontAtlasTextureStartIndex + TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].Brush->GetRenderingResource() };
+			m_OneFrameResources[TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].Brush->GetRenderingResource() };
 #endif
 		}
 #endif //#if IMGUI_ALLOW_LOCAL_DRAWING
@@ -446,7 +438,7 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 		// latest shared font texture data should never be destroyed!
 		check(TexData != m_SharedFontAtlas->TexData);
 
-		ReleaseFontAtlasTexture(ImGuiIDToIndex(TexData->GetTexID()) - FontAtlasTextureStartIndex);
+		ReleaseFontAtlasTexture(ImGuiIDToIndex(TexData->GetTexID()));
 
 		TexData->SetStatus(ImTextureStatus_Destroyed);
 		TexData->SetTexID(ImTextureID_Invalid);

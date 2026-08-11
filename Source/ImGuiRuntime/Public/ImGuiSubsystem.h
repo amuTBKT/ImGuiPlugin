@@ -120,8 +120,6 @@ public:
 
 	static ImTextureID	IndexToImGuiID(uint32 Index)	{ return static_cast<ImTextureID>(Index); }
 	static uint32		ImGuiIDToIndex(ImTextureID ID)  { return static_cast<uint32>(ID); }
-	static ImTextureID	GetMissingImageTextureID()		{ return MissingImageTextureIndex; }
-	static uint32		GetMissingImageTextureIndex()	{ return ImGuiIDToIndex(MissingImageTextureIndex); }
 
 	bool CaptureGpuFrame() const;
 
@@ -150,15 +148,10 @@ private:
 		bool bInUse = false;
 	};
 	TArray<FImGuiFontTextureEntry> m_SharedFontAtlasTextures;
-	TSharedPtr<FSlateBrush> m_MissingImageBrush = nullptr;
 
 	int32 m_FontAtlasBuilderFrameCount = 0;
 	TSharedPtr<ImFontAtlas, ESPMode::NotThreadSafe> m_SharedFontAtlas;
 	TUniquePtr<ImGuiUtils::FImGuiImageCache> m_ImageCache;
-
-	FImGuiImageBindingParams m_MissingImageParams = {};
-	static constexpr uint32 MissingImageTextureIndex = 0u;
-	static constexpr uint32 FontAtlasTextureStartIndex = MissingImageTextureIndex + 1u;
 
 	TArray<FSlateBrush> m_OneFrameSlateBrushes;
 	TArray<FImGuiTextureResource> m_OneFrameResources;

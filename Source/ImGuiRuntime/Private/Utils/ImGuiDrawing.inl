@@ -199,6 +199,10 @@ namespace ImGuiUtils
 						}
 					}
 
+					auto& FallbackTexture = m_BoundTextures.AddDefaulted_GetRef();
+					FallbackTexture.TextureRHI = GWhiteTexture->TextureRHI;
+					FallbackTexture.SamplerRHI = TStaticSamplerState<SF_Point>::GetRHI();
+
 #if ((ENGINE_MAJOR_VERSION * 100u + ENGINE_MINOR_VERSION) > 505) //(Version > 5.5)
 					FRHIBufferCreateDesc VertexBufferDesc =
 						FRHIBufferCreateDesc::CreateVertex<ImDrawVert>(TEXT("ImGui_VertexBuffer"), DrawData->TotalVtxCount)
@@ -339,7 +343,7 @@ namespace ImGuiUtils
 									uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
 									if (!(m_BoundTextures.IsValidIndex(TextureIndex)/* && RenderData.BoundTextures[Index].IsValid()*/))
 									{
-										TextureIndex = UImGuiSubsystem::GetMissingImageTextureIndex();
+										TextureIndex = m_BoundTextures.Num() - 1;
 									}
 
 									SetShaderParametersLegacyVS(
@@ -470,11 +474,14 @@ namespace ImGuiUtils
 					OutDrawElements.PushClip(FSlateClippingZone{ TransformRect(WidgetTransform, ClippingRect) });
 					{
 						uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
-						if (!TextureResources.IsValidIndex(TextureIndex))
+						if (TextureResources.IsValidIndex(TextureIndex))
 						{
-							TextureIndex = UImGuiSubsystem::GetMissingImageTextureIndex();
+							FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, TextureResources[TextureIndex].GetResourceHandle(), SlateVertices, SlateIndices, nullptr, 0, 0);
 						}
-						FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, TextureResources[TextureIndex].GetResourceHandle(), SlateVertices, SlateIndices, nullptr, 0, 0);
+						else
+						{
+							FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, FSlateResourceHandle(), SlateVertices, SlateIndices, nullptr, 0, 0);
+						}
 					}
 					OutDrawElements.PopClip();
 				}

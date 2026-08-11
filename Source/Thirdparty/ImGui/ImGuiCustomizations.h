@@ -52,6 +52,8 @@ IMGUI_UNREAL_API uint64 ImFileWrite(const void* Data, uint64 Size, uint64 Count,
 #endif
 //-------------------- Config Customization --------------------//
 
+#define ImTextureID_Invalid ((ImTextureID)-1)
+
 //-------------------- DrawCallback Customization --------------------//
 // TODO: it is unsafe to switch render targets/graphics stage (using compute shaders) in the callback.
 // Since the widget is rendered using RenderPass, would have to wrap the callback inside End/Begin render pass stages.
