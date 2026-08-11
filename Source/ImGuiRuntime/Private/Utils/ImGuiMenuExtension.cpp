@@ -601,7 +601,7 @@ namespace ImGuiUtils
 #endif
 				{
 					const bool bIsEditorContext = GIsEditor && !GetWorld();
-					ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), bIsEditorContext ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_PassthruCentralNode);
+					MainViewportDockSpaceId = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), bIsEditorContext ? ImGuiDockNodeFlags_None : ImGuiDockNodeFlags_PassthruCentralNode);
 				}
 			}
 		}
@@ -625,6 +625,7 @@ namespace ImGuiUtils
 		bool m_AutoHideMenuBar = true;
 		float m_MenuBarAlpha = MenuBarVisibilityDuration;
 
+		ImGuiID MainViewportDockSpaceId = 0;
 		int32 HitTestInvisibilityCounter = 0;
 		FVector2f LastMousePosition = FVector2f::ZeroVector;
 		TOptional<EVisibility> m_PendingVisibilityState;
@@ -656,7 +657,7 @@ namespace ImGuiUtils
 					}
 					if (Slot.ToolTip.Len() > 0)
 					{
-						ImGui::SetItemTooltip(*Slot.ToolTip);
+						ImGui::SetItemTooltip("%s", *Slot.ToolTip);
 					}
 				}
 
@@ -867,6 +868,13 @@ namespace ImGuiUtils
 #endif
 			{
 				bool bKeepMenuBarVisible = (!FSlateApplication::IsInitialized() || TickContext->bIsDrawingRemotely) || !m_AutoHideMenuBar || (CVarAutoHideMainMenuBar.GetValueOnGameThread() == false);
+				if (ImGuiDockNode* DockNode = ImGui::DockBuilderGetNode(MainViewportDockSpaceId))
+				{
+					if (DockNode->ChildNodes[0]->Windows.Size > 0 || DockNode->ChildNodes[1]->Windows.Size > 0)
+					{
+						bKeepMenuBarVisible = true;
+					}
+				}
 				if (!bKeepMenuBarVisible)
 				{
 					ImGuiViewport* MainViewport = ImGui::GetMainViewport();
