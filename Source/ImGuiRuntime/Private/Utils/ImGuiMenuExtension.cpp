@@ -1167,7 +1167,7 @@ namespace ImGuiUtils
 				}
 			}
 
-			for (auto Itr = m_MenuContainers.CreateIterator(); Itr; ++Itr)
+			for (auto Itr = m_PIEMenuContainers.CreateIterator(); Itr; ++Itr)
 			{
 				const UWorld* MenuContainerWorld = Itr->GetWorld();
 				if (!MenuContainerWorld || MenuContainerWorld == World)
@@ -1316,7 +1316,12 @@ namespace ImGuiUtils
 		FImGuiMenuContainer& GetMenuContainer(const UWorld* World)
 		{
 #if WITH_EDITOR
-			for (auto Itr = m_MenuContainers.CreateIterator(); Itr; ++Itr)
+			if (!World)
+			{
+				return m_PrimaryContextMenuContainer;
+			}
+
+			for (auto Itr = m_PIEMenuContainers.CreateIterator(); Itr; ++Itr)
 			{
 				if (Itr->GetWorld() == World)
 				{
@@ -1325,9 +1330,9 @@ namespace ImGuiUtils
 			}
 			FImGuiMenuContainer NewContainer = {};
 			NewContainer.SetWorld(World);
-			return m_MenuContainers.Add_GetRef(MoveTemp(NewContainer));
+			return m_PIEMenuContainers.Add_GetRef(MoveTemp(NewContainer));
 #else
-			return m_MenuContainer;
+			return m_PrimaryContextMenuContainer;
 #endif
 		}
 
@@ -1379,14 +1384,14 @@ namespace ImGuiUtils
 
 #if WITH_EDITOR
 		TSharedPtr<FWorkspaceItem> m_ImGuiTabGroup;
-		TArray<FImGuiMenuContainer> m_MenuContainers;
+		TArray<FImGuiMenuContainer> m_PIEMenuContainers;
 		TWeakPtr<SWindow> m_PIEDedicatedServerWindow;
 		TArray<TWeakPtr<SImGuiMainMenuWidget>> m_PIEContextWidgets;
-#else
-		FImGuiMenuContainer m_MenuContainer;
 #endif
+
 		// Editor/Game context widget
 		TWeakPtr<SImGuiMainMenuWidget> m_PrimaryContextWidget;
+		FImGuiMenuContainer m_PrimaryContextMenuContainer;
 
 		// Keep the widget pinned when running headless (no windows around to keep the widget alive)
 		TSharedPtr<SImGuiMainMenuWidget> m_PinnedPrimaryContextWidget;
