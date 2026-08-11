@@ -45,16 +45,19 @@ struct FImGuiTickContext
 
 	// updating the main menu bar
 	// TODO: is there a better way to detect if we are inside `BeginMainMenuBar`/`EndMainMenuBar` block?
-	bool bIsTickingMainMenuBar = false;
+	bool  MainMenuBar_bIsTicking = false;
 	float MainMenuBar_Height = 0.f;
 	float MainMenuBar_RightDirOffsetX = 0.f;
 	float MainMenuBar_RightDirOffsetY = 0.f;
 	float MainMenuBar_RightDirCursorPosX = 0.f;
 
-	// this is different from `AddRightAlignedMainMenuBarWidget` as ImGui::BeginMenu has some custom logic to handle item spacing
+	// allow callback to modify enabled state (alternative to UImGuiSubsystem::GetMainMenuWidgetActiveState(...))
+	bool* MainMenuBar_CurrentItemEnabledState = nullptr;
+
+	// this is different from `AllocateSpaceForRightAlignedMenuWidget` as ImGui::BeginMenu has some custom logic to handle item spacing
 	bool AllocateSpaceForRightAlignedMenuItem(const char* Label)
 	{
-		if (!ensure(bIsTickingMainMenuBar))
+		if (!ensure(MainMenuBar_bIsTicking))
 		{
 			return false;
 		}
@@ -77,7 +80,7 @@ struct FImGuiTickContext
 
 	bool AllocateSpaceForRightAlignedMenuWidget(float RequestedWidth)
 	{
-		if (!ensure(bIsTickingMainMenuBar))
+		if (!ensure(MainMenuBar_bIsTicking))
 		{
 			return false;
 		}

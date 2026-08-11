@@ -643,7 +643,9 @@ namespace ImGuiUtils
 
 				if (EnumHasAnyFlags(Slot.WidgetFlags, EImGuiMainMenuWidgetFlags::TickInMenuBar))
 				{
+					TickContext->MainMenuBar_CurrentItemEnabledState = &Slot.bIsActive;
 					Slot.GetTickDelegate().ExecuteIfBound(TickContext);
+					TickContext->MainMenuBar_CurrentItemEnabledState = nullptr;
 				}
 				else
 				{
@@ -743,7 +745,7 @@ namespace ImGuiUtils
 
 			auto RunMainMenuTickLogic = [&](bool bDrawRightAlignedItems)
 				{
-					TickContext->bIsTickingMainMenuBar = true;
+					TickContext->MainMenuBar_bIsTicking = true;
 					TickContext->MainMenuBar_Height = ImGui::GetFrameHeight();
 
 					for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
@@ -753,7 +755,9 @@ namespace ImGuiUtils
 
 						if (Slot.IsMenuItem())
 						{
+							TickContext->MainMenuBar_CurrentItemEnabledState = &Slot.bIsActive;
 							Slot.GetTickDelegate().ExecuteIfBound(TickContext);
+							TickContext->MainMenuBar_CurrentItemEnabledState = nullptr;
 						}
 						else if (!Slot.GetChildren().IsEmpty() && ImGui::BeginMenu(Slot.GetName()))
 						{
@@ -806,7 +810,7 @@ namespace ImGuiUtils
 						}
 					}
 
-					TickContext->bIsTickingMainMenuBar = false;
+					TickContext->MainMenuBar_bIsTicking = false;
 				};
 
 #if WITH_EDITOR
