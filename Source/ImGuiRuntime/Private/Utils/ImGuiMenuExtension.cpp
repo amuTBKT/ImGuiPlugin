@@ -714,6 +714,12 @@ namespace ImGuiUtils
 			}
 		}
 
+		static bool HasAnyDockedWindow(ImGuiDockNode* Node)
+		{
+			if (!Node) return false;
+			if (Node->Windows.Size > 0) return true;
+			return HasAnyDockedWindow(Node->ChildNodes[0]) || HasAnyDockedWindow(Node->ChildNodes[1]);
+		}
 		virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override
 		{
 			m_ImGuiSubsystem = UImGuiSubsystem::Get();
@@ -868,9 +874,9 @@ namespace ImGuiUtils
 #endif
 			{
 				bool bKeepMenuBarVisible = (!FSlateApplication::IsInitialized() || TickContext->bIsDrawingRemotely) || !m_AutoHideMenuBar || (CVarAutoHideMainMenuBar.GetValueOnGameThread() == false);
-				if (ImGuiDockNode* DockNode = ImGui::DockBuilderGetNode(MainViewportDockSpaceId))
+				if (ImGuiDockNode* DockNode = bKeepMenuBarVisible ? nullptr : ImGui::DockBuilderGetNode(MainViewportDockSpaceId))
 				{
-					if (DockNode->ChildNodes[0]->Windows.Size > 0 || DockNode->ChildNodes[1]->Windows.Size > 0)
+					if (HasAnyDockedWindow(DockNode))
 					{
 						bKeepMenuBarVisible = true;
 					}
