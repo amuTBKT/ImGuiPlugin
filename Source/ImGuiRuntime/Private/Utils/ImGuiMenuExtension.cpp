@@ -13,6 +13,7 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Engine/GameViewportClient.h"
 #include "Framework/Commands/InputChord.h"
+#include "Framework/Application/SlateUser.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "Framework/Application/IInputProcessor.h"
 #include "Framework/Application/SlateApplication.h"
@@ -67,13 +68,47 @@ static TAutoConsoleVariable<bool> CVarAutoHideMainMenuBar(
 
 namespace ImGuiFocusHandler
 {
-	// give focus back to game viewport
-	void ResetFocus()
+	static TWeakPtr<SWidget> LastFocusedWidget;
+	static FDelegateHandle FocusChangedEventHandle;
+
+	void OnFocusChanged(const FFocusEvent& Event, const FWeakWidgetPath& OldWidgetPath, const TSharedPtr<SWidget>& OldWidget, const FWidgetPath& NewWidgetPath, const TSharedPtr<SWidget>& NewWidget)
 	{
-		// TODO: maybe keep track of last active widget and bring that to focus?
+		if (Event.GetUser() == 0 && NewWidget && NewWidget->GetType() != TEXT("SImGuiMainMenuWidget"))
+		{
+			LastFocusedWidget = NewWidget;
+		}
+	}
+	void RegisterFocusChangedEvents()
+	{
 		if (FSlateApplication::IsInitialized())
 		{
-			FSlateApplication::Get().SetAllUserFocusToGameViewport(EFocusCause::SetDirectly);
+			FocusChangedEventHandle = FSlateApplication::Get().OnFocusChanging().AddStatic(OnFocusChanged);
+		}
+	}
+	void UnregisterFocusChangedEvents()
+	{
+		if (FSlateApplication::IsInitialized())
+		{
+			FSlateApplication::Get().OnFocusChanging().Remove(FocusChangedEventHandle);
+			FocusChangedEventHandle.Reset();
+		}
+	}
+
+	// give focus back game
+	void ResetFocus()
+	{
+		if (FSlateApplication::IsInitialized())
+		{
+			TSharedPtr<SWidget> WidgetToFocus = LastFocusedWidget.Pin();
+			if (WidgetToFocus)
+			{
+				FSlateApplication::Get().SetAllUserFocus(WidgetToFocus, EFocusCause::SetDirectly);
+			}
+			else
+			{
+				FSlateApplication::Get().SetAllUserFocusToGameViewport(EFocusCause::SetDirectly);
+			}
+			LastFocusedWidget.Reset();
 		}
 	}
 
@@ -82,7 +117,12 @@ namespace ImGuiFocusHandler
 	{
 		if (FSlateApplication::IsInitialized())
 		{
-			// TODO: maybe keep track of last active widget and bring that to focus?
+			TSharedPtr<FSlateUser> SlateUser = FSlateApplication::Get().GetUser(0);
+			if (SlateUser)
+			{
+				LastFocusedWidget = SlateUser->GetFocusedWidget();
+			}
+
 			ExecuteOnGameThread(TEXT("ImGui_RetainFocus"),
 				[]()
 				{
@@ -1650,10 +1690,14 @@ namespace ImGuiUtils
 		{
 			FSlateApplication::Get().RegisterInputPreProcessor(MenuExtensionHandle);
 		}
+
+		ImGuiFocusHandler::RegisterFocusChangedEvents();
 	}
 
 	void UnregisterMenuExtensions()
 	{
+		ImGuiFocusHandler::UnregisterFocusChangedEvents();
+
 		MenuExtensionHandle = nullptr;
 	}
 }
