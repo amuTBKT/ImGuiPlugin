@@ -70,6 +70,7 @@ namespace ImGuiFocusHandler
 	// give focus back to game viewport
 	void ResetFocus()
 	{
+		// TODO: maybe keep track of last active widget and bring that to focus?
 		if (FSlateApplication::IsInitialized())
 		{
 			FSlateApplication::Get().SetAllUserFocusToGameViewport(EFocusCause::SetDirectly);
@@ -81,6 +82,7 @@ namespace ImGuiFocusHandler
 	{
 		if (FSlateApplication::IsInitialized())
 		{
+			// TODO: maybe keep track of last active widget and bring that to focus?
 			ExecuteOnGameThread(TEXT("ImGui_RetainFocus"),
 				[]()
 				{
@@ -550,11 +552,19 @@ namespace ImGuiUtils
 			EndImGuiFrame();
 			m_bIsDockNodeValid = false;
 
-			if (FSlateApplication::IsInitialized())
+			// TODO: maybe move this to SImGuiWidgetBase? not sure this seems a bit hacky and not needed in general atm.
+			EVisibility CurrentVisibility = GetVisibility();
+			if (CurrentVisibility != EVisibility::Hidden)
 			{
-				// TODO: maybe move this to SImGuiWidgetBase? not sure this seems a bit hacky and not needed in general atm.
-				EVisibility CurrentVisibility = GetVisibility();
-				if (CurrentVisibility != EVisibility::Hidden)
+				if (GetTickContext()->bIsDrawingRemotely)
+				{
+					if (CurrentVisibility != EVisibility::HitTestInvisible)
+					{
+						ImGuiFocusHandler::ResetFocus();
+						SetVisibility(EVisibility::HitTestInvisible);
+					}
+				}
+				else if (FSlateApplication::IsInitialized())
 				{
 					// give a few frames before disabling inputs (otherwise it just keeps flipping b/w the two states)
 					HitTestInvisibilityCounter += GetImGuiContext()->IO.WantCaptureMouse ? 4 : -1;
