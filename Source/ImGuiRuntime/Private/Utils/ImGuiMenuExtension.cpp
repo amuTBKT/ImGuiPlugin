@@ -555,6 +555,7 @@ namespace ImGuiUtils
 		}
 		void ShowWidget()
 		{
+			bFocusRequested = true;
 			m_PendingVisibilityState = EVisibility::Visible;
 		}
 
@@ -563,11 +564,17 @@ namespace ImGuiUtils
 		{
 			if (GetVisibility().IsVisible())
 			{
-				FImGuiTickScope Scope{ GetTickContext() };
+				FImGuiTickScope TickScope{ GetTickContext() };
 
 				BeginImGuiFrame(GetCachedGeometry());
 
 				SetupDockNode();
+
+				if (bFocusRequested && FSlateApplication::IsInitialized())
+				{
+					bFocusRequested = false;
+					FSlateApplication::Get().SetAllUserFocus(AsShared(), EFocusCause::SetDirectly);
+				}
 			}
 
 			// update visiibility after BeginFrame to ensure viewport windows get destroyed
@@ -587,7 +594,7 @@ namespace ImGuiUtils
 
 		void EndFrame()
 		{
-			FImGuiTickScope Scope{ GetTickContext() };
+			FImGuiTickScope TickScope{ GetTickContext() };
 
 			EndImGuiFrame();
 			m_bIsDockNodeValid = false;
@@ -678,6 +685,7 @@ namespace ImGuiUtils
 		ImGuiID MainViewportDockSpaceId = 0;
 		int32 HitTestInvisibilityCounter = 0;
 		FVector2f LastMousePosition = FVector2f::ZeroVector;
+		bool bFocusRequested = true;
 		TOptional<EVisibility> m_PendingVisibilityState;
 
 		// cached during tick for easier access
@@ -781,7 +789,7 @@ namespace ImGuiUtils
 				m_ImGuiSubsystem = nullptr;
 			};
 
-			FImGuiTickScope Scope{ TickContext };
+			FImGuiTickScope TickScope{ TickContext };
 
 			if (Slots.IsEmpty())
 			{
@@ -1044,7 +1052,7 @@ namespace ImGuiUtils
 			if (GIsEditor)
 			{
 				m_ImGuiTabGroup = WorkspaceMenu::GetMenuStructure().GetToolsCategory()->AddGroup(
-					LOCTEXT("ImGuiGroupName", "ImGui"),
+					IMGUI_FNAME("ImGui"), LOCTEXT("ImGuiGroupName", "ImGui"),
 					FSlateIcon(FAppStyle::GetAppStyleSetName(), "Icons.Layout"), /*bSortChildren=*/true);
 
 				if (CVarAddImGuiWidgetToLevelViewport.GetValueOnGameThread() == false)
