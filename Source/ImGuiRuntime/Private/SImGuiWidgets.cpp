@@ -75,7 +75,7 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 		m_ConfigFilePath = FAnsiString::Printf("%s/%s.ini", ImGuiSubsystem->GetIniDirectoryPath(), *FileName);
 	}
 
-	FImGuiTickScope Scope{ m_TickContext.Get() };
+	FImGuiTickScope TickScope{ m_TickContext.Get() };
 
 	ImGuiIO& IO = m_ImGuiContext->IO;
 	IO.IniFilename = m_ConfigFilePath.IsEmpty() ? nullptr : *m_ConfigFilePath;
@@ -201,7 +201,7 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 {
 	// cleanup references to this widget
 	{
-		FImGuiTickScope Scope{ m_TickContext.Get() };
+		FImGuiTickScope TickScope{ m_TickContext.Get() };
 
 #ifdef WITH_NET_IMGUI
 		NetImgui::Shutdown();
@@ -321,7 +321,7 @@ void SImGuiWidgetBase::Tick(const FGeometry& WidgetGeometry, const double Curren
 
 	Super::Tick(WidgetGeometry, CurrentTime, DeltaTime);
 
-	FImGuiTickScope Scope{ m_TickContext.Get() };
+	FImGuiTickScope TickScope{ m_TickContext.Get() };
 
 	BeginImGuiFrame(WidgetGeometry);
 
@@ -338,7 +338,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 		return LayerId;
 	}
 
-	FImGuiTickScope Scope{ m_TickContext.Get() };
+	FImGuiTickScope TickScope{ m_TickContext.Get() };
 
 	ImGuiIO& IO = m_ImGuiContext->IO;
 
@@ -480,7 +480,7 @@ void SImGuiWidgetBase::OnMouseLeave(const FPointerEvent& MouseEvent)
 
 	if (!HasMouseCapture())
 	{
-		FImGuiTickScope Scope{ m_TickContext.Get() };
+		FImGuiTickScope TickScope{ m_TickContext.Get() };
 
 		for (int32 MouseButton = 0; MouseButton < ImGuiMouseButton_COUNT; ++MouseButton)
 		{
@@ -650,7 +650,7 @@ void SImGuiWidget::Construct(const FArguments& InArgs)
 
 void SImGuiWidget::TickImGuiInternal(FImGuiTickContext* TickContext)
 {
-	FImGuiTickScope Scope{ TickContext };
+	FImGuiTickScope TickScope{ TickContext };
 
 	if (m_bSkipWindowCreation)
 	{

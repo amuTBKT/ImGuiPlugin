@@ -124,22 +124,32 @@ struct FImGuiTickScope : FNoncopyable
 {
 	explicit FImGuiTickScope(FImGuiTickContext* Context)
 		: PrevContext(BeginContext(Context))
+		, bRestoreContext(PrevContext != Context)
 	{
 	}
 	~FImGuiTickScope()
 	{
-		EndContext(PrevContext);
+		if (bRestoreContext)
+		{
+			EndContext(PrevContext);
+		}
 		PrevContext = nullptr;
 	}
 
 	FORCEINLINE static FImGuiTickContext* BeginContext(FImGuiTickContext* Context)
 	{
-		ImGuiContext* PrevImGuiContext = ImGui::GetCurrentContext();
-
-		ImGui::SetCurrentContext(Context ? Context->ImguiContext : nullptr);
-		ImPlot::SetCurrentContext(Context ? Context->ImplotContext : nullptr);
-
-		return FImGuiTickContext::GetTickContextFromImGuiContext(PrevImGuiContext);
+		FImGuiTickContext* PrevContext = FImGuiTickContext::GetTickContextFromImGuiContext(ImGui::GetCurrentContext());
+		if (PrevContext != Context)
+		{
+			ImGui::SetCurrentContext(Context ? Context->ImguiContext : nullptr);
+			ImPlot::SetCurrentContext(Context ? Context->ImplotContext : nullptr);
+		}
+		else if (PrevContext)
+		{
+			check(PrevContext->ImguiContext == ImGui::GetCurrentContext());
+			check(PrevContext->ImplotContext == ImPlot::GetCurrentContext());
+		}
+		return PrevContext;
 	}
 	FORCEINLINE static void EndContext(FImGuiTickContext* PrevContext)
 	{
@@ -148,6 +158,7 @@ struct FImGuiTickScope : FNoncopyable
 	}
 
 	FImGuiTickContext* PrevContext = nullptr;
+	bool bRestoreContext = false;
 };
 
 // scope to resolve label/name conflicts
