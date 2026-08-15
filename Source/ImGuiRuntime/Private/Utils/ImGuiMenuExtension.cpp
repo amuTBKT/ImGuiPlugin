@@ -135,37 +135,50 @@ namespace ImGuiFocusHandler
 
 namespace ImGuiUtils
 {
+	struct FMenuPathIterator
+	{
+		FMenuPathIterator(FAnsiStringView InPath)
+			: Path(InPath)
+			, ItrOffset(0)
+		{}
+
+		FAnsiStringView operator++()
+		{
+			int32 DelimiterIndex;
+			if (Path.Mid(ItrOffset).FindChar('.', DelimiterIndex))
+			{
+				ItrOffset += DelimiterIndex + 1;
+				return Path.Mid(0, ItrOffset - 1);
+			}
+			return {};
+		}
+
+		FName GetNextGroup()
+		{
+			FName GroupName = NAME_None;
+
+			int32 DelimiterIndex;
+			if (Path.Mid(ItrOffset).FindChar('.', DelimiterIndex))
+			{
+				GroupName = FName(Path.Mid(ItrOffset, DelimiterIndex));
+				ItrOffset += DelimiterIndex + 1;
+			}
+			return GroupName;
+		}
+
+		operator bool() const
+		{
+			return ItrOffset < Path.Len();
+		}
+
+		FAnsiStringView Path;
+		int32 ItrOffset;
+	};
+
 	struct FImGuiMenuContainer
 	{
 		struct FWidgetSlot
 		{
-			struct FPathIterator
-			{
-				FPathIterator(FAnsiStringView InPath)
-					: Path(InPath)
-					, ItrOffset(0)
-				{}
-
-				FAnsiStringView operator++()
-				{
-					int32 DelimitedIndex;
-					if (Path.Mid(ItrOffset).FindChar('.', DelimitedIndex))
-					{
-						ItrOffset += DelimitedIndex + 1;
-						return Path.Mid(0, ItrOffset - 1);
-					}
-					return {};
-				}
-
-				operator bool() const
-				{
-					return ItrOffset < Path.Len();
-				}
-
-				FAnsiStringView Path;
-				int32 ItrOffset;
-			};
-
 			explicit FWidgetSlot(FAnsiString InPath, EImGuiMainMenuWidgetFlags InWidgetFlags = EImGuiMainMenuWidgetFlags::None)
 				: Path(MoveTemp(InPath))
 				, Storage(TInPlaceType<TArray<FWidgetSlot>>(), TArray<FWidgetSlot>{})
@@ -253,7 +266,7 @@ namespace ImGuiUtils
 
 		TPair<EFindSlotResult, FWidgetSlot*> FindOrCreateSlot_Internal(FAnsiStringView Path, bool bCreateHierarchy, TOptional<EImGuiMainMenuWidgetFlags> Flags)
 		{
-			FWidgetSlot::FPathIterator PathItr{ Path };
+			FMenuPathIterator PathItr{ Path };
 
 			FAnsiStringView SubPath = ++PathItr;
 			if (SubPath.IsEmpty())
@@ -1466,7 +1479,7 @@ namespace ImGuiUtils
 		return MenuExtensionHandle->GetMenuContainer(World);
 	}
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #if WITH_EDITOR
 	class SImGuiViewportToolBarButton : public SCompoundWidget
@@ -1688,7 +1701,72 @@ namespace ImGuiUtils
 		});
 #endif //#if WITH_EDITOR
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#if WITH_EDITOR
+	static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FImGuiWidgetRegisterParams RegisterParams)
+	{
+		return SNew(SDockTab)
+			.TabRole(ETabRole::NomadTab)
+			[
+				SNew(SImGuiWidget)
+				.MainViewportWindow(SpawnTabArgs.GetOwnerWindow())
+				.OnTickDelegate(FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction))
+				.ConfigFileName(RegisterParams.GetWidetName())
+				.bEnableViewports(RegisterParams.bEnableViewports)
+				.bTickDelegateCreatesWindow(RegisterParams.bSkipWindowCreation)
+			];
+	}
+	TSharedRef<FWorkspaceItem> GetMenuRoot(FName MenuName)
+	{
+		// "Window" section
+		if (MenuName == IMGUI_FNAME("Menu"))	return WorkspaceMenu::GetMenuStructure().GetStructureRoot();
+		if (MenuName == IMGUI_FNAME("Window"))	return WorkspaceMenu::GetMenuStructure().GetStructureRoot();
+
+		// "Tools" section
+		if (MenuName == IMGUI_FNAME("Tools"))	return WorkspaceMenu::GetMenuStructure().GetToolsStructureRoot();
+
+		// fallback to "Tools.ImGui" section
+		return MenuExtensionHandle->GetImGuiTabGroup();
+	}
+	static TSharedRef<FWorkspaceItem> GetMenuGroup(const char* MenuPath)
+	{
+		FAnsiString Path(MenuPath);
+		// for convenience inject "Instrumentation" section manually
+		if (Path.StartsWith("Tools.Debug", ESearchCase::IgnoreCase)		||
+			Path.StartsWith("Tools.Profile", ESearchCase::IgnoreCase)	||
+			Path.StartsWith("Tools.Audit", ESearchCase::IgnoreCase)		||
+			Path.StartsWith("Tools.Platforms", ESearchCase::IgnoreCase))
+		{
+			Path.InsertAt(5, ".Instrumentation");
+		}
+
+		FMenuPathIterator PathItr{ *Path };
+		TSharedRef<FWorkspaceItem> MenuGroup = GetMenuRoot(PathItr.GetNextGroup());
+		while (PathItr)
+		{
+			FName NextGroupName = PathItr.GetNextGroup();
+			if (NextGroupName.IsNone())
+			{
+				break;
+			}
+
+			const TSharedRef<FWorkspaceItem>* Menu = MenuGroup->GetChildItems().FindByPredicate([&](const auto& Entry) { return Entry->GetFName() == NextGroupName; });
+			if (!Menu)
+			{
+				MenuGroup = MenuGroup->AddGroup(NextGroupName, FText::FromString(*NextGroupName.ToString()), FSlateIcon(), true);
+			}
+			else
+			{
+				MenuGroup = *Menu;
+			}
+		}
+
+		return MenuGroup;
+	}
+#endif //#if WITH_EDITOR
+
+	///////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	void RegisterMenuExtensions()
 	{
@@ -1708,7 +1786,8 @@ namespace ImGuiUtils
 
 		MenuExtensionHandle = nullptr;
 	}
-}
+
+} //namespace ImGuiUtils
 
 FImGuiTickContext* GetMainMenuWidgetTickContextForWorld(const UWorld* World)
 {
@@ -1802,20 +1881,6 @@ FAutoRegisterMainMenuWidget::FAutoRegisterMainMenuWidget(FImGuiWidgetRegisterPar
 }
 
 #if WITH_EDITOR
-static TSharedRef<SDockTab> SpawnWidgetTab(const FSpawnTabArgs& SpawnTabArgs, FImGuiWidgetRegisterParams RegisterParams)
-{
-	return SNew(SDockTab)
-		.TabRole(ETabRole::NomadTab)
-		[
-			SNew(SImGuiWidget)
-				.MainViewportWindow(SpawnTabArgs.GetOwnerWindow())
-				.OnTickDelegate(FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction))
-				.ConfigFileName(RegisterParams.GetWidetName())
-				.bEnableViewports(RegisterParams.bEnableViewports)
-				.bTickDelegateCreatesWindow(RegisterParams.bSkipWindowCreation)
-		];
-}
-
 FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegisterParams RegisterParams)
 {
 	if (!GIsEditor)
@@ -1834,11 +1899,13 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegiste
 		return;
 	}
 
+	ImGuiUtils::FMenuPathIterator PathItr{ RegisterParams.WidgetPath };
+
 	if (UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get())
 	{
 		RegisterParams.InitFunction();
-		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.GetWidetName()), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
-			.SetGroup(ImGuiUtils::MenuExtensionHandle->GetImGuiTabGroup())
+		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.GetWidetName()), FOnSpawnTab::CreateStatic(&ImGuiUtils::SpawnWidgetTab, RegisterParams))
+			.SetGroup(ImGuiUtils::GetMenuGroup(RegisterParams.WidgetPath))
 			.SetDisplayName(FText::FromString(UTF8_TO_TCHAR(RegisterParams.GetWidetName())))
 			.SetTooltipText(FText::FromString(UTF8_TO_TCHAR(RegisterParams.WidgetDescription)))
 			.SetIcon(RegisterParams.WidgetIcon);
@@ -1849,8 +1916,8 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegiste
 			[RegisterParams](UImGuiSubsystem* ImGuiSubsystem)
 			{
 				RegisterParams.InitFunction();
-				FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.GetWidetName()), FOnSpawnTab::CreateStatic(&SpawnWidgetTab, RegisterParams))
-					.SetGroup(ImGuiUtils::MenuExtensionHandle->GetImGuiTabGroup())
+				FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.GetWidetName()), FOnSpawnTab::CreateStatic(&ImGuiUtils::SpawnWidgetTab, RegisterParams))
+					.SetGroup(ImGuiUtils::GetMenuGroup(RegisterParams.WidgetPath))
 					.SetDisplayName(FText::FromString(UTF8_TO_TCHAR(RegisterParams.GetWidetName())))
 					.SetTooltipText(FText::FromString(UTF8_TO_TCHAR(RegisterParams.WidgetDescription)))
 					.SetIcon(RegisterParams.WidgetIcon);
