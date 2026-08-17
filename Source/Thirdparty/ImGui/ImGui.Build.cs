@@ -17,8 +17,8 @@ public class ImGui : ModuleRules
 			PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui/net_imgui"));
 
 			// use unreal socket
-			PrivateDefinitions.Add("NETIMGUI_WINSOCKET_ENABLED=0");
-			PrivateDefinitions.Add("NETIMGUI_POSIX_SOCKETS_ENABLED=0");
+			PublicDefinitions.Add("NETIMGUI_WINSOCKET_ENABLED=0");
+			PublicDefinitions.Add("NETIMGUI_POSIX_SOCKETS_ENABLED=0");
 		}
 
 		PublicIncludePaths.Add(Path.Combine(PluginDirectory, "Source/Thirdparty/ImGui"));
