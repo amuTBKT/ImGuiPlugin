@@ -1153,6 +1153,10 @@ namespace ImGuiUtils
 			{
 				return false;
 			}
+			if (InKeyEvent.IsRepeat())
+			{
+				return false;
+			}
 
 			auto IsEventBoundToKey = [](const FKeyEvent& KeyEvent, const FInputChord& InputChord) -> bool
 				{
