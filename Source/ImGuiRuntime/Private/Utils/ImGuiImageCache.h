@@ -54,13 +54,6 @@ namespace ImGuiUtils
 			int32 LastUsedFrameIndex = 0;
 		};
 
-		struct FRasterRequest
-		{
-			ImFontAtlasRectId RectId;
-			FName BrushResourceName;
-			bool bIsVectorImage;
-		};
-
 	public:
 		FImGuiImageCache(TSharedPtr<ImFontAtlas, ESPMode::NotThreadSafe> InFontAtlas)
 			: FontAtlas(InFontAtlas)
