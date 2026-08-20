@@ -614,43 +614,43 @@ namespace ImGuiUtils
 
 			// TODO: maybe move this to SImGuiWidgetBase? not sure this seems a bit hacky and not needed in general atm.
 			EVisibility CurrentVisibility = GetVisibility();
-			if (CurrentVisibility != EVisibility::Hidden)
+			if (GetTickContext()->bIsDrawingRemotely)
 			{
-				if (GetTickContext()->bIsDrawingRemotely)
+				if (CurrentVisibility != EVisibility::HitTestInvisible)
 				{
-					if (CurrentVisibility != EVisibility::HitTestInvisible)
-					{
-						ImGuiFocusHandler::ResetFocus();
-						SetVisibility(EVisibility::HitTestInvisible);
-					}
+					SetVisibility(EVisibility::HitTestInvisible);
 				}
-				else if (FSlateApplication::IsInitialized())
+				if (HasAnyUserFocus())
 				{
-					// give a few frames before disabling inputs (otherwise it just keeps flipping b/w the two states)
-					HitTestInvisibilityCounter += GetImGuiContext()->IO.WantCaptureMouse ? 4 : -1;
-					HitTestInvisibilityCounter = FMath::Clamp(HitTestInvisibilityCounter, -4, 4);
-					if (HitTestInvisibilityCounter == 4)
-					{
-						SetVisibility(EVisibility::Visible);
-					}
-					else if (HitTestInvisibilityCounter == -4)
-					{
-						SetVisibility(EVisibility::HitTestInvisible);
-					}
+					ImGuiFocusHandler::ResetFocus();
+				}
+			}
+			if (CurrentVisibility != EVisibility::Hidden && FSlateApplication::IsInitialized())
+			{
+				// give a few frames before disabling inputs (otherwise it just keeps flipping b/w the two states)
+				HitTestInvisibilityCounter += GetImGuiContext()->IO.WantCaptureMouse ? 4 : -1;
+				HitTestInvisibilityCounter = FMath::Clamp(HitTestInvisibilityCounter, -4, 4);
+				if (HitTestInvisibilityCounter == 4)
+				{
+					SetVisibility(EVisibility::Visible);
+				}
+				else if (HitTestInvisibilityCounter == -4)
+				{
+					SetVisibility(EVisibility::HitTestInvisible);
+				}
 
-					// we don't receive mouse position events when set to HitTestInvisible
-					if (CurrentVisibility == EVisibility::HitTestInvisible)
+				// we don't receive mouse position events when set to HitTestInvisible
+				if (CurrentVisibility == EVisibility::HitTestInvisible)
+				{
+					FVector2f MousePosition = FSlateApplication::Get().GetCursorPos();
+					if ((GetImGuiContext()->IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) == 0)
 					{
-						FVector2f MousePosition = FSlateApplication::Get().GetCursorPos();
-						if ((GetImGuiContext()->IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) == 0)
-						{
-							MousePosition = GetCachedGeometry().AbsoluteToLocal(MousePosition);
-						}
-						if (!LastMousePosition.Equals(MousePosition, 1.f))
-						{
-							LastMousePosition = MousePosition;
-							GetImGuiContext()->IO.AddMousePosEvent(MousePosition.X, MousePosition.Y);
-						}
+						MousePosition = GetCachedGeometry().AbsoluteToLocal(MousePosition);
+					}
+					if (!LastMousePosition.Equals(MousePosition, 1.f))
+					{
+						LastMousePosition = MousePosition;
+						GetImGuiContext()->IO.AddMousePosEvent(MousePosition.X, MousePosition.Y);
 					}
 				}
 			}
