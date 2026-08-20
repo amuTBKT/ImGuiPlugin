@@ -625,7 +625,7 @@ namespace ImGuiUtils
 					ImGuiFocusHandler::ResetFocus();
 				}
 			}
-			if (CurrentVisibility != EVisibility::Hidden && FSlateApplication::IsInitialized())
+			else if (CurrentVisibility != EVisibility::Hidden && FSlateApplication::IsInitialized())
 			{
 				// give a few frames before disabling inputs (otherwise it just keeps flipping b/w the two states)
 				HitTestInvisibilityCounter += GetImGuiContext()->IO.WantCaptureMouse ? 4 : -1;
