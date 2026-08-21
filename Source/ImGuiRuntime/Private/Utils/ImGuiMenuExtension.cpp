@@ -1107,12 +1107,12 @@ namespace ImGuiUtils
 			if (GConfig && GConfig->GetString(TEXT("ImGuiPlugin"), TEXT("ToggleMenuKeyChord"), RawChordString, GInputIni))
 			{
 				UScriptStruct* StructReflection = FInputChord::StaticStruct();
-				StructReflection->ImportText(*RawChordString, &ToggleMenuKeyChord, nullptr, EPropertyPortFlags::PPF_None, nullptr, FInputChord::StaticStruct()->GetName(), true);
+				StructReflection->ImportText(*RawChordString, &m_ToggleMenuKeyChord, nullptr, EPropertyPortFlags::PPF_None, nullptr, FInputChord::StaticStruct()->GetName(), true);
 			}
-			if (GConfig && GConfig->GetString(TEXT("ImGuiPlugin"), TEXT("SetFocusKeyChord"), RawChordString, GInputIni))
+			if (GConfig && GConfig->GetString(TEXT("ImGuiPlugin"), TEXT("SetUIFocusKeyChord"), RawChordString, GInputIni))
 			{
 				UScriptStruct* StructReflection = FInputChord::StaticStruct();
-				StructReflection->ImportText(*RawChordString, &SetFocusKeyChord, nullptr, EPropertyPortFlags::PPF_None, nullptr, FInputChord::StaticStruct()->GetName(), true);
+				StructReflection->ImportText(*RawChordString, &m_SetUIFocusKeyChord, nullptr, EPropertyPortFlags::PPF_None, nullptr, FInputChord::StaticStruct()->GetName(), true);
 			}
 		}
 		~FImGuiMenuExtension()
@@ -1171,12 +1171,12 @@ namespace ImGuiUtils
 					return KeyEventModifierState == InputChordModifierState;
 				};
 
-			if (IsEventBoundToKey(InKeyEvent, SetFocusKeyChord))
+			if (IsEventBoundToKey(InKeyEvent, m_SetUIFocusKeyChord))
 			{
 				ImGuiFocusHandler::SetUIFocus();
 			}
 
-			if (IsEventBoundToKey(InKeyEvent, ToggleMenuKeyChord))
+			if (IsEventBoundToKey(InKeyEvent, m_ToggleMenuKeyChord))
 			{
 #if WITH_EDITOR
 				TSharedPtr<SWidget> FocusedWidget = SlateApp.GetUserFocusedWidget(InKeyEvent.GetUserIndex());
@@ -1473,8 +1473,8 @@ namespace ImGuiUtils
 
 		TUniquePtr<FAutoConsoleCommandWithWorld> m_OpenImGuiMenuCommand = nullptr;
 
-		FInputChord ToggleMenuKeyChord;
-		FInputChord SetFocusKeyChord;
+		FInputChord m_ToggleMenuKeyChord;
+		FInputChord m_SetUIFocusKeyChord;
 	};
 	static TSharedPtr<FImGuiMenuExtension> MenuExtensionHandle = nullptr;
 
@@ -1776,7 +1776,7 @@ namespace ImGuiUtils
 	{
 		MenuExtensionHandle = MakeShared<FImGuiMenuExtension>();
 		if (FSlateApplication::IsInitialized() &&
-			(MenuExtensionHandle->ToggleMenuKeyChord.IsValidChord() || MenuExtensionHandle->SetFocusKeyChord.IsValidChord()))
+			(MenuExtensionHandle->m_ToggleMenuKeyChord.IsValidChord() || MenuExtensionHandle->m_SetUIFocusKeyChord.IsValidChord()))
 		{
 			FSlateApplication::Get().RegisterInputPreProcessor(MenuExtensionHandle);
 		}
