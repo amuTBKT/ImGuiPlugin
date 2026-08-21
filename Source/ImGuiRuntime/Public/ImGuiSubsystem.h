@@ -118,9 +118,6 @@ public:
 	IMGUIRUNTIME_API ImTextureRef GetSharedFontTextureID() const;
 	ImFontAtlas* GetSharedFontAtlas() const { return m_SharedFontAtlas.Get(); }
 
-	static ImTextureID	IndexToImGuiID(uint32 Index)	{ return static_cast<ImTextureID>(Index); }
-	static uint32		ImGuiIDToIndex(ImTextureID ID)  { return static_cast<uint32>(ID); }
-
 	bool CaptureGpuFrame() const;
 
 private:

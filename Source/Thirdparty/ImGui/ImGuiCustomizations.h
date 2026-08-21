@@ -52,7 +52,8 @@ IMGUI_UNREAL_API uint64 ImFileWrite(const void* Data, uint64 Size, uint64 Count,
 #endif
 //-------------------- Config Customization --------------------//
 
-#define ImTextureID_Invalid ((ImTextureID)-1)
+#define ImTextureId int32
+#define ImTextureID_Invalid -1
 
 //-------------------- DrawCallback Customization --------------------//
 // TODO: it is unsafe to switch render targets/graphics stage (using compute shaders) in the callback.

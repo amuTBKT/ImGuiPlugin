@@ -340,7 +340,7 @@ namespace ImGuiUtils
 
 									RHICmdList.SetScissorRect(true, ScissorRectLeft, ScissorRectTop, ScissorRectRight, ScissorRectBottom);
 
-									uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
+									int32 TextureIndex = DrawCmd.GetTexID();
 									if (!(m_BoundTextures.IsValidIndex(TextureIndex)/* && RenderData.BoundTextures[Index].IsValid()*/))
 									{
 										TextureIndex = m_BoundTextures.Num() - 1;
@@ -473,7 +473,7 @@ namespace ImGuiUtils
 
 					OutDrawElements.PushClip(FSlateClippingZone{ TransformRect(WidgetTransform, ClippingRect) });
 					{
-						uint32 TextureIndex = UImGuiSubsystem::ImGuiIDToIndex(DrawCmd.GetTexID());
+						int32 TextureIndex = DrawCmd.GetTexID();
 						if (TextureResources.IsValidIndex(TextureIndex))
 						{
 							FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, TextureResources[TextureIndex].GetResourceHandle(), SlateVertices, SlateIndices, nullptr, 0, 0);

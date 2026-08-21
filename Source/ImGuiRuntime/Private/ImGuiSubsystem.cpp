@@ -394,7 +394,7 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 		if (FSlateApplication::IsInitialized())
 		{
 #if WITH_ENGINE
-			UTextureRenderTarget2D* AtlasTexture = (UTextureRenderTarget2D*)m_SharedFontAtlasTextures[ImGuiIDToIndex(TexData->GetTexID())].Brush->GetResourceObject();
+			UTextureRenderTarget2D* AtlasTexture = (UTextureRenderTarget2D*)m_SharedFontAtlasTextures[TexData->GetTexID()].Brush->GetResourceObject();
 
 			bool bReuploadTexture = (TexData->Status == ImTextureStatus_WantCreate);
 			if (AtlasTexture->SizeX != FontAtlasWidth || AtlasTexture->SizeY != FontAtlasHeight)
@@ -422,7 +422,7 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 			static const FName FontTextureName = TEXT("ImGui_SharedFontTexture");
 			static int32 FontTextureNameCounter = 0;
 
-			int32 TextureIndex = ImGuiIDToIndex(TexData->GetTexID());
+			int32 TextureIndex = TexData->GetTexID();
 			m_SharedFontAtlasTextures[TextureIndex].Brush = FSlateDynamicImageBrush::CreateWithImageData(FName(FontTextureName, ++FontTextureNameCounter),
 				FVector2D(FontAtlasWidth, FontAtlasHeight),
 				TArray((uint8*)TexData->GetPixelsAt(0, 0), FontAtlasWidth * FontAtlasHeight * TexData->BytesPerPixel));
@@ -438,7 +438,7 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 		// latest shared font texture data should never be destroyed!
 		check(TexData != m_SharedFontAtlas->TexData);
 
-		ReleaseFontAtlasTexture(ImGuiIDToIndex(TexData->GetTexID()));
+		ReleaseFontAtlasTexture(TexData->GetTexID());
 
 		TexData->SetStatus(ImTextureStatus_Destroyed);
 		TexData->SetTexID(ImTextureID_Invalid);
@@ -497,7 +497,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 
 			Params.UV0 = ImVec2(Proxy->StartUV.X, Proxy->StartUV.Y);
 			Params.UV1 = ImVec2(Proxy->StartUV.X + Proxy->SizeUV.X, Proxy->StartUV.Y + Proxy->SizeUV.Y);
-			Params.Id = IndexToImGuiID(ResourceHandleIndex);
+			Params.Id = ResourceHandleIndex;
 		}
 	}
 	return Params;
@@ -508,7 +508,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 	FImGuiImageBindingParams Params = {};
 	if (SlateShaderResource)
 	{
-		uint32 ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([&](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == SlateShaderResource; });
+		int32 ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([&](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == SlateShaderResource; });
 		if (ResourceHandleIndex == INDEX_NONE)
 		{
 			ResourceHandleIndex = m_OneFrameResources.Emplace(SlateShaderResource);
@@ -517,7 +517,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 		Params.Size = ImVec2(SlateShaderResource->GetWidth(), SlateShaderResource->GetHeight());
 		Params.UV0 = ImVec2(0.f, 0.f);
 		Params.UV1 = ImVec2(1.f, 1.f);
-		Params.Id = IndexToImGuiID(ResourceHandleIndex);
+		Params.Id = ResourceHandleIndex;
 	}
 	return Params;
 }
