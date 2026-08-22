@@ -22,9 +22,9 @@
 	// not compiling with unreal, define common types
 	#define IMGUI_UNREAL_API
 
-	#include <cstdint>
-	using uint32 = uint32_t;
-	using uint64 = uint64_t;
+	using int32 = int;
+	using uint32 = unsigned int;
+	using uint64 = unsigned long long;
 #endif //#ifdef IMGUI_UNREAL_API
 
 #ifdef IMGUI_ENABLE_ASSERT_HOOK
