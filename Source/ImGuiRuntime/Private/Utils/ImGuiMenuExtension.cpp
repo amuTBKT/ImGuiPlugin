@@ -620,7 +620,7 @@ namespace ImGuiUtils
 				{
 					SetVisibility(EVisibility::HitTestInvisible);
 				}
-				if (HasAnyUserFocus())
+				if (FSlateApplication::IsInitialized() && HasAnyUserFocus())
 				{
 					ImGuiFocusHandler::ResetFocus();
 				}

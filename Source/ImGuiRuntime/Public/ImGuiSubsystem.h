@@ -13,6 +13,7 @@ class UWorld;
 class SWindow;
 class UTexture2D;
 class FConfigFile;
+class FTextureResource;
 class FSlateShaderResource;
 class UTextureRenderTarget2D;
 class FSlateShaderResourceProxy;
@@ -35,17 +36,23 @@ public:
 		: Storage(TInPlaceType<FSlateResourceHandle>(), InResourceHandle)
 	{
 	}
+	explicit FImGuiTextureResource(FTextureResource* InTextureResource)
+		: Storage(TInPlaceType<FTextureResource*>(), InTextureResource)
+	{
+	}
 
 	const FSlateShaderResourceProxy* GetSlateShaderResourceProxy() const;
 	FSlateShaderResource* GetSlateShaderResource() const;
+	FTextureResource* GetTextureResource() const { check(UsesRawTextureResource()); return Storage.Get<FTextureResource*>(); }
 
-	bool UsesResourceHandle() const { return Storage.IsType<FSlateResourceHandle>(); }
-	bool UsesRawResource() const { return Storage.IsType<FSlateShaderResource*>(); }
+	bool UsesSlateResourceHandle()	const { return Storage.IsType<FSlateResourceHandle>(); }
+	bool UsesRawSlateResource()		const { return Storage.IsType<FSlateShaderResource*>(); }
+	bool UsesRawTextureResource()	const { return Storage.IsType<FTextureResource*>(); }
 
-	FSlateResourceHandle GetResourceHandle() const { check(UsesResourceHandle()); return Storage.Get<FSlateResourceHandle>(); }
+	FSlateResourceHandle GetResourceHandle() const { check(UsesSlateResourceHandle()); return Storage.Get<FSlateResourceHandle>(); }
 
 private:
-	TVariant<FSlateResourceHandle, FSlateShaderResource*> Storage;
+	TVariant<FSlateResourceHandle, FSlateShaderResource*, FTextureResource*> Storage;
 };
 
 enum class EImGuiMainMenuWidgetFlags : uint8
@@ -93,7 +100,11 @@ public:
 #if WITH_ENGINE
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(UTexture2D* Texture);
 #endif
-	const TArray<FImGuiTextureResource>&	  GetOneFrameResources() const { return m_OneFrameResources; }
+	const FImGuiTextureResource* GetOneFrameResource(ImTextureID ResourceId) const
+	{
+		const auto TextureEntry = m_OneFrameResources.FindByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; });
+		return TextureEntry ? &TextureEntry->Value : nullptr;
+	}
 
 	// widget
 	IMGUIRUNTIME_API TSharedPtr<SWindow> CreateWidget(const FString& WindowName, FVector2f WindowSize, FOnTickImGuiWidgetDelegate TickDelegate);
@@ -124,9 +135,11 @@ private:
 	void BeginImGuiFrame();
 	void EndImGuiFrame();
 
+	FImGuiImageBindingParams RegisterOneFrameResource(ImTextureID ResourceId, FImGuiTextureResource&& Resource, float Width, float Height);
+
 	void UpdateFontAtlasTexture(ImTextureData* TexData);
-	int32 AllocateFontAtlasTexture(int32 SizeX, int32 SizeY);
-	void ReleaseFontAtlasTexture(int32 Index);
+	ImTextureID AllocateFontAtlasTexture(int32 SizeX, int32 SizeY);
+	void ReleaseFontAtlasTexture(ImTextureID ResourceId);
 
 private:
 	static TUniquePtr<UImGuiSubsystem> SubsystemInstance;
@@ -137,19 +150,18 @@ private:
 
 	struct FImGuiFontTextureEntry
 	{
-		TSharedPtr<FSlateBrush> Brush = nullptr;
 #if WITH_ENGINE
-		// need to store as TObjectPtr to fix incremental GC related warnings
-		TObjectPtr<UTextureRenderTarget2D> BrushTexture = nullptr;
+		TObjectPtr<UTextureRenderTarget2D> Texture = nullptr;
+#else
+		TSharedPtr<FSlateBrush> Brush = nullptr;
 #endif
 		bool bInUse = false;
 	};
-	TArray<FImGuiFontTextureEntry> m_SharedFontAtlasTextures;
+	TArray<TUniquePtr<FImGuiFontTextureEntry>> m_SharedFontAtlasTextures;
 
 	int32 m_FontAtlasBuilderFrameCount = 0;
 	TSharedPtr<ImFontAtlas, ESPMode::NotThreadSafe> m_SharedFontAtlas;
 	TUniquePtr<ImGuiUtils::FImGuiImageCache> m_ImageCache;
 
-	TArray<FSlateBrush> m_OneFrameSlateBrushes;
-	TArray<FImGuiTextureResource> m_OneFrameResources;
+	TArray<TPair<ImTextureID, FImGuiTextureResource>> m_OneFrameResources;
 };

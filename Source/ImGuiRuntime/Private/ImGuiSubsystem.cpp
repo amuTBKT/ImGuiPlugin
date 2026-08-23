@@ -57,6 +57,10 @@ FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
 	{
 		return Storage.Get<FSlateShaderResource*>();
 	}
+	else if (Storage.IsType<FTextureResource*>())
+	{
+		return nullptr;
+	}
 	ensureAlwaysMsgf(false, TEXT("Resource type not handled!"));
 	return nullptr;
 }
@@ -150,9 +154,7 @@ void UImGuiSubsystem::Initialize()
 	m_ImageCache = MakeUnique<ImGuiUtils::FImGuiImageCache>(m_SharedFontAtlas);
 #endif
 
-	// upto 8 shared font textures at a time (to account for repacking)
-	// when spammed ImGui can cycle through a lot of atlases (most I encountered was 5)
-	m_SharedFontAtlasTextures.SetNum(8);
+	m_SharedFontAtlasTextures.Add(MakeUnique<FImGuiFontTextureEntry>());
 
 	OnSubsystemInitialized.Broadcast(this);
 
@@ -187,11 +189,11 @@ bool UImGuiSubsystem::ShouldEnableImGui()
 void UImGuiSubsystem::AddReferencedObjects(FReferenceCollector& Collector)
 {
 #if WITH_ENGINE
-	for (FImGuiFontTextureEntry& TextureEntry : m_SharedFontAtlasTextures)
+	for (const auto& TextureEntry : m_SharedFontAtlasTextures)
 	{
-		if (TextureEntry.BrushTexture)
+		if (TextureEntry->Texture)
 		{
-			Collector.AddReferencedObject(TextureEntry.BrushTexture);
+			Collector.AddReferencedObject(TextureEntry->Texture);
 		}
 	}
 #endif
@@ -270,23 +272,27 @@ FImGuiTickContext* UImGuiSubsystem::GetMainMenuWidgetTickContext(const UWorld* W
 void UImGuiSubsystem::BeginImGuiFrame()
 {
 	m_OneFrameResources.Reset();
-	m_OneFrameSlateBrushes.Reset();
 
 	// queue font updates
 	ImFontAtlasUpdateNewFrame(m_SharedFontAtlas.Get(), ++m_FontAtlasBuilderFrameCount, true);
 
 	// register all font altases
-	for (const FImGuiFontTextureEntry& TextureEntry : m_SharedFontAtlasTextures)
+	for (const auto& TextureEntry : m_SharedFontAtlasTextures)
 	{
-		if (TextureEntry.Brush)
+		if (!TextureEntry->bInUse)
+			continue;
+
+#if WITH_ENGINE
+		if (TextureEntry->Texture)
 		{
-			RegisterOneFrameResource(TextureEntry.Brush.Get());
+			m_OneFrameResources.Emplace(ToImTextureID(TextureEntry.Get()), FImGuiTextureResource(TextureEntry->Texture->GetResource()));
 		}
-		else
+#else
+		if (TextureEntry->Brush)
 		{
-			// queue an empty slot which may get populated by UpdateFontAtlasTexture
-			m_OneFrameResources.Add(FImGuiTextureResource{nullptr});
+			m_OneFrameResources.Emplace(ToImTextureID(TextureEntry.Get()), FImGuiTextureResource(TextureEntry->Brush->GetRenderingResource()));
 		}
+#endif
 	}
 
 	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);
@@ -316,53 +322,61 @@ void UImGuiSubsystem::CommitSharedFontAtlasChanges()
 	ImFontAtlasUpdateNewFrame(m_SharedFontAtlas.Get(), ++m_FontAtlasBuilderFrameCount, true);
 }
 
-int32 UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
+ImTextureID UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
 {
 	static const FName FontTextureName = TEXT("ImGui_SharedFontTexture");
 
-	for (int32 TextureIndex = 0; TextureIndex < m_SharedFontAtlasTextures.Num(); ++TextureIndex)
+	int32 TextureIndex = 0;
+	FImGuiFontTextureEntry* TextureEntry = nullptr;
+	for (; TextureIndex < m_SharedFontAtlasTextures.Num(); ++TextureIndex)
 	{
-		if (!m_SharedFontAtlasTextures[TextureIndex].bInUse)
+		if (!m_SharedFontAtlasTextures[TextureIndex]->bInUse)
 		{
-#if WITH_ENGINE && IMGUI_ALLOW_LOCAL_DRAWING
-			if (FSlateApplication::IsInitialized())
-			{
-				if (!m_SharedFontAtlasTextures[TextureIndex].Brush)
-				{
-					m_SharedFontAtlasTextures[TextureIndex].Brush = MakeShared<FSlateBrush>();
-				}
-
-				UTextureRenderTarget2D* Texture = (UTextureRenderTarget2D*)m_SharedFontAtlasTextures[TextureIndex].Brush->GetResourceObject();
-				if (!Texture)
-				{
-					Texture = NewObject<UTextureRenderTarget2D>(GetTransientPackage(), FName(FontTextureName, TextureIndex + 1));
-					Texture->Filter = TextureFilter::TF_Bilinear;
-					Texture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
-					Texture->OverrideFormat = PF_R8G8B8A8;
-					Texture->ClearColor = FLinearColor(0, 0, 0, 0);
-					Texture->bNoFastClear = true;
-					Texture->InitAutoFormat(SizeX, SizeY);
-					Texture->UpdateResourceImmediate(/*bClearRenderTarget=*/false);
-
-					m_SharedFontAtlasTextures[TextureIndex].BrushTexture = Texture;
-					m_SharedFontAtlasTextures[TextureIndex].Brush->SetResourceObject(Texture);
-					m_OneFrameResources[TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].Brush->GetRenderingResource() };
-				}
-			}
-#endif
-			m_SharedFontAtlasTextures[TextureIndex].bInUse = true;
-			return TextureIndex;
+			TextureEntry = m_SharedFontAtlasTextures[TextureIndex].Get();
+			break;
 		}
 	}
-	// TODO: add logic to flush render thread and recycle textures here.
-	checkNoEntry();
-	return INDEX_NONE;
+	if (!TextureEntry)
+	{
+		m_SharedFontAtlasTextures.Add(MakeUnique<FImGuiFontTextureEntry>());
+		TextureEntry = m_SharedFontAtlasTextures.Last().Get();
+	}
+
+	ImTextureID ResourceId = ToImTextureID(TextureEntry);
+
+#if WITH_ENGINE && IMGUI_ALLOW_LOCAL_DRAWING
+	if (FSlateApplication::IsInitialized())
+	{
+		UTextureRenderTarget2D* Texture = TextureEntry->Texture;
+		if (!Texture)
+		{
+			Texture = NewObject<UTextureRenderTarget2D>(GetTransientPackage(), FName(FontTextureName, TextureIndex + 1));
+			Texture->Filter = TextureFilter::TF_Bilinear;
+			Texture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
+			Texture->OverrideFormat = PF_R8G8B8A8;
+			Texture->ClearColor = FLinearColor(0, 0, 0, 0);
+			Texture->bNoFastClear = true;
+			Texture->InitAutoFormat(SizeX, SizeY);
+			Texture->UpdateResourceImmediate(/*bClearRenderTarget=*/false);
+
+			TextureEntry->Texture = Texture;
+			if (!m_OneFrameResources.ContainsByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; }))
+			{
+				m_OneFrameResources.Emplace(ResourceId, FImGuiTextureResource(Texture->GetResource()));
+			}
+		}
+	}
+#endif
+
+	TextureEntry->bInUse = true;
+	return ResourceId;
 }
 
-void UImGuiSubsystem::ReleaseFontAtlasTexture(int32 Index)
+void UImGuiSubsystem::ReleaseFontAtlasTexture(ImTextureID ResourceId)
 {
 	// TODO: maybe add some logic to release unused textures after a few frames
-	m_SharedFontAtlasTextures[Index].bInUse = false;
+	FImGuiFontTextureEntry* FontAtlasTexture = FromImTextureID<FImGuiFontTextureEntry>(ResourceId);
+	FontAtlasTexture->bInUse = false;
 }
 
 void UImGuiSubsystem::UpdateFontAtlasTextures(ImTextureData** Textures, int32 TextureCount)
@@ -393,8 +407,11 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 #if IMGUI_ALLOW_LOCAL_DRAWING
 		if (FSlateApplication::IsInitialized())
 		{
+			ImTextureID ResourceId = TexData->GetTexID();
+
 #if WITH_ENGINE
-			UTextureRenderTarget2D* AtlasTexture = (UTextureRenderTarget2D*)m_SharedFontAtlasTextures[TexData->GetTexID()].Brush->GetResourceObject();
+			FImGuiFontTextureEntry* FontAtlasTexture = FromImTextureID<FImGuiFontTextureEntry>(ResourceId);
+			UTextureRenderTarget2D* AtlasTexture = FontAtlasTexture->Texture;
 
 			bool bReuploadTexture = (TexData->Status == ImTextureStatus_WantCreate);
 			if (AtlasTexture->SizeX != FontAtlasWidth || AtlasTexture->SizeY != FontAtlasHeight)
@@ -418,15 +435,34 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 						RHICmdList.Transition(FRHITransitionInfo(TexResource->GetTexture2DRHI(), ERHIAccess::CopyDest, ERHIAccess::SRVMask));
 					});
 			}
+
+			auto OneFrameResource = m_OneFrameResources.FindByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; });
+			if (!OneFrameResource)
+			{
+				m_OneFrameResources.Emplace(ResourceId, FImGuiTextureResource(AtlasTexture->GetResource()));
+			}
+			else
+			{
+				OneFrameResource->Value = FImGuiTextureResource{ AtlasTexture->GetResource() };
+			}
 #else
 			static const FName FontTextureName = TEXT("ImGui_SharedFontTexture");
 			static int32 FontTextureNameCounter = 0;
 
-			int32 TextureIndex = TexData->GetTexID();
-			m_SharedFontAtlasTextures[TextureIndex].Brush = FSlateDynamicImageBrush::CreateWithImageData(FName(FontTextureName, ++FontTextureNameCounter),
+			FImGuiFontTextureEntry* FontAtlasTexture = FromImTextureID<FImGuiFontTextureEntry>(ResourceId);
+			FontAtlasTexture->Brush = FSlateDynamicImageBrush::CreateWithImageData(FName(FontTextureName, ++FontTextureNameCounter),
 				FVector2D(FontAtlasWidth, FontAtlasHeight),
 				TArray((uint8*)TexData->GetPixelsAt(0, 0), FontAtlasWidth * FontAtlasHeight * TexData->BytesPerPixel));
-			m_OneFrameResources[TextureIndex] = FImGuiTextureResource{ m_SharedFontAtlasTextures[TextureIndex].Brush->GetRenderingResource() };
+
+			auto OneFrameResource = m_OneFrameResources.FindByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; });
+			if (!OneFrameResource)
+			{
+				m_OneFrameResources.Emplace(ResourceId, FImGuiTextureResource(FontAtlasTexture->Brush->GetRenderingResource()));
+			}
+			else
+			{
+				OneFrameResource->Value = FImGuiTextureResource{ FontAtlasTexture->Brush->GetRenderingResource() };
+			}
 #endif
 		}
 #endif //#if IMGUI_ALLOW_LOCAL_DRAWING
@@ -478,26 +514,22 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 		const FSlateShaderResourceProxy* Proxy = ResourceHandle.GetResourceProxy();
 		if (Proxy)
 		{
-			int32 ResourceHandleIndex;
+			ImTextureID ResourceId = ToImTextureID(Proxy->Resource);
 			// NOTE: when updating slate atlases `Proxy->Resource` can return null which gets patched later in the frame.
 			// So make sure we get a unique `ResourceHandleIndex` here in order to allow shader to override the UV data.
-			if (Proxy->Resource)
+			if (!Proxy->Resource)
 			{
-				ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([Proxy](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == Proxy->Resource; });
-			}
-			else
-			{
-				ResourceHandleIndex = INDEX_NONE;
+				ResourceId = ToImTextureID(Proxy);
 			}
 
-			if (ResourceHandleIndex == INDEX_NONE)
+			if (!m_OneFrameResources.ContainsByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; }))
 			{
-				ResourceHandleIndex = m_OneFrameResources.Emplace(ResourceHandle);
+				m_OneFrameResources.Emplace(ResourceId, FImGuiTextureResource(ResourceHandle));
 			}
 
 			Params.UV0 = ImVec2(Proxy->StartUV.X, Proxy->StartUV.Y);
 			Params.UV1 = ImVec2(Proxy->StartUV.X + Proxy->SizeUV.X, Proxy->StartUV.Y + Proxy->SizeUV.Y);
-			Params.Id = ResourceHandleIndex;
+			Params.Id = ResourceId;
 		}
 	}
 	return Params;
@@ -508,16 +540,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 	FImGuiImageBindingParams Params = {};
 	if (SlateShaderResource)
 	{
-		int32 ResourceHandleIndex = m_OneFrameResources.IndexOfByPredicate([&](const auto& TextureResource) { return TextureResource.GetSlateShaderResource() == SlateShaderResource; });
-		if (ResourceHandleIndex == INDEX_NONE)
-		{
-			ResourceHandleIndex = m_OneFrameResources.Emplace(SlateShaderResource);
-		}
-
-		Params.Size = ImVec2(SlateShaderResource->GetWidth(), SlateShaderResource->GetHeight());
-		Params.UV0 = ImVec2(0.f, 0.f);
-		Params.UV1 = ImVec2(1.f, 1.f);
-		Params.Id = ResourceHandleIndex;
+		Params = RegisterOneFrameResource(ToImTextureID(SlateShaderResource), FImGuiTextureResource(SlateShaderResource), SlateShaderResource->GetWidth(), SlateShaderResource->GetHeight());
 	}
 	return Params;
 }
@@ -525,14 +548,27 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 #if WITH_ENGINE
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(UTexture2D* Texture)
 {
-	if (!Texture)
+	FImGuiImageBindingParams Params = {};
+	if (Texture)
 	{
-		return {};
+		Params = RegisterOneFrameResource(ToImTextureID(Texture), FImGuiTextureResource(Texture->GetResource()), Texture->GetSizeX(), Texture->GetSizeY());
 	}
-
-	FSlateBrush& NewBrush = m_OneFrameSlateBrushes.AddDefaulted_GetRef();
-	NewBrush.SetResourceObject(Texture);
-
-	return RegisterOneFrameResource(&NewBrush);
+	return Params;
 }
 #endif
+
+FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(ImTextureID ResourceId, FImGuiTextureResource&& Resource, float Width, float Height)
+{
+	if (!m_OneFrameResources.ContainsByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; }))
+	{
+		m_OneFrameResources.Emplace(ResourceId, MoveTemp(Resource));
+	}
+
+	FImGuiImageBindingParams Params = {};
+	Params.Size = ImVec2(Width, Height);
+	Params.UV0 = ImVec2(0.f, 0.f);
+	Params.UV1 = ImVec2(1.f, 1.f);
+	Params.Id = ResourceId;
+
+	return Params;
+}

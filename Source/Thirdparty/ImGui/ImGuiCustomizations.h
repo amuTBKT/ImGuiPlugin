@@ -52,8 +52,13 @@ IMGUI_UNREAL_API uint64 ImFileWrite(const void* Data, uint64 Size, uint64 Count,
 #endif
 //-------------------- Config Customization --------------------//
 
-#define ImTextureId int32
-#define ImTextureID_Invalid -1
+#define ImTextureID uint64
+#define ImTextureID_Invalid ((ImTextureID)0)
+
+inline ImTextureID ToImTextureID(const void* ptr) { return static_cast<ImTextureID>((uintptr_t)ptr); };
+
+template <typename T>
+inline T* FromImTextureID(ImTextureID id) { return reinterpret_cast<T*>(id); };
 
 //-------------------- DrawCallback Customization --------------------//
 // TODO: it is unsafe to switch render targets/graphics stage (using compute shaders) in the callback.
@@ -61,7 +66,7 @@ IMGUI_UNREAL_API uint64 ImFileWrite(const void* Data, uint64 Size, uint64 Count,
 
 /**
  * Callback which can be used to render directly into the ImGui Slate window
- * 
+ *
  * @param RHICmdList	: FRHICommandListImmediate used to render the ImGui widget.
  * @param DrawRect		: Draw rect inside the Slate window.
  * @param ViewportPos	: Viewport position to adjust clip rect (Window/ViewportPos cached during Tick flickers for a frame when window moves to viewport).
