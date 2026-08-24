@@ -285,12 +285,12 @@ void UImGuiSubsystem::BeginImGuiFrame()
 #if WITH_ENGINE
 		if (TextureEntry->Texture)
 		{
-			m_OneFrameResources.Emplace(ToImTextureID(TextureEntry.Get()), FImGuiTextureResource(TextureEntry->Texture->GetResource()));
+			m_OneFrameResources.Emplace(FImGuiTextureResource(TextureEntry->Texture->GetResource()), ToImTextureID(TextureEntry.Get()));
 		}
 #else
 		if (TextureEntry->Brush)
 		{
-			m_OneFrameResources.Emplace(ToImTextureID(TextureEntry.Get()), FImGuiTextureResource(TextureEntry->Brush->GetRenderingResource()));
+			m_OneFrameResources.Emplace(FImGuiTextureResource(TextureEntry->Brush->GetRenderingResource()), ToImTextureID(TextureEntry.Get()));
 		}
 #endif
 	}
@@ -342,8 +342,6 @@ ImTextureID UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
 		TextureEntry = m_SharedFontAtlasTextures.Last().Get();
 	}
 
-	ImTextureID ResourceId = ToImTextureID(TextureEntry);
-
 #if WITH_ENGINE && IMGUI_ALLOW_LOCAL_DRAWING
 	if (FSlateApplication::IsInitialized())
 	{
@@ -360,23 +358,22 @@ ImTextureID UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
 			Texture->UpdateResourceImmediate(/*bClearRenderTarget=*/false);
 
 			TextureEntry->Texture = Texture;
-			if (!m_OneFrameResources.ContainsByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; }))
-			{
-				m_OneFrameResources.Emplace(ResourceId, FImGuiTextureResource(Texture->GetResource()));
-			}
 		}
 	}
 #endif
 
 	TextureEntry->bInUse = true;
-	return ResourceId;
+	return ToImTextureID(TextureEntry);
 }
 
 void UImGuiSubsystem::ReleaseFontAtlasTexture(ImTextureID ResourceId)
 {
 	// TODO: maybe add some logic to release unused textures after a few frames
-	FImGuiFontTextureEntry* FontAtlasTexture = FromImTextureID<FImGuiFontTextureEntry>(ResourceId);
-	FontAtlasTexture->bInUse = false;
+	FImGuiFontTextureEntry* TextureEntry = FromImTextureID<FImGuiFontTextureEntry>(ResourceId);
+	if (TextureEntry)
+	{
+		TextureEntry->bInUse = false;
+	}
 }
 
 void UImGuiSubsystem::UpdateFontAtlasTextures(ImTextureData** Textures, int32 TextureCount)
@@ -408,10 +405,10 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 		if (FSlateApplication::IsInitialized())
 		{
 			ImTextureID ResourceId = TexData->GetTexID();
+			FImGuiFontTextureEntry* TextureEntry = FromImTextureID<FImGuiFontTextureEntry>(ResourceId);
 
 #if WITH_ENGINE
-			FImGuiFontTextureEntry* FontAtlasTexture = FromImTextureID<FImGuiFontTextureEntry>(ResourceId);
-			UTextureRenderTarget2D* AtlasTexture = FontAtlasTexture->Texture;
+			UTextureRenderTarget2D* AtlasTexture = TextureEntry->Texture;
 
 			bool bReuploadTexture = (TexData->Status == ImTextureStatus_WantCreate);
 			if (AtlasTexture->SizeX != FontAtlasWidth || AtlasTexture->SizeY != FontAtlasHeight)
@@ -436,32 +433,31 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 					});
 			}
 
-			auto OneFrameResource = m_OneFrameResources.FindByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; });
+			auto OneFrameResource = m_OneFrameResources.FindByKey(ResourceId);
 			if (!OneFrameResource)
 			{
-				m_OneFrameResources.Emplace(ResourceId, FImGuiTextureResource(AtlasTexture->GetResource()));
+				m_OneFrameResources.Emplace(FImGuiTextureResource(AtlasTexture->GetResource()), ResourceId);
 			}
 			else
 			{
-				OneFrameResource->Value = FImGuiTextureResource{ AtlasTexture->GetResource() };
+				OneFrameResource->Resource = FImGuiTextureResource{ AtlasTexture->GetResource() };
 			}
 #else
 			static const FName FontTextureName = TEXT("ImGui_SharedFontTexture");
 			static int32 FontTextureNameCounter = 0;
 
-			FImGuiFontTextureEntry* FontAtlasTexture = FromImTextureID<FImGuiFontTextureEntry>(ResourceId);
-			FontAtlasTexture->Brush = FSlateDynamicImageBrush::CreateWithImageData(FName(FontTextureName, ++FontTextureNameCounter),
+			TextureEntry->Brush = FSlateDynamicImageBrush::CreateWithImageData(FName(FontTextureName, ++FontTextureNameCounter),
 				FVector2D(FontAtlasWidth, FontAtlasHeight),
 				TArray((uint8*)TexData->GetPixelsAt(0, 0), FontAtlasWidth * FontAtlasHeight * TexData->BytesPerPixel));
 
-			auto OneFrameResource = m_OneFrameResources.FindByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; });
+			auto OneFrameResource = m_OneFrameResources.FindByKey(ResourceId);
 			if (!OneFrameResource)
 			{
-				m_OneFrameResources.Emplace(ResourceId, FImGuiTextureResource(FontAtlasTexture->Brush->GetRenderingResource()));
+				m_OneFrameResources.Emplace(FImGuiTextureResource(TextureEntry->Brush->GetRenderingResource()), ResourceId);
 			}
 			else
 			{
-				OneFrameResource->Value = FImGuiTextureResource{ FontAtlasTexture->Brush->GetRenderingResource() };
+				OneFrameResource->Resource = FImGuiTextureResource{ TextureEntry->Brush->GetRenderingResource() };
 			}
 #endif
 		}
@@ -522,9 +518,9 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 				ResourceId = ToImTextureID(Proxy);
 			}
 
-			if (!m_OneFrameResources.ContainsByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; }))
+			if (!m_OneFrameResources.Contains(ResourceId))
 			{
-				m_OneFrameResources.Emplace(ResourceId, FImGuiTextureResource(ResourceHandle));
+				m_OneFrameResources.Emplace(FImGuiTextureResource(ResourceHandle), ResourceId);
 			}
 
 			Params.UV0 = ImVec2(Proxy->StartUV.X, Proxy->StartUV.Y);
@@ -559,9 +555,9 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(UTexture2D* T
 
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(ImTextureID ResourceId, FImGuiTextureResource&& Resource, float Width, float Height)
 {
-	if (!m_OneFrameResources.ContainsByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; }))
+	if (!m_OneFrameResources.Contains(ResourceId))
 	{
-		m_OneFrameResources.Emplace(ResourceId, MoveTemp(Resource));
+		m_OneFrameResources.Emplace(MoveTemp(Resource), ResourceId);
 	}
 
 	FImGuiImageBindingParams Params = {};

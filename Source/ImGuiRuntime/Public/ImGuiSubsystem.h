@@ -102,8 +102,8 @@ public:
 #endif
 	const FImGuiTextureResource* GetOneFrameResource(ImTextureID ResourceId) const
 	{
-		const auto TextureEntry = m_OneFrameResources.FindByPredicate([ResourceId](const auto& Entry) { return Entry.Key == ResourceId; });
-		return TextureEntry ? &TextureEntry->Value : nullptr;
+		const FOneFrameResource* TextureEntry = m_OneFrameResources.FindByKey(ResourceId);
+		return TextureEntry ? &TextureEntry->Resource : nullptr;
 	}
 
 	// widget
@@ -163,5 +163,12 @@ private:
 	TSharedPtr<ImFontAtlas, ESPMode::NotThreadSafe> m_SharedFontAtlas;
 	TUniquePtr<ImGuiUtils::FImGuiImageCache> m_ImageCache;
 
-	TArray<TPair<ImTextureID, FImGuiTextureResource>> m_OneFrameResources;
+	struct FOneFrameResource
+	{
+		FImGuiTextureResource	Resource;
+		ImTextureID				ResourceId;
+
+		bool operator==(ImTextureID InResourceId) const { return ResourceId == InResourceId; }
+	};
+	TArray<FOneFrameResource> m_OneFrameResources;
 };
