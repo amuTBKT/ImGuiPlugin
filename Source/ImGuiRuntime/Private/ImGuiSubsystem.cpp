@@ -37,14 +37,6 @@ static TAutoConsoleVariable<bool> CVarEnableFreeType(
 
 /*--------------------------------------------------------------------------------------------------------------------------*/
 
-const FSlateShaderResourceProxy* FImGuiTextureResource::GetSlateShaderResourceProxy() const
-{
-	check(Storage.IsType<FSlateResourceHandle>());
-
-	const FSlateResourceHandle& ResourceHandle = Storage.Get<FSlateResourceHandle>();
-	return ResourceHandle.GetResourceProxy();
-}
-
 FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
 {
 	if (Storage.IsType<FSlateResourceHandle>())

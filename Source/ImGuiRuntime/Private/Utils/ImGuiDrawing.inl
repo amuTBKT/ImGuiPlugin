@@ -468,24 +468,6 @@ namespace ImGuiUtils
 
 			for (const ImDrawList* CmdList : m_DrawData->CmdLists)
 			{
-				SlateVertices.SetNum(CmdList->VtxBuffer.Size, EAllowShrinking::No);
-				for (int32 VertexIndex = 0; VertexIndex < CmdList->VtxBuffer.Size; ++VertexIndex)
-				{
-					const ImDrawVert& ImGuiVertex = CmdList->VtxBuffer[VertexIndex];
-					FSlateVertex& SlateVertex = SlateVertices[VertexIndex];
-
-					FVector2f TransformedPos = WidgetTransform.TransformPoint(FVector2f{ ImGuiVertex.pos.x, ImGuiVertex.pos.y });
-					SlateVertex.Position = { TransformedPos.X, TransformedPos.Y };
-
-					SlateVertex.TexCoords[0] = ImGuiVertex.uv.x;
-					SlateVertex.TexCoords[1] = ImGuiVertex.uv.y;
-					SlateVertex.TexCoords[2] = 1.f;
-					SlateVertex.TexCoords[3] = 1.f;
-
-					SlateVertex.Color.Bits = ImGuiVertex.col;
-					Swap(SlateVertex.Color.R, SlateVertex.Color.B);
-				}
-
 				for (const auto& DrawCmd : CmdList->CmdBuffer)
 				{
 					if (DrawCmd.UserCallback != NULL)
@@ -493,11 +475,43 @@ namespace ImGuiUtils
 						// TODO: callbacks not supported atm
 						continue;
 					}
+					if (DrawCmd.ElemCount == 0)
+					{
+						continue;
+					}
+					static_assert(sizeof(SlateIndex) >= sizeof(ImDrawIdx));
 
-					SlateIndices.SetNum(DrawCmd.ElemCount, EAllowShrinking::No);
-					for (uint32 Index = 0; Index < DrawCmd.ElemCount; ++Index)
+					SlateIndices.SetNumUninitialized(DrawCmd.ElemCount, EAllowShrinking::No);
+					SlateIndices[0] = CmdList->IdxBuffer[DrawCmd.IdxOffset];
+					SlateIndex MinIndex = SlateIndices[0];
+					SlateIndex MaxIndex = SlateIndices[0];
+					for (uint32 Index = 1; Index < DrawCmd.ElemCount; ++Index)
 					{
 						SlateIndices[Index] = CmdList->IdxBuffer[DrawCmd.IdxOffset + Index];
+						MinIndex = FMath::Min(MinIndex, SlateIndices[Index]);
+						MaxIndex = FMath::Max(MaxIndex, SlateIndices[Index]);
+					}
+					for (SlateIndex& Index : SlateIndices)
+					{
+						Index -= MinIndex;
+					}
+
+					// slate copies the vertex array so restrict size to active indices
+					SlateVertices.SetNumUninitialized(MaxIndex - MinIndex + 1, EAllowShrinking::No);
+					for (int32 VertIndex = 0; VertIndex < SlateVertices.Num(); ++VertIndex)
+					{
+						const ImDrawVert& ImGuiVertex = CmdList->VtxBuffer[DrawCmd.VtxOffset + MinIndex + VertIndex];
+						FSlateVertex& SlateVertex = SlateVertices[VertIndex];
+
+						SlateVertex.Position = WidgetTransform.TransformPoint(FVector2f{ ImGuiVertex.pos.x, ImGuiVertex.pos.y });
+
+						SlateVertex.TexCoords[0] = ImGuiVertex.uv.x;
+						SlateVertex.TexCoords[1] = ImGuiVertex.uv.y;
+						SlateVertex.TexCoords[2] = 1.f;
+						SlateVertex.TexCoords[3] = 1.f;
+
+						SlateVertex.Color.Bits = ImGuiVertex.col;
+						Swap(SlateVertex.Color.R, SlateVertex.Color.B);
 					}
 
 					FSlateRect ClippingRect;
@@ -524,8 +538,8 @@ namespace ImGuiUtils
 		}
 
 	private:
-		TArray<FSlateVertex> SlateVertices;
 		TArray<SlateIndex> SlateIndices;
+		TArray<FSlateVertex> SlateVertices;
 		FVector2f m_DrawRectOffset = FVector2f::ZeroVector;
 		const ImDrawData* m_DrawData = nullptr;
 		bool m_bHasDrawCommands = false;

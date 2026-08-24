@@ -28,12 +28,12 @@ DECLARE_STATS_GROUP(TEXT("ImGui"), STATGROUP_ImGui, STATCAT_Advanced);
 class FImGuiTextureResource
 {
 public:
-	explicit FImGuiTextureResource(FSlateShaderResource* InShaderResource)
-		: Storage(TInPlaceType<FSlateShaderResource*>(), InShaderResource)
-	{
-	}
 	explicit FImGuiTextureResource(const FSlateResourceHandle& InResourceHandle)
 		: Storage(TInPlaceType<FSlateResourceHandle>(), InResourceHandle)
+	{
+	}
+	explicit FImGuiTextureResource(FSlateShaderResource* InShaderResource)
+		: Storage(TInPlaceType<FSlateShaderResource*>(), InShaderResource)
 	{
 	}
 	explicit FImGuiTextureResource(FTextureResource* InTextureResource)
@@ -41,15 +41,14 @@ public:
 	{
 	}
 
-	const FSlateShaderResourceProxy* GetSlateShaderResourceProxy() const;
-	FSlateShaderResource* GetSlateShaderResource() const;
-	FTextureResource* GetTextureResource() const { check(UsesRawTextureResource()); return Storage.Get<FTextureResource*>(); }
+	FSlateShaderResource*			 GetSlateShaderResource() const;
+	const FSlateShaderResourceProxy* GetSlateShaderResourceProxy() const { return GetResourceHandle().GetResourceProxy(); }
+	FTextureResource*				 GetTextureResource() const { check(UsesRawTextureResource()); return Storage.Get<FTextureResource*>(); }
+	const FSlateResourceHandle&		 GetResourceHandle() const { check(UsesSlateResourceHandle()); return Storage.Get<FSlateResourceHandle>(); }
 
 	bool UsesSlateResourceHandle()	const { return Storage.IsType<FSlateResourceHandle>(); }
 	bool UsesRawSlateResource()		const { return Storage.IsType<FSlateShaderResource*>(); }
 	bool UsesRawTextureResource()	const { return Storage.IsType<FTextureResource*>(); }
-
-	FSlateResourceHandle GetResourceHandle() const { check(UsesSlateResourceHandle()); return Storage.Get<FSlateResourceHandle>(); }
 
 private:
 	TVariant<FSlateResourceHandle, FSlateShaderResource*, FTextureResource*> Storage;
