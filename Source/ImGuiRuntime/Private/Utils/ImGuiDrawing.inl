@@ -523,7 +523,14 @@ namespace ImGuiUtils
 					OutDrawElements.PushClip(FSlateClippingZone{ TransformRect(WidgetTransform, ClippingRect) });
 					{
 						const FImGuiTextureResource* TextureResource = ImGuiSubsystem->GetOneFrameResource(DrawCmd.GetTexID());
-						if (TextureResource)
+
+						// TODO: A bit unfortunate but when resizing slate brushes there's no good way to handle one frame flicker
+						// The slate resource gets initialized after this function call so there's really no way to patch the vertex texcoords
+						// Using FSlateBoxElement could work but there's no way to handle z-ordering (box elements are drawn before custom verts)
+						// We force local image cache to bypass slate brush rendering, so hopefully should not encounter this issue
+						const bool bIsResourceValid = TextureResource && TextureResource->GetSlateShaderResource();
+
+						if (bIsResourceValid)
 						{
 							FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, TextureResource->GetResourceHandle(), SlateVertices, SlateIndices, nullptr, 0, 0);
 						}

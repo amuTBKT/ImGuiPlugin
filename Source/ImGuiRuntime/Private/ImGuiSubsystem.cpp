@@ -35,6 +35,12 @@ static TAutoConsoleVariable<bool> CVarEnableFreeType(
 	ECVF_ReadOnly);
 #endif
 
+#if defined(WITH_NET_IMGUI) || !WITH_ENGINE
+// 1. Needed with NetImGui to allow uploading slate brushes to the server
+// 2. Needed for slate rendering path as slate brushes don't play well with custom verts setup
+#define USE_LOCAL_IMAGE_CACHE 1
+#endif
+
 /*--------------------------------------------------------------------------------------------------------------------------*/
 
 FSlateShaderResource* FImGuiTextureResource::GetSlateShaderResource() const
@@ -140,9 +146,8 @@ void UImGuiSubsystem::Initialize()
 		m_SharedFontAtlas->AddFontDefaultBitmap();
 	}
 
-#ifdef WITH_NET_IMGUI
-	// Slate brush cache which writes directly into ImGuiFontAtlas
-	// allows showing FSlateBrush on NetImGui server
+#ifdef USE_LOCAL_IMAGE_CACHE
+	// slate brush cache which writes directly into ImGuiFontAtlas
 	m_ImageCache = MakeUnique<ImGuiUtils::FImGuiImageCache>(m_SharedFontAtlas);
 #endif
 
@@ -159,7 +164,7 @@ void UImGuiSubsystem::Initialize()
 
 void UImGuiSubsystem::Deinitialize()
 {
-#ifdef WITH_NET_IMGUI
+#ifdef USE_LOCAL_IMAGE_CACHE
 	m_ImageCache.Reset();
 #endif
 
@@ -289,7 +294,7 @@ void UImGuiSubsystem::BeginImGuiFrame()
 
 	GCaptureNextGpuFrames = FMath::Max(0, GCaptureNextGpuFrames - 1);
 
-#ifdef WITH_NET_IMGUI
+#ifdef USE_LOCAL_IMAGE_CACHE
 	if (m_ImageCache)
 	{
 		m_ImageCache->OnBeginFrame();
@@ -489,7 +494,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 		return Params;
 	}
 
-#ifdef WITH_NET_IMGUI
+#ifdef USE_LOCAL_IMAGE_CACHE
 	if (m_ImageCache && ImGuiUtils::FImGuiImageCache::CanLoadBrush(*SlateBrush))
 	{
 		return m_ImageCache->GetOrLoadBrush(*SlateBrush, LocalSize, DrawScale);
