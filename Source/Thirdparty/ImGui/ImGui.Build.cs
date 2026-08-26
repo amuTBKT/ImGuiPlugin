@@ -10,6 +10,8 @@ public class ImGui : ModuleRules
 		Type = ModuleType.External;
 
 		PublicDefinitions.Add("WITH_IMGUI=1");
+		PublicDefinitions.Add("IMGUI_UNREAL_API=IMGUIRUNTIME_API");
+		PublicDefinitions.Add("IMGUI_USER_CONFIG=\"ImGuiCustomizations.h\"");
 
 		if (Target.bCompileAgainstEngine && Target.Type != TargetType.Editor && Target.Type != TargetType.Program)
 		{

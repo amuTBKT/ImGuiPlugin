@@ -4,13 +4,7 @@
 
 #include "Textures/SlateIcon.h"
 
-#define IMGUI_UNREAL_API IMGUIRUNTIME_API
-#include "ImGuiCustomizations.h"
-
-// Not ideal but we include internal header here as some files do need access to it and we would like all includes to be directed through "ImGuiPluginTypes.h"
-// This is to ensure macros are consistent b/w static ImGui.lib and runtime code
 #include "imgui/imgui_internal.h"
-
 #include "implot/implot.h"
 
 // since the module is built as DLL, we need to register allocators for each module that makes ImGui calls, usually at module startup
@@ -20,7 +14,7 @@
 	/*Free*/     [](void* Pointer, void* UserData = nullptr) { FMemory::Free(Pointer); },       \
 	/*UserData*/ nullptr);
 
-#define IMGUI_FNAME(Name) [](){ static FName StaticFName(Name); return StaticFName; }()
+#define IMGUI_FNAME(Name) [](){ static FName StaticName(Name); return StaticName; }()
 
 // returns FSlateBrush for specified icon and style name
 #define IMGUI_STYLE_ICON_BRUSH(StyleName, IconName) []() -> const FSlateBrush* { static const FSlateBrush* Brush = FSlateIcon(FName(StyleName), FName(IconName)).GetOptionalIcon(); return Brush; }()

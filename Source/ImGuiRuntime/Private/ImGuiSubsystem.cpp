@@ -509,7 +509,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 		{
 			ImTextureID ResourceId = ToImTextureID(Proxy->Resource);
 			// NOTE: when updating slate atlases `Proxy->Resource` can return null which gets patched later in the frame.
-			// So make sure we get a unique `ResourceHandleIndex` here in order to allow shader to override the UV data.
+			// So make sure we get a unique `ResourceId` here in order to allow shader to override the UV data.
 			if (!Proxy->Resource)
 			{
 				ResourceId = ToImTextureID(Proxy);

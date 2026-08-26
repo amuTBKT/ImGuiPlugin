@@ -1,6 +1,7 @@
 // Copyright 2024-26 Amit Kumar Mehar. All Rights Reserved.
 
-#include "ImGuiCustomizations.h"
+// needed because imgui.cpp defines `IMGUI_DEFINE_MATH_OPERATORS` which could be overriden by IMGUI_USER_CONFIG
+#include "imgui/imgui.h"
 
 // imgui
 #include "imgui/imgui.cpp"
