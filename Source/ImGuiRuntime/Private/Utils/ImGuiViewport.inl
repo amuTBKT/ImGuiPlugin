@@ -1,5 +1,7 @@
 // Copyright 2024-26 Amit Kumar Mehar. All Rights Reserved.
 
+#include "RenderingThread.h"
+
 namespace ImGuiUtils
 {
 	class FWidgetDrawer;
@@ -173,7 +175,7 @@ namespace ImGuiUtils
 				WidgetDrawer->SetDrawRectOffset(DrawRect.GetTopLeft2f());
 
 				OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
-#if WITH_ENGINE
+#ifdef IMGUI_USE_NATIVE_RENDERER
 				FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
 #else
 				WidgetDrawer->DrawSlateWidget(WidgetGeometry, OutDrawElements, LayerId);

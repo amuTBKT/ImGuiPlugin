@@ -150,6 +150,20 @@ namespace ImGuiUtils
 									const int32 Stride = FontAtlas->TexData->Width * BytesPerPixel;
 									nsvgRasterizeFull(Rasterizer, Image, 0, 0, SVGScaleX, SVGScaleY, (uint8*)FontAtlas->TexData->GetPixelsAt(AtlasRect.x, AtlasRect.y), AtlasRect.w, AtlasRect.w, Stride);
 
+#ifndef IMGUI_USE_BGRA_PACKED_COLOR
+									// TODO: nsvg claims the rendering is in RGBA but doesn't look like the case :?
+									for (int32 Y = 0; Y < AtlasRect.h; ++Y)
+									{
+										uint8* Dst = (uint8*)FontAtlas->TexData->GetPixelsAt(AtlasRect.x, AtlasRect.y + Y);
+										uint8* End = Dst + AtlasRect.w * BytesPerPixel;
+										while (Dst < End)
+										{
+											Swap(Dst[0], Dst[2]);
+											Dst += BytesPerPixel;
+										}
+									}
+#endif
+
 									nsvgDeleteRasterizer(Rasterizer);
 								}
 								nsvgDelete(Image);
@@ -178,7 +192,11 @@ namespace ImGuiUtils
 								const int32 Stride = Width * BytesPerPixel;
 
 								TArray<uint8> DecodedImage;
+#ifndef IMGUI_USE_BGRA_PACKED_COLOR
+								if (ImageWrapper->GetRaw(ERGBFormat::RGBA, 8, DecodedImage))
+#else
 								if (ImageWrapper->GetRaw(ERGBFormat::BGRA, 8, DecodedImage))
+#endif
 								{
 									RectId = FontAtlas->AddCustomRect(Width, Height, &AtlasRect);
 									if (RectId != ImFontAtlasRectId_Invalid)

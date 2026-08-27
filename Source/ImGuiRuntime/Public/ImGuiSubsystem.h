@@ -96,7 +96,7 @@ public:
 	FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush, float UniformSize) { return RegisterOneFrameResource(SlateBrush, FVector2f(UniformSize)); }
 	FImGuiImageBindingParams RegisterOneFrameResource(const FSlateBrush* SlateBrush) { return SlateBrush ? RegisterOneFrameResource(SlateBrush, SlateBrush->GetImageSize(), 1.0f) : FImGuiImageBindingParams(); }
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(FSlateShaderResource* SlateShaderResource);
-#if WITH_ENGINE
+#ifdef IMGUI_USE_NATIVE_RENDERER
 	IMGUIRUNTIME_API FImGuiImageBindingParams RegisterOneFrameResource(UTexture2D* Texture);
 #endif
 	const FImGuiTextureResource* GetOneFrameResource(ImTextureID ResourceId) const
@@ -149,7 +149,7 @@ private:
 
 	struct FImGuiFontTextureEntry
 	{
-#if WITH_ENGINE
+#ifdef IMGUI_USE_NATIVE_RENDERER
 		TObjectPtr<UTextureRenderTarget2D> Texture = nullptr;
 #else
 		TSharedPtr<FSlateBrush> Brush = nullptr;

@@ -44,6 +44,9 @@ public class ImGuiRuntime : ModuleRules
 			{
 				PublicDefinitions.Add("IMGUI_ALLOW_MENUBAR_EXTENSION=1");
 			}
+
+			// TODO: `TargetType.Program` is not tested with native renderer, but in theory should work
+			PublicDefinitions.Add("IMGUI_USE_NATIVE_RENDERER=1");
 		}
 
 		if ((Target.Type != TargetType.Server) && Target.bCompileFreeType)

@@ -12,7 +12,7 @@
 #include "Utils/ImGuiImageCache.h"
 #include "Framework/Application/SlateApplication.h"
 
-#if WITH_ENGINE
+#ifdef IMGUI_USE_NATIVE_RENDERER
 #include "UObject/Package.h"
 #include "TextureResource.h"
 #include "Engine/Texture2D.h"
@@ -35,7 +35,7 @@ static TAutoConsoleVariable<bool> CVarEnableFreeType(
 	ECVF_ReadOnly);
 #endif
 
-#if defined(WITH_NET_IMGUI) || !WITH_ENGINE
+#if defined(WITH_NET_IMGUI) || !defined(IMGUI_USE_NATIVE_RENDERER)
 // 1. Needed with NetImGui to allow uploading slate brushes to the server
 // 2. Needed for slate rendering path as slate brushes don't play well with custom verts setup
 #define USE_LOCAL_IMAGE_CACHE 1
@@ -185,7 +185,7 @@ bool UImGuiSubsystem::ShouldEnableImGui()
 
 void UImGuiSubsystem::AddReferencedObjects(FReferenceCollector& Collector)
 {
-#if WITH_ENGINE
+#ifdef IMGUI_USE_NATIVE_RENDERER
 	for (const auto& TextureEntry : m_SharedFontAtlasTextures)
 	{
 		if (TextureEntry->Texture)
@@ -279,7 +279,7 @@ void UImGuiSubsystem::BeginImGuiFrame()
 		if (!TextureEntry->bInUse)
 			continue;
 
-#if WITH_ENGINE
+#ifdef IMGUI_USE_NATIVE_RENDERER
 		if (TextureEntry->Texture)
 		{
 			m_OneFrameResources.Emplace(FImGuiTextureResource(TextureEntry->Texture->GetResource()), ToImTextureID(TextureEntry.Get()));
@@ -339,7 +339,7 @@ ImTextureID UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
 		TextureEntry = m_SharedFontAtlasTextures.Last().Get();
 	}
 
-#if WITH_ENGINE && IMGUI_ALLOW_LOCAL_DRAWING
+#if IMGUI_ALLOW_LOCAL_DRAWING && defined(IMGUI_USE_NATIVE_RENDERER)
 	if (FSlateApplication::IsInitialized())
 	{
 		UTextureRenderTarget2D* Texture = TextureEntry->Texture;
@@ -404,7 +404,7 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 			ImTextureID ResourceId = TexData->GetTexID();
 			FImGuiFontTextureEntry* TextureEntry = FromImTextureID<FImGuiFontTextureEntry>(ResourceId);
 
-#if WITH_ENGINE
+#ifdef IMGUI_USE_NATIVE_RENDERER
 			UTextureRenderTarget2D* AtlasTexture = TextureEntry->Texture;
 
 			bool bReuploadTexture = (TexData->Status == ImTextureStatus_WantCreate);
@@ -538,7 +538,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 	return Params;
 }
 
-#if WITH_ENGINE
+#ifdef IMGUI_USE_NATIVE_RENDERER
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(UTexture2D* Texture)
 {
 	FImGuiImageBindingParams Params = {};

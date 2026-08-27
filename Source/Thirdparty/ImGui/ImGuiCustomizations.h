@@ -43,6 +43,13 @@
 #define IMGUI_DISABLE_DEFAULT_FILE_FUNCTIONS			1
 #define IMGUI_DISABLE_TIME_FUNCTIONS					1 //some cross platform issues
 
+#ifndef IMGUI_USE_NATIVE_RENDERER
+// for slate rendering path we don't really have much control over texture format and rendering
+// prefer BGRA color format as that is the default used by unreal
+// NOTE: not using BGRA by default as that will require changes to NetImGui server
+#define IMGUI_USE_BGRA_PACKED_COLOR						1
+#endif
+
 #ifdef IMGUI_DISABLE_DEFAULT_FILE_FUNCTIONS
 using ImFileHandle = class IFileHandle*;
 IMGUI_UNREAL_API ImFileHandle ImFileOpen(const char* FileName, const char* Mode);

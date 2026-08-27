@@ -2,7 +2,7 @@
 
 #if IMGUI_ALLOW_LOCAL_DRAWING
 
-#if WITH_ENGINE
+#ifdef IMGUI_USE_NATIVE_RENDERER
 #include "RHI.h"
 #include "ImGuiShaders.h"
 #include "RHIStaticStates.h"
@@ -18,7 +18,7 @@
 
 namespace ImGuiUtils
 {
-#if WITH_ENGINE
+#ifdef IMGUI_USE_NATIVE_RENDERER
 	static inline uint32 PackF16ToU32(const FVector2f& Value)
 	{
 		return uint32(FFloat16(Value.X).Encoded) | (uint32(FFloat16(Value.Y).Encoded) << 16);
@@ -43,7 +43,7 @@ namespace ImGuiUtils
 			FVertexDeclarationElementList Elements;
 			Elements.Add(FVertexElement(0, STRUCT_OFFSET(FImGuiVertex, Position), VET_Float2, 0, VertexFormatStride));
 			Elements.Add(FVertexElement(0, STRUCT_OFFSET(FImGuiVertex, UV), VET_Float2, 1, VertexFormatStride));
-			Elements.Add(FVertexElement(0, STRUCT_OFFSET(FImGuiVertex, Color), VET_Color, 2, VertexFormatStride));
+			Elements.Add(FVertexElement(0, STRUCT_OFFSET(FImGuiVertex, Color), VET_UByte4N, 2, VertexFormatStride));
 			VertexDeclarationRHI = PipelineStateCache::GetOrCreateVertexDeclaration(Elements);
 		}
 
@@ -501,17 +501,12 @@ namespace ImGuiUtils
 					for (int32 VertIndex = 0; VertIndex < SlateVertices.Num(); ++VertIndex)
 					{
 						const ImDrawVert& ImGuiVertex = CmdList->VtxBuffer[DrawCmd.VtxOffset + MinIndex + VertIndex];
-						FSlateVertex& SlateVertex = SlateVertices[VertIndex];
 
-						SlateVertex.Position = WidgetTransform.TransformPoint(FVector2f{ ImGuiVertex.pos.x, ImGuiVertex.pos.y });
-
-						SlateVertex.TexCoords[0] = ImGuiVertex.uv.x;
-						SlateVertex.TexCoords[1] = ImGuiVertex.uv.y;
-						SlateVertex.TexCoords[2] = 1.f;
-						SlateVertex.TexCoords[3] = 1.f;
-
-						SlateVertex.Color.Bits = ImGuiVertex.col;
-						Swap(SlateVertex.Color.R, SlateVertex.Color.B);
+						SlateVertices[VertIndex] = FSlateVertex::Make(
+							WidgetTransform,
+							FVector2f(ImGuiVertex.pos.x, ImGuiVertex.pos.y),
+							FVector2f(ImGuiVertex.uv.x, ImGuiVertex.uv.y),
+							FColor(ImGuiVertex.col));
 					}
 
 					FSlateRect ClippingRect;
@@ -530,7 +525,8 @@ namespace ImGuiUtils
 						// We force local image cache to bypass slate brush rendering, so hopefully should not encounter this issue
 						const bool bIsResourceValid = TextureResource && TextureResource->GetSlateShaderResource();
 
-						if (bIsResourceValid)
+						// `FSlateDrawElement::MakeCustomVerts` only allows resource handles so need to check for that as well
+						if (bIsResourceValid && TextureResource->UsesSlateResourceHandle())
 						{
 							FSlateDrawElement::MakeCustomVerts(OutDrawElements, LayerId, TextureResource->GetResourceHandle(), SlateVertices, SlateIndices, nullptr, 0, 0);
 						}
@@ -551,7 +547,7 @@ namespace ImGuiUtils
 		const ImDrawData* m_DrawData = nullptr;
 		bool m_bHasDrawCommands = false;
 	};
-#endif //#if WITH_ENGINE
+#endif //#ifdef IMGUI_USE_NATIVE_RENDERER
 }
 
 #else

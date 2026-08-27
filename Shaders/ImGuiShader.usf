@@ -15,9 +15,9 @@ void MainVS(
 	out float2 OutUV : TEXCOORD0,
 	out float4 OutColor : COLOR0)
 {
-	ClipPosition = mul(float4(InPosition.xy, 0.f, 1.f), ProjectionMatrix);
 	OutUV = InUV;
-	OutColor = InColor.bgra;
+	OutColor = InColor;
+	ClipPosition = mul(float4(InPosition.xy, 0.f, 1.f), ProjectionMatrix);
 
 	if (any(TexCoordOverrideMode.xy != 0))
 	{
