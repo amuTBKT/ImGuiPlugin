@@ -150,8 +150,7 @@ namespace ImGuiUtils
 									const int32 Stride = FontAtlas->TexData->Width * BytesPerPixel;
 									nsvgRasterizeFull(Rasterizer, Image, 0, 0, SVGScaleX, SVGScaleY, (uint8*)FontAtlas->TexData->GetPixelsAt(AtlasRect.x, AtlasRect.y), AtlasRect.w, AtlasRect.w, Stride);
 
-#ifndef IMGUI_USE_BGRA_PACKED_COLOR
-									// TODO: nsvg claims the rendering is in RGBA but doesn't look like the case :?
+#if defined(NSVG_USE_BGRA) && !defined(IMGUI_USE_BGRA_PACKED_COLOR)
 									for (int32 Y = 0; Y < AtlasRect.h; ++Y)
 									{
 										uint8* Dst = (uint8*)FontAtlas->TexData->GetPixelsAt(AtlasRect.x, AtlasRect.y + Y);
