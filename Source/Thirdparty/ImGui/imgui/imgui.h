@@ -1,4 +1,4 @@
-// dear imgui, v1.92.9
+// dear imgui, v1.93.0 WIP
 // (headers)
 
 // Help:
@@ -29,8 +29,8 @@
 
 // Library Version
 // (Integer encoded as XYYZZ for use in #if preprocessor conditionals, e.g. '#if IMGUI_VERSION_NUM >= 12345')
-#define IMGUI_VERSION       "1.92.9"
-#define IMGUI_VERSION_NUM   19290
+#define IMGUI_VERSION       "1.93.0 WIP"
+#define IMGUI_VERSION_NUM   19294
 #define IMGUI_HAS_TABLE             // Added BeginTable() - from IMGUI_VERSION_NUM >= 18000
 #define IMGUI_HAS_TEXTURES          // Added ImGuiBackendFlags_RendererHasTextures - from IMGUI_VERSION_NUM >= 19198
 #define IMGUI_HAS_VIEWPORT          // In 'docking' WIP branch.
@@ -1136,7 +1136,7 @@ namespace ImGui
     // - Reminder ImGuiKey enum include access to mouse buttons and gamepad, so key ownership can apply to them.
     // - The return value of SetItemKeyOwner() says if ownership has been requested for the item, which is a shortcut to calling yet non-public TestKeyOwner() function.
     // - Many related features are still in imgui_internal.h. For instance, most IsKeyXXX()/IsMouseXXX() functions have an owner-id-aware version.
-    IMGUI_API bool          SetItemKeyOwner(ImGuiKey key);                                      // Set key owner to last item ID if it is hovered or active. Return true when ownership has been set. Roughly equivalent to 'if (TestKeyOwner(key, GetItemID()) && (IsItemHovered() || IsItemActive())) { SetKeyOwner(key, GetItemID());'. 
+    IMGUI_API bool          SetItemKeyOwner(ImGuiKey key);                                      // Set key owner to last item ID if it is hovered or active. Return true when ownership has been set. Roughly equivalent to 'if (TestKeyOwner(key, GetItemID()) && (IsItemHovered() || IsItemActive())) { SetKeyOwner(key, GetItemID());'.
 
     // Inputs Utilities: Mouse
     // - To refer to a mouse button, you may use named enums in your code e.g. ImGuiMouseButton_Left, ImGuiMouseButton_Right.
@@ -2442,7 +2442,7 @@ struct ImGuiStyle
     ImGuiTreeNodeFlags TreeLinesFlags;      // Default way to draw lines connecting TreeNode hierarchy. ImGuiTreeNodeFlags_DrawLinesNone or ImGuiTreeNodeFlags_DrawLinesFull or ImGuiTreeNodeFlags_DrawLinesToNodes.
     float       TreeLinesSize;              // Thickness of outlines when using ImGuiTreeNodeFlags_DrawLines.
     float       TreeLinesRounding;          // Radius of lines connecting child nodes to the vertical line.
-    float       MenuItemRounding;           // Radius of MenuItem, BeginMenu rounding. 
+    float       MenuItemRounding;           // Radius of MenuItem, BeginMenu rounding.
     float       SelectableRounding;         // Radius of Selectable rounding. MODIFYING THIS IS DISCOURAGED. CONTIGUOUS SELECTIONS WILL NOT LOOK RIGHT. (#7589)
     float       DragDropTargetRounding;     // Radius of the drag and drop target frame. When <0.0f: use FrameRounding.
     float       DragDropTargetBorderSize;   // Thickness of the drag and drop target border.
@@ -2461,10 +2461,12 @@ struct ImGuiStyle
     bool        DockingNodeHasCloseButton;  // Docking node has their own CloseButton() to close all docked windows.
     float       DockingSeparatorSize;       // Thickness of resizing border between docked windows
     float       MouseCursorScale;           // Scale software rendered mouse cursor (when io.MouseDrawCursor is enabled). We apply per-monitor DPI scaling over this scale. May be removed later.
+
+    // Rendering & Tesselation
     bool        AntiAliasedLines;           // Enable anti-aliased lines/borders. Disable if you are really tight on CPU/GPU. Latched at the beginning of the frame (copied to ImDrawList).
     bool        AntiAliasedLinesUseTex;     // Enable anti-aliased lines/borders using textures where possible. Require backend to render with bilinear filtering (NOT point/nearest filtering). Latched at the beginning of the frame (copied to ImDrawList).
     bool        AntiAliasedFill;            // Enable anti-aliased edges around filled shapes (rounded rectangles, circles, etc.). Disable if you are really tight on CPU/GPU. Latched at the beginning of the frame (copied to ImDrawList).
-    float       CurveTessellationTol;       // Tessellation tolerance when using PathBezierCurveTo() without a specific number of segments. Decrease for highly tessellated curves (higher quality, more polygons), increase to reduce quality.
+    float       CurveTessellationMaxError;  // Maximum error (in pixels) when using PathBezierCurveTo() without a specific number of segments. Decrease for highly tessellated curves (higher quality, more polygons), increase to reduce quality.
     float       CircleTessellationMaxError; // Maximum error (in pixels) allowed when using AddCircle()/AddCircleFilled() or drawing rounded corner rectangles with no explicit segment count specified. Decrease for higher quality but more geometry.
 
     // Colors
@@ -2488,6 +2490,7 @@ struct ImGuiStyle
 
     // Obsolete names
 #ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+    float       CurveTessellationTol;       // [OBSOLETE] Old CurveTessellationTol = New CurveTessellationMaxError*CurveTessellationMaxError. // Changed in 1.93.0
     // TabMinWidthForCloseButton = TabCloseButtonMinWidthUnselected // Renamed in 1.91.9.
 #endif
 };
@@ -3432,7 +3435,7 @@ enum ImDrawFlags_
 
     // Stroke options
     ImDrawFlags_Closed                      = 1 << 9, // PathStroke(), AddPolyline(): specify that shape should be closed.
-    //ImDrawFlags_Closed                    = 1 << 0, // Prior to 1.92.8 (May 2026), ImDrawFlags_Closed was guaranteed to be == 1<<0 == 1 for legacy compatibility reason. Hardcoded use of 1 or true should be replaced.
+    //ImDrawFlags_Closed                    = 1,      // Prior to 1.92.8 (May 2026), ImDrawFlags_Closed was guaranteed to be == 1<<0 == 1 for legacy compatibility reason. Hardcoded use of 1 or true should be replaced.
 
     ImDrawFlags_InvalidMask_                = ~0x7FFFFFF0, // == 0x8000000F,
 };
@@ -3477,7 +3480,8 @@ struct ImDrawList
     ImVector<ImVec4>        _ClipRectStack;     // [Internal]
     ImVector<ImTextureRef>  _TextureStack;      // [Internal]
     ImVector<ImU8>          _CallbacksDataBuf;  // [Internal]
-    float                   _FringeScale;       // [Internal] anti-alias fringe is scaled by this value, this helps to keep things sharp while zooming at vertex buffer content
+    float                   _FringeScale;       // [Internal] anti-alias fringe is scaled by this value, this helps to keep things sharp while zooming at vertex buffer content.
+    float                   _InvFringeScale;    // [internal] 1.0 / _FringeScale // FIXME: Consider renaming to _PixelDensity.
     const char*             _OwnerName;         // Pointer to owner window's name for debugging
 
     // If you want to create ImDrawList instances, pass them ImGui::GetDrawListSharedData().
@@ -3611,6 +3615,7 @@ struct ImDrawList
     // [Internal helpers]
     IMGUI_API void  _SetDrawListSharedData(ImDrawListSharedData* data);
     IMGUI_API void  _ResetForNewFrame();
+    IMGUI_API void  _SetPixelDensity(float pixel_density);
     IMGUI_API void  _ClearFreeMemory();
     IMGUI_API void  _PopUnusedDrawCmd();
     IMGUI_API void  _TryMergeDrawCmds();
@@ -3875,8 +3880,8 @@ struct ImFontAtlas
     IMGUI_API void              CompactCache();                                 // Compact cached glyphs and texture.
     IMGUI_API void              SetFontLoader(const ImFontLoader* font_loader); // Change font loader at runtime.
 
-    // Clearing the atlas/fonts has little use nowadays, unless you want to batch remove all fonts. 
-    // - Since 1.92, you can call ClearFonts() mid-frame, if you load new fonts afterwards. 
+    // Clearing the atlas/fonts has little use nowadays, unless you want to batch remove all fonts.
+    // - Since 1.92, you can call ClearFonts() mid-frame, if you load new fonts afterwards.
     // - As we are transitioning toward our new font system the semantic for those functions gets increasingly misleading and are often a source of issues.
     //   TL;DR; most likely, don't use any of those functions. We expect to obsolete/rework them.
     IMGUI_API void              Clear();                    // Clear everything (fonts + textures). Don't call mid-frame!

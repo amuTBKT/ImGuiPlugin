@@ -36,7 +36,7 @@ namespace ImGuiUtils
 
 			bool operator==(const FImageKey& Other) const
 			{
-				return KeyHash == Other.KeyHash;
+				return TexID == Other.TexID && BrushName == Other.BrushName && PixelSize == Other.PixelSize;
 			}
 
 			friend inline uint32 GetTypeHash(const FImageKey& Key)
@@ -120,6 +120,7 @@ namespace ImGuiUtils
 					}
 					else
 					{
+						ensureMsgf(false, TEXT("Invalid cached image! Did you clear ImFontAtlas without calling FImGuiImageCache::Clear first?"));
 						CachedImage = nullptr;
 					}
 				}

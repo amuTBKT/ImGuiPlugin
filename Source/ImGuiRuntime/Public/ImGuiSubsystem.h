@@ -164,8 +164,8 @@ private:
 
 	struct FOneFrameResource
 	{
-		FImGuiTextureResource	Resource;
 		ImTextureID				ResourceId;
+		FImGuiTextureResource	Resource;
 
 		bool operator==(ImTextureID InResourceId) const { return ResourceId == InResourceId; }
 	};

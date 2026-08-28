@@ -282,12 +282,12 @@ void UImGuiSubsystem::BeginImGuiFrame()
 #ifdef IMGUI_USE_NATIVE_RENDERER
 		if (TextureEntry->Texture)
 		{
-			m_OneFrameResources.Emplace(FImGuiTextureResource(TextureEntry->Texture->GetResource()), ToImTextureID(TextureEntry.Get()));
+			m_OneFrameResources.Emplace(ToImTextureID(TextureEntry.Get()), FImGuiTextureResource(TextureEntry->Texture->GetResource()));
 		}
 #else
 		if (TextureEntry->Brush)
 		{
-			m_OneFrameResources.Emplace(FImGuiTextureResource(TextureEntry->Brush->GetRenderingResource()), ToImTextureID(TextureEntry.Get()));
+			m_OneFrameResources.Emplace(ToImTextureID(TextureEntry.Get()), FImGuiTextureResource(TextureEntry->Brush->GetRenderingResource()));
 		}
 #endif
 	}
@@ -433,7 +433,7 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 			auto OneFrameResource = m_OneFrameResources.FindByKey(ResourceId);
 			if (!OneFrameResource)
 			{
-				m_OneFrameResources.Emplace(FImGuiTextureResource(AtlasTexture->GetResource()), ResourceId);
+				m_OneFrameResources.Emplace(ResourceId, FImGuiTextureResource(AtlasTexture->GetResource()));
 			}
 			else
 			{
@@ -450,7 +450,7 @@ void UImGuiSubsystem::UpdateFontAtlasTexture(ImTextureData* TexData)
 			auto OneFrameResource = m_OneFrameResources.FindByKey(ResourceId);
 			if (!OneFrameResource)
 			{
-				m_OneFrameResources.Emplace(FImGuiTextureResource(TextureEntry->Brush->GetRenderingResource()), ResourceId);
+				m_OneFrameResources.Emplace(ResourceId, FImGuiTextureResource(TextureEntry->Brush->GetRenderingResource()));
 			}
 			else
 			{
@@ -517,7 +517,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateB
 
 			if (!m_OneFrameResources.Contains(ResourceId))
 			{
-				m_OneFrameResources.Emplace(FImGuiTextureResource(ResourceHandle), ResourceId);
+				m_OneFrameResources.Emplace(ResourceId, FImGuiTextureResource(ResourceHandle));
 			}
 
 			Params.UV0 = ImVec2(Proxy->StartUV.X, Proxy->StartUV.Y);
@@ -554,7 +554,7 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(ImTextureID R
 {
 	if (!m_OneFrameResources.Contains(ResourceId))
 	{
-		m_OneFrameResources.Emplace(MoveTemp(Resource), ResourceId);
+		m_OneFrameResources.Emplace(ResourceId, MoveTemp(Resource));
 	}
 
 	FImGuiImageBindingParams Params = {};
