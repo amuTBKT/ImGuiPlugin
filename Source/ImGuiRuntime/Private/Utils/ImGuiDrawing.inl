@@ -121,6 +121,11 @@ namespace ImGuiUtils
 			return m_bHasDrawCommands;
 		}
 
+		FORCEINLINE static void AddDrawElement(FSlateWindowElementList& OutDrawElements, const FGeometry& WidgetGeometry, int32 LayerId, TSharedPtr<FWidgetDrawer> WidgetDrawer)
+		{
+			FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
+		}
+
 		virtual void Draw_RenderThread(FRDGBuilder& GraphBuilder, const FDrawPassInputs& Inputs) override
 		{
 			FRenderParameters* PassParameters = GraphBuilder.AllocParameters<FRenderParameters>();
@@ -458,6 +463,11 @@ namespace ImGuiUtils
 		bool HasDrawCommands() const
 		{
 			return m_bHasDrawCommands;
+		}
+
+		FORCEINLINE static void AddDrawElement(FSlateWindowElementList& OutDrawElements, const FGeometry& WidgetGeometry, int32 LayerId, TSharedPtr<FWidgetDrawer> WidgetDrawer)
+		{
+			WidgetDrawer->DrawSlateWidget(WidgetGeometry, OutDrawElements, LayerId);
 		}
 
 		void DrawSlateWidget(const FGeometry& AllottedGeometry, FSlateWindowElementList& OutDrawElements, int32 LayerId)

@@ -175,11 +175,7 @@ namespace ImGuiUtils
 				WidgetDrawer->SetDrawRectOffset(DrawRect.GetTopLeft2f());
 
 				OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
-#ifdef IMGUI_USE_NATIVE_RENDERER
-				FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
-#else
-				WidgetDrawer->DrawSlateWidget(WidgetGeometry, OutDrawElements, LayerId);
-#endif
+				ImGuiUtils::FWidgetDrawer::AddDrawElement(OutDrawElements, WidgetGeometry, LayerId, WidgetDrawer);
 				OutDrawElements.PopClip();
 			}
 #endif //#if IMGUI_ALLOW_LOCAL_DRAWING

@@ -355,11 +355,7 @@ int32 SImGuiWidgetBase::OnPaint(const FPaintArgs& Args, const FGeometry& WidgetG
 	if (WidgetDrawer->SetDrawData(ImGui::GetDrawData(), ImGui::GetTime(), WidgetGeometry.GetRenderBoundingRect().GetTopLeft2f()))
 	{
 		OutDrawElements.PushClip(FSlateClippingZone{ ClippingRect });
-#ifdef IMGUI_USE_NATIVE_RENDERER
-		FSlateDrawElement::MakeCustom(OutDrawElements, LayerId, WidgetDrawer);
-#else
-		WidgetDrawer->DrawSlateWidget(WidgetGeometry, OutDrawElements, LayerId);
-#endif
+		ImGuiUtils::FWidgetDrawer::AddDrawElement(OutDrawElements, WidgetGeometry, LayerId, WidgetDrawer);
 		OutDrawElements.PopClip();
 	}
 #endif //#if IMGUI_ALLOW_LOCAL_DRAWING

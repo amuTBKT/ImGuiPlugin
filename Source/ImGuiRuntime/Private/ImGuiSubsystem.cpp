@@ -130,11 +130,10 @@ void UImGuiSubsystem::Initialize()
 		IFileManager::Get().MakeDirectory(UTF8_TO_TCHAR(*m_IniDirectoryPath), true);
 	}
 
-	// NOTE: Add reference to make sure ImGuiContext cannot release the font atlas
 	m_SharedFontAtlas = MakeShared<ImFontAtlas, ESPMode::NotThreadSafe>();
-	m_SharedFontAtlas->TexMinWidth  = 512;
-	m_SharedFontAtlas->TexMinHeight = 512;
-	m_SharedFontAtlas->RefCount = 1;
+	m_SharedFontAtlas->TexMinWidth	= 512;
+	m_SharedFontAtlas->TexMinHeight	= 512;
+	m_SharedFontAtlas->RefCount = 1; // add reference to make sure ImGuiContext cannot release the font atlas
 #if WITH_FREETYPE
 	if (CVarEnableFreeType.GetValueOnAnyThread())
 	{
