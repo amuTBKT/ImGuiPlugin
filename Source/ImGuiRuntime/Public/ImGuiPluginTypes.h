@@ -202,7 +202,7 @@ struct FImGuiImageBindingParams
 namespace FImGui
 {
 	// utility function to allow adding icon to menu item
-	FORCEINLINE bool MenuItem(FImGuiTickContext* TickContext, const char* Label, bool bIsActive, const FImGuiImageBindingParams& Icon)
+	FORCEINLINE bool MenuItem(FImGuiTickContext* TickContext, const char* Label, bool bIsActive, const FImGuiImageBindingParams& Icon, ImVec2 IconOffset = ImVec2(0.f, 0.f))
 	{
 		const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
 		const float HalfItemSpacing = ItemSpacing * 0.5f;
@@ -256,6 +256,7 @@ namespace FImGui
 		{
 			ImGui::SameLine();
 			ImGui::SetCursorPosX(CursorPosX);
+			ImGui::SetCursorPos(ImGui::GetCursorPos() + IconOffset);
 			if (Icon.GetTexID() != ImTextureID_Invalid)
 			{
 				ImGui::Image(Icon.Id, Icon.Size, Icon.UV0, Icon.UV1);
@@ -282,7 +283,7 @@ namespace FImGui
 
 	// utility function to allow adding icon to sub menu
 	template <typename MenuCallback>
-	FORCEINLINE bool SubMenu(FImGuiTickContext* TickContext, const char* Label, MenuCallback MenuFunc, const FImGuiImageBindingParams& ExpandedIcon, const FImGuiImageBindingParams& CollapsedIcon)
+	FORCEINLINE bool SubMenu(FImGuiTickContext* TickContext, const char* Label, MenuCallback MenuFunc, const FImGuiImageBindingParams& ExpandedIcon, const FImGuiImageBindingParams& CollapsedIcon, ImVec2 IconOffset = ImVec2(0.f, 0.f))
 	{
 		const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
 		const float HalfItemSpacing = ItemSpacing * 0.5f;
@@ -350,6 +351,7 @@ namespace FImGui
 		{
 			ImGui::SameLine();
 			ImGui::SetCursorPosX(CursorPosX);
+			ImGui::SetCursorPos(ImGui::GetCursorPos() + IconOffset);
 			if (bOpen)
 			{
 				ImGui::Image(ExpandedIcon.Id, ExpandedIcon.Size, ExpandedIcon.UV0, ExpandedIcon.UV1);
@@ -375,9 +377,9 @@ namespace FImGui
 	}
 
 	template <typename MenuCallback>
-	FORCEINLINE bool SubMenu(FImGuiTickContext* TickContext, const char* Label, MenuCallback MenuFunc, const FImGuiImageBindingParams& Icon)
+	FORCEINLINE bool SubMenu(FImGuiTickContext* TickContext, const char* Label, MenuCallback MenuFunc, const FImGuiImageBindingParams& Icon, ImVec2 IconOffset = ImVec2(0.f, 0.f))
 	{
-		return SubMenu(TickContext, Label, MenuFunc, Icon, Icon);
+		return SubMenu(TickContext, Label, MenuFunc, Icon, Icon, IconOffset);
 	}
 }
 
