@@ -706,6 +706,7 @@ namespace ImGuiUtils
 		UImGuiSubsystem* m_ImGuiSubsystem = nullptr;
 		FImGuiImageBindingParams m_ExpandedMenuIcon{};
 		FImGuiImageBindingParams m_CollapsedMenuIcon{};
+		FImGuiImageBindingParams m_TransparentMenuIcon{};
 
 		void TickMainMenuBar(FImGuiMenuContainer& MenuContainer, FImGuiMenuContainer::FWidgetSlot& Slot, FImGuiTickContext* TickContext)
 		{
@@ -721,8 +722,8 @@ namespace ImGuiUtils
 				}
 				else
 				{
-					FImGuiImageBindingParams Icon = Slot.Icon ? m_ImGuiSubsystem->RegisterOneFrameResource(Slot.Icon, ImGui::GetTextLineHeight()) : FImGuiImageBindingParams{};
-					if (FImGui::MenuItem(Slot.GetName(), Slot.bIsActive, Icon))
+					FImGuiImageBindingParams Icon = Slot.Icon ? m_ImGuiSubsystem->RegisterOneFrameResource(Slot.Icon, ImGui::GetTextLineHeight()) : m_TransparentMenuIcon;
+					if (FImGui::MenuItem(TickContext, Slot.GetName(), Slot.bIsActive, Icon))
 					{
 						Slot.bIsActive = !Slot.bIsActive;
 					}
@@ -739,7 +740,7 @@ namespace ImGuiUtils
 			}
 			else if (!Slot.GetChildren().IsEmpty())
 			{
-				FImGui::SubMenu(Slot.GetName(),
+				FImGui::SubMenu(TickContext, Slot.GetName(),
 					[&]()
 					{
 						for (auto& ChildSlot : Slot.GetChildren())
@@ -818,6 +819,7 @@ namespace ImGuiUtils
 
 			m_ExpandedMenuIcon = m_ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderOpen"), ImGui::GetTextLineHeight());
 			m_CollapsedMenuIcon = m_ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderClosed"), ImGui::GetTextLineHeight());
+			m_TransparentMenuIcon = m_ImGuiSubsystem->RegisterOneFrameResource(nullptr, ImGui::GetTextLineHeight());
 
 			SetupDockNode();
 
@@ -850,6 +852,7 @@ namespace ImGuiUtils
 					// draw right aligned menu items
 					if (bDrawRightAlignedItems)
 					{
+						TickContext->MainMenuBar_bTickingRightAlignedItems = true;
 						TickContext->MainMenuBar_RightDirOffsetX = ImGui::GetCursorPosX();
 						TickContext->MainMenuBar_RightDirOffsetY = ImGui::GetCursorPosY();
 						TickContext->MainMenuBar_RightDirCursorPosX = ImGui::GetMainViewport()->WorkSize.x - ImGui::GetCurrentWindow()->DC.MenuBarOffset.x;
@@ -886,6 +889,8 @@ namespace ImGuiUtils
 								}
 							}
 						}
+
+						TickContext->MainMenuBar_bTickingRightAlignedItems = false;
 					}
 
 					TickContext->MainMenuBar_bIsTicking = false;

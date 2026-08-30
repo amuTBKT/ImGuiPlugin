@@ -40,6 +40,7 @@ struct FImGuiTickContext
 	// updating the main menu bar
 	// TODO: is there a better way to detect if we are inside `BeginMainMenuBar`/`EndMainMenuBar` block?
 	bool  MainMenuBar_bIsTicking = false;
+	bool  MainMenuBar_bTickingRightAlignedItems = false;
 	float MainMenuBar_Height = 0.f;
 	float MainMenuBar_RightDirOffsetX = 0.f;
 	float MainMenuBar_RightDirOffsetY = 0.f;
@@ -51,7 +52,7 @@ struct FImGuiTickContext
 	// this is different from `AllocateSpaceForRightAlignedMenuWidget` as ImGui::BeginMenu has some custom logic to handle item spacing
 	bool AllocateSpaceForRightAlignedMenuItem(const char* Label)
 	{
-		if (!ensure(MainMenuBar_bIsTicking))
+		if (!ensure(MainMenuBar_bIsTicking && MainMenuBar_bTickingRightAlignedItems))
 		{
 			return false;
 		}
@@ -74,7 +75,7 @@ struct FImGuiTickContext
 
 	bool AllocateSpaceForRightAlignedMenuWidget(float RequestedWidth)
 	{
-		if (!ensure(MainMenuBar_bIsTicking))
+		if (!ensure(MainMenuBar_bIsTicking && MainMenuBar_bTickingRightAlignedItems))
 		{
 			return false;
 		}
@@ -187,12 +188,13 @@ struct FImGuiNamedScope final : FNoncopyable
 // params used to create image widgets, works for slate icons too (they are atlased)
 struct FImGuiImageBindingParams
 {
-	ImVec2 Size = ImVec2(1.f, 1.f);
-	ImVec2 UV0 = ImVec2(0.f, 0.f);
-	ImVec2 UV1 = ImVec2(1.f, 1.f);
+	ImVec2 Size = ImVec2(0.f, 0.f);
+	ImVec2 UV0  = ImVec2(0.f, 0.f);
+	ImVec2 UV1  = ImVec2(1.f, 1.f);
 	ImTextureRef Id;
 
-	ImTextureID GetTexID() const { return Id.GetTexID(); }
+	ImTextureID GetTexID()	const { return Id.GetTexID(); }
+	bool		IsValid()	const { return GetTexID() != ImTextureID_Invalid; }
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -200,78 +202,182 @@ struct FImGuiImageBindingParams
 namespace FImGui
 {
 	// utility function to allow adding icon to menu item
-	FORCEINLINE bool MenuItem(const char* Label, bool bIsActive, const FImGuiImageBindingParams& Icon)
+	FORCEINLINE bool MenuItem(FImGuiTickContext* TickContext, const char* Label, bool bIsActive, const FImGuiImageBindingParams& Icon)
 	{
-		const float CursorPosX = ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x * 0.5f;
+		const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
+		const float HalfItemSpacing = ItemSpacing * 0.5f;
+		const float FramePadding = ImGui::GetStyle().FramePadding.x;
+		const bool bIsHorizontalMenu = ImGui::GetCurrentWindow()->DC.LayoutType == ImGuiLayoutType_Horizontal;
+
+		const bool bIsIconOnlyItem = FCStringAnsi::Strstr(Label, "##") == Label;
+		ensureMsgf(bIsHorizontalMenu || !bIsIconOnlyItem, TEXT("Icon only menu item (%hs) should only be used with horizontal menus"), Label);
 
 		// label name with padding for icon
-		char LabelBuffer[128];
-		FCStringAnsi::Sprintf(LabelBuffer, "        %s", Label, Label);
-
-		ImGui::BeginGroup();
-		bool bPressed = ImGui::MenuItem(LabelBuffer, nullptr, bIsActive);
-
-		ImGui::SameLine();
-		ImGui::SetCursorPosX(CursorPosX);
-		if (Icon.GetTexID() != ImTextureID_Invalid)
+		TAnsiStringBuilder<128> LabelBuffer;
+		if (Icon.Size.x > 0)
 		{
-			ImGui::Image(Icon.Id, Icon.Size, Icon.UV0, Icon.UV1);
+			// TODO: only tested with Roboto font
+			const float WhitespaceCharSize = ImGui::CalcTextSize("\u200A").x;
+			float WhitespaceWidth = bIsHorizontalMenu ? Icon.Size.x : Icon.Size.x + FramePadding;
+			if (bIsIconOnlyItem)
+			{
+				// TODO: this is probably a hack :p
+				WhitespaceWidth = FMath::Max(0.f, WhitespaceWidth - ItemSpacing);
+			}
+			const int32 WhitespaceCount = FMath::TruncToInt(WhitespaceWidth / WhitespaceCharSize);
+			for (int32 i = 0; i < WhitespaceCount; ++i)
+			{
+				LabelBuffer.Append("\u200A");
+			}
+		}
+		LabelBuffer.Append(Label);
+
+		if (TickContext->MainMenuBar_bTickingRightAlignedItems && !TickContext->AllocateSpaceForRightAlignedMenuItem(*LabelBuffer))
+		{
+			return false;
+		}
+
+		if (bIsHorizontalMenu)
+		{
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() - HalfItemSpacing);
+			ImGui::BeginGroup();
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + HalfItemSpacing);
 		}
 		else
 		{
-			ImGui::Dummy(ImVec2(1.f, 1.f));
+			ImGui::BeginGroup();
+		}
+
+		float CursorPosX = ImGui::GetCursorPosX();
+		bool bPressed = ImGui::MenuItem(*LabelBuffer, nullptr, bIsActive);
+		const float MenuItemExtentMaxX = ImGui::GetItemRectMax().x;
+
+		if (Icon.Size.x > 0)
+		{
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(CursorPosX);
+			if (Icon.GetTexID() != ImTextureID_Invalid)
+			{
+				ImGui::Image(Icon.Id, Icon.Size, Icon.UV0, Icon.UV1);
+			}
+			else
+			{
+				ImGui::Dummy(ImVec2(Icon.Size.x, Icon.Size.y));
+			}
+
+			// make sure LastItemRectMax matches menu item's rect
+			if (bIsHorizontalMenu)
+			{
+				ImGui::Dummy(ImVec2(MenuItemExtentMaxX - ImGui::GetItemRectMax().x - ItemSpacing, 0.f));
+			}
 		}
 		ImGui::EndGroup();
+		if (bIsHorizontalMenu)
+		{
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() - HalfItemSpacing);
+		}
 
 		return bPressed;
 	}
 
 	// utility function to allow adding icon to sub menu
 	template <typename MenuCallback>
-	FORCEINLINE bool SubMenu(const char* Label, MenuCallback MenuFunc, const FImGuiImageBindingParams& ExpandedIcon, const FImGuiImageBindingParams& CollapsedIcon, ImVec2 IconOffset = ImVec2(0.f, 0.f))
+	FORCEINLINE bool SubMenu(FImGuiTickContext* TickContext, const char* Label, MenuCallback MenuFunc, const FImGuiImageBindingParams& ExpandedIcon, const FImGuiImageBindingParams& CollapsedIcon)
 	{
-		const float CursorPosX = ImGui::GetCursorPosX() + ImGui::GetStyle().FramePadding.x * 0.5f;
+		const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
+		const float HalfItemSpacing = ItemSpacing * 0.5f;
+		const float FramePadding = ImGui::GetStyle().FramePadding.x;
+		const bool bIsHorizontalMenu = ImGui::GetCurrentWindow()->DC.LayoutType == ImGuiLayoutType_Horizontal;
+
+		const bool bIsIconOnlyItem = FCStringAnsi::Strstr(Label, "##") == Label;
+		ensureMsgf(bIsHorizontalMenu || !bIsIconOnlyItem, TEXT("Icon only menu item (%hs) should only be used with horizontal menus"), Label);
 
 		// label name with padding for icon
 		// NOTE: "[Icon] Label" has the same ID as "Label"
 		// this is to ensure calling ImGui::BeginMenu("Label") finds the same menu as FImGui::SubMenu("Label", ...)
-		char LabelBuffer[256];
+		TAnsiStringBuilder<256> LabelBuffer;
+		if (ExpandedIcon.Size.x > 0)
+		{
+			// TODO: only tested with Roboto font
+			const float WhitespaceCharSize = ImGui::CalcTextSize("\u200A").x;
+			float WhitespaceWidth = bIsHorizontalMenu ? ExpandedIcon.Size.x : ExpandedIcon.Size.x + FramePadding;
+			if (bIsIconOnlyItem)
+			{
+				// TODO: this is probably a hack :p
+				WhitespaceWidth = FMath::Max(0.f, WhitespaceWidth - ItemSpacing);
+			}
+			const int32 WhitespaceCount = FMath::TruncToInt(WhitespaceWidth / WhitespaceCharSize);
+			for (int32 i = 0; i < WhitespaceCount; ++i)
+			{
+				LabelBuffer.Append("\u200A");
+			}
+		}
 		if (FCStringAnsi::Strstr(Label, "##"))
 		{
-			// icon padding handled by user
-			FCStringAnsi::Sprintf(LabelBuffer, "%s", Label);
+			LabelBuffer.Append(Label);
 		}
 		else
 		{
-			FCStringAnsi::Sprintf(LabelBuffer, "        %s###%s", Label, Label);
+			LabelBuffer.Appendf("%s###%s", Label);
 		}
 
-		const bool bOpen = ImGui::BeginMenu(LabelBuffer);
+		if (TickContext->MainMenuBar_bTickingRightAlignedItems && !TickContext->AllocateSpaceForRightAlignedMenuItem(*LabelBuffer))
+		{
+			return false;
+		}
+
+		if (bIsHorizontalMenu)
+		{
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() - HalfItemSpacing);
+			ImGui::BeginGroup();
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + HalfItemSpacing);
+		}
+		else
+		{
+			ImGui::BeginGroup();
+		}
+
+		float CursorPosX = ImGui::GetCursorPosX();
+		const bool bOpen = ImGui::BeginMenu(*LabelBuffer);
+		const float MenuItemExtentMaxX = ImGui::GetItemRectMax().x;
 		if (bOpen)
 		{
 			MenuFunc();
 			ImGui::EndMenu();
 		}
 
-		ImGui::SameLine();
-		ImGui::SetCursorPosX(CursorPosX);
-		ImGui::SetCursorPos(ImGui::GetCursorPos() + IconOffset);
-		if (bOpen)
+		if (ExpandedIcon.Size.x > 0)
 		{
-			ImGui::Image(ExpandedIcon.Id, ExpandedIcon.Size, ExpandedIcon.UV0, ExpandedIcon.UV1);
+			ImGui::SameLine();
+			ImGui::SetCursorPosX(CursorPosX);
+			if (bOpen)
+			{
+				ImGui::Image(ExpandedIcon.Id, ExpandedIcon.Size, ExpandedIcon.UV0, ExpandedIcon.UV1);
+			}
+			else
+			{
+				ImGui::Image(CollapsedIcon.Id, CollapsedIcon.Size, CollapsedIcon.UV0, CollapsedIcon.UV1);
+			}
+
+			// make sure LastItemRectMax matches menu item's rect
+			if (bIsHorizontalMenu)
+			{
+				ImGui::Dummy(ImVec2(MenuItemExtentMaxX - ImGui::GetItemRectMax().x - ItemSpacing, 0.f));
+			}
 		}
-		else
+		ImGui::EndGroup();
+		if (bIsHorizontalMenu)
 		{
-			ImGui::Image(CollapsedIcon.Id, CollapsedIcon.Size, CollapsedIcon.UV0, CollapsedIcon.UV1);
+			ImGui::SetCursorPosX(ImGui::GetCursorPosX() - HalfItemSpacing);
 		}
 
 		return bOpen;
 	}
 
 	template <typename MenuCallback>
-	FORCEINLINE bool SubMenu(const char* Label, MenuCallback MenuFunc, const FImGuiImageBindingParams& Icon, ImVec2 IconOffset = ImVec2(0.f, 0.f))
+	FORCEINLINE bool SubMenu(FImGuiTickContext* TickContext, const char* Label, MenuCallback MenuFunc, const FImGuiImageBindingParams& Icon)
 	{
-		return SubMenu(Label, MenuFunc, Icon, Icon, IconOffset);
+		return SubMenu(TickContext, Label, MenuFunc, Icon, Icon);
 	}
 }
 
