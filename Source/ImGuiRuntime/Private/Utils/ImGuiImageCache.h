@@ -22,21 +22,16 @@ namespace ImGuiUtils
 	{
 		struct FImageKey
 		{
-			int32			TexID;
-			FName			BrushName;
-			FIntPoint		PixelSize;
-
-			FImageKey(int32 InTexID, const FName& InBrushName, const FIntPoint& InSize)
-				: TexID(InTexID)
-				, BrushName(InBrushName)
+			FImageKey(const FName& InBrushName, const FIntPoint& InSize)
+				: BrushName(InBrushName)
 				, PixelSize(InSize)
 			{
-				KeyHash = HashCombine(GetTypeHash(TexID), HashCombine(GetTypeHash(BrushName), GetTypeHash(PixelSize)));
+				KeyHash = HashCombine(GetTypeHash(BrushName), GetTypeHash(PixelSize));
 			}
 
 			bool operator==(const FImageKey& Other) const
 			{
-				return TexID == Other.TexID && BrushName == Other.BrushName && PixelSize == Other.PixelSize;
+				return BrushName == Other.BrushName && PixelSize == Other.PixelSize;
 			}
 
 			friend inline uint32 GetTypeHash(const FImageKey& Key)
@@ -45,7 +40,9 @@ namespace ImGuiUtils
 			}
 
 		private:
-			uint32 KeyHash;
+			FName		BrushName;
+			FIntPoint	PixelSize;
+			uint32		KeyHash;
 		};
 
 		struct FCachedImage
@@ -110,7 +107,7 @@ namespace ImGuiUtils
 			{
 				// non vector image don't need scaling so cache at 1x1 (cannot determine the size without loading it first)
 				const FIntPoint SizeForCaching = (Brush.GetImageType() == ESlateBrushImageType::Vector) ? DrawSize.IntPoint() : FIntPoint(1, 1);
-				FImageKey CacheKey(FontAtlas->TexData->UniqueID, Brush.GetResourceName(), SizeForCaching);
+				FImageKey CacheKey(Brush.GetResourceName(), SizeForCaching);
 				FCachedImage* CachedImage = CachedImages.Find(CacheKey);
 				if (CachedImage)
 				{
@@ -140,7 +137,8 @@ namespace ImGuiUtils
 							NSVGimage* Image = nsvgParse(TCHAR_TO_ANSI(*SVGString), "px", 96.f);
 							if (Image)
 							{
-								RectId = FontAtlas->AddCustomRect(CacheKey.PixelSize.X, CacheKey.PixelSize.Y, &AtlasRect);
+								FIntPoint RasterSize = DrawSize.IntPoint();
+								RectId = FontAtlas->AddCustomRect(RasterSize.X, RasterSize.Y, &AtlasRect);
 								if (RectId != ImFontAtlasRectId_Invalid)
 								{
 									NSVGrasterizer* Rasterizer = nsvgCreateRasterizer();
