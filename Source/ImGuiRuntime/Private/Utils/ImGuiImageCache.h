@@ -95,12 +95,12 @@ namespace ImGuiUtils
 
 		FORCEINLINE static bool CanLoadBrush(const FSlateBrush& Brush)
 		{
-			return (Brush.GetImageType() != ESlateBrushImageType::NoImage) && !Brush.IsDynamicallyLoaded();
+			return (Brush.GetImageType() != ESlateBrushImageType::NoImage) && !Brush.IsDynamicallyLoaded() && !::IsValid(Brush.GetResourceObject());
 		}
 
 		FImGuiImageBindingParams GetOrLoadBrush(const FSlateBrush& Brush, FVector2f LocalSize, float DrawScale)
 		{
-			DECLARE_SCOPE_CYCLE_COUNTER(TEXT("SVG GetResourceHandle"), STAT_ImGui_LookupSVG, STATGROUP_ImGui);
+			DECLARE_SCOPE_CYCLE_COUNTER(TEXT("ImageCache::GetResourceHandle"), STAT_ImGui_LookupImage, STATGROUP_ImGui);
 
 			FVector2f DrawSize = LocalSize * DrawScale;
 			ImFontAtlasRect AtlasRect;
