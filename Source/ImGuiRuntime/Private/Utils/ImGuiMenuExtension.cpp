@@ -857,9 +857,14 @@ namespace ImGuiUtils
 						TickContext->MainMenuBar_RightDirOffsetY = ImGui::GetCursorPosY();
 						TickContext->MainMenuBar_RightDirCursorPosX = ImGui::GetMainViewport()->WorkSize.x - ImGui::GetCurrentWindow()->DC.MenuBarOffset.x;
 
-						if (TickContext->AllocateSpaceForRightAlignedMenuItem("Search"))
+						// search menu items widget
+						if (ImGui::GetCurrentWindow()->DC.LayoutType == ImGuiLayoutType_Horizontal)
 						{
-							ImGui::MenuItem("Search");
+							auto SearchIcon = m_ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.Search"), ImGui::GetTextLineHeight());
+							if (FImGui::MenuItem(TickContext, "##SearchMenu", false, SearchIcon, ImVec2(0.f, 2.5f)))
+							{
+							}
+							ImGui::SetItemTooltip("%s", "Search menu items");
 						}
 
 						for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
@@ -869,7 +874,9 @@ namespace ImGuiUtils
 
 							if (Slot.IsMenuItem())
 							{
+								TickContext->MainMenuBar_CurrentItemEnabledState = &Slot.bIsActive;
 								Slot.GetTickDelegate().ExecuteIfBound(TickContext);
+								TickContext->MainMenuBar_CurrentItemEnabledState = nullptr;
 							}
 							else if (!Slot.GetChildren().IsEmpty())
 							{
@@ -891,6 +898,13 @@ namespace ImGuiUtils
 						}
 
 						TickContext->MainMenuBar_bTickingRightAlignedItems = false;
+					}
+
+					// HACK: patch max cursor pos
+					ImGuiWindow* CurrentWindow = ImGui::GetCurrentWindow();
+					if (CurrentWindow->DC.CursorPos.x >= CurrentWindow->DC.CursorMaxPos.x)
+					{
+						CurrentWindow->DC.CursorMaxPos.x = CurrentWindow->DC.CursorPos.x;
 					}
 
 					TickContext->MainMenuBar_bIsTicking = false;

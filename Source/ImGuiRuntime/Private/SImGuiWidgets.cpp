@@ -89,7 +89,11 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
 	IO.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
 	IO.BackendPlatformName = "Unreal Engine";
-	IO.BackendRendererName = "Unreal Engine";
+#ifdef IMGUI_USE_NATIVE_RENDERER
+	IO.BackendRendererName = "Native Renderer";
+#else
+	IO.BackendRendererName = "Slate Renderer";
+#endif
 
 	if (InArgs._bEnableViewports && FSlateApplication::IsInitialized() && FPlatformProperties::SupportsWindowedMode())
 	{

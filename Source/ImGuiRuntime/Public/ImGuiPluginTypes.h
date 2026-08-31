@@ -210,7 +210,7 @@ namespace FImGui
 		const bool bIsHorizontalMenu = ImGui::GetCurrentWindow()->DC.LayoutType == ImGuiLayoutType_Horizontal;
 
 		const bool bIsIconOnlyItem = FCStringAnsi::Strstr(Label, "##") == Label;
-		ensureMsgf(bIsHorizontalMenu || !bIsIconOnlyItem, TEXT("Icon only menu item (%hs) should only be used with horizontal menus"), Label);
+		ensureMsgf(bIsHorizontalMenu || !bIsIconOnlyItem, TEXT("Icon only menu item (%hs) should only be used with horizontal menus."), Label);
 
 		// label name with padding for icon
 		TAnsiStringBuilder<128> LabelBuffer;
@@ -231,6 +231,7 @@ namespace FImGui
 			}
 		}
 		LabelBuffer.Append(Label);
+		checkf(LabelBuffer.GetAllocatedSize() == 0, TEXT("LabelBuffer overflow detected! Try to keep menu item labels short."));
 
 		if (TickContext->MainMenuBar_bTickingRightAlignedItems && !TickContext->AllocateSpaceForRightAlignedMenuItem(*LabelBuffer))
 		{
@@ -291,7 +292,7 @@ namespace FImGui
 		const bool bIsHorizontalMenu = ImGui::GetCurrentWindow()->DC.LayoutType == ImGuiLayoutType_Horizontal;
 
 		const bool bIsIconOnlyItem = FCStringAnsi::Strstr(Label, "##") == Label;
-		ensureMsgf(bIsHorizontalMenu || !bIsIconOnlyItem, TEXT("Icon only menu item (%hs) should only be used with horizontal menus"), Label);
+		ensureMsgf(bIsHorizontalMenu || !bIsIconOnlyItem, TEXT("Icon only menu item (%hs) should only be used with horizontal menus."), Label);
 
 		// label name with padding for icon
 		// NOTE: "[Icon] Label" has the same ID as "Label"
@@ -319,8 +320,9 @@ namespace FImGui
 		}
 		else
 		{
-			LabelBuffer.Appendf("%s###%s", Label);
+			LabelBuffer.Appendf("%s###%s", Label, Label);
 		}
+		checkf(LabelBuffer.GetAllocatedSize() == 0, TEXT("LabelBuffer overflow detected! Try to keep menu item labels short."));
 
 		if (TickContext->MainMenuBar_bTickingRightAlignedItems && !TickContext->AllocateSpaceForRightAlignedMenuItem(*LabelBuffer))
 		{

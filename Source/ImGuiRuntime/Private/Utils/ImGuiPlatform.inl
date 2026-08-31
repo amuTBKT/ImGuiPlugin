@@ -130,13 +130,18 @@ namespace ImGuiUtils
 			Viewport->PlatformUserData = nullptr;
 
 #if !WITH_EDITOR
-			// try to keep UI focus
-			ExecuteOnGameThread(TEXT("ImGui_RetainFocus"),
-				[]()
-				{
-					FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
-					FSlateApplication::Get().ResetToDefaultInputSettings();
-				});
+			// TODO: Ideally should check if the viewport was manually merged, this should be fine for now
+			bool bTooltipWindow = (Viewport->Flags & ImGuiViewportFlags_TopMost);
+			if (!bTooltipWindow)
+			{
+				// try to keep UI focus
+				ExecuteOnGameThread(TEXT("ImGui_RetainFocus"),
+					[]()
+					{
+						FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
+						FSlateApplication::Get().ResetToDefaultInputSettings();
+					});
+			}
 #endif
 		}
 	}
