@@ -110,6 +110,8 @@ namespace ImGuiUtils
 	{
 		if (FImGuiViewportData* ViewportData = (FImGuiViewportData*)Viewport->PlatformUserData)
 		{
+			TWeakPtr<SImGuiWidgetBase> MainViewportWidget = ViewportData->MainViewportWidget.Pin();
+
 			if (TSharedPtr<SWindow> ViewportWindow = ViewportData->ViewportWindow.Pin())
 			{
 				ViewportWindow->GetOnWindowClosedEvent().Remove(ViewportData->OnWindowClosedHandle);
@@ -130,16 +132,27 @@ namespace ImGuiUtils
 			Viewport->PlatformUserData = nullptr;
 
 #if !WITH_EDITOR
+			if (IsEngineExitRequested())
+			{
+				return;
+			}
+
 			// TODO: Ideally should check if the viewport was manually merged, this should be fine for now
 			bool bTooltipWindow = (Viewport->Flags & ImGuiViewportFlags_TopMost);
 			if (!bTooltipWindow)
 			{
 				// try to keep UI focus
 				ExecuteOnGameThread(TEXT("ImGui_RetainFocus"),
-					[]()
+					[MainViewportWidget]()
 					{
 						FSlateApplication::Get().ClearKeyboardFocus(EFocusCause::SetDirectly);
 						FSlateApplication::Get().ResetToDefaultInputSettings();
+
+						TSharedPtr<SImGuiWidgetBase> WidgetToFocus = MainViewportWidget.Pin();
+						if (WidgetToFocus)
+						{
+							FSlateApplication::Get().SetAllUserFocus(WidgetToFocus, EFocusCause::SetDirectly);
+						}
 					});
 			}
 #endif
