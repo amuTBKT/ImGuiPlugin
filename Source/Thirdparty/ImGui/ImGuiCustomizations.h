@@ -18,13 +18,6 @@
 	#if WITH_FREETYPE
 		#define IMGUI_ENABLE_FREETYPE 1
 	#endif
-
-	#ifndef IMGUI_USE_NATIVE_RENDERER
-		// for slate renderer path we don't really have much control over texture format and rendering
-		// prefer BGRA color format as that is the default used by unreal
-		// NOTE: not using BGRA for native renderer as that will require changes to NetImGui server
-		#define IMGUI_USE_BGRA_PACKED_COLOR 1
-	#endif
 #else
 	// not compiling with unreal, define common types
 	#define IMGUI_UNREAL_API
@@ -49,6 +42,7 @@
 #define IMGUI_DISABLE_WIN32_FUNCTIONS					1
 #define IMGUI_DISABLE_DEFAULT_FILE_FUNCTIONS			1
 #define IMGUI_DISABLE_TIME_FUNCTIONS					1 //some cross platform issues
+#define IMGUI_USE_BGRA_PACKED_COLOR						1
 
 #ifdef IMGUI_DISABLE_DEFAULT_FILE_FUNCTIONS
 using ImFileHandle = class IFileHandle*;
