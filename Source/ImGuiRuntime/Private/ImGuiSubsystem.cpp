@@ -354,6 +354,8 @@ ImTextureID UImGuiSubsystem::AllocateFontAtlasTexture(int32 SizeX, int32 SizeY)
 		if (!Texture)
 		{
 			Texture = NewObject<UTextureRenderTarget2D>(GetTransientPackage(), FName(FontTextureName, TextureIndex + 1));
+			Texture->AddressX = TA_Clamp;
+			Texture->AddressY = TA_Clamp;
 			Texture->Filter = TextureFilter::TF_Bilinear;
 			Texture->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8;
 			Texture->OverrideFormat = PF_B8G8R8A8;
@@ -490,6 +492,7 @@ bool UImGuiSubsystem::CaptureGpuFrame() const
 FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(const FSlateBrush* SlateBrush, FVector2f LocalSize, float DrawScale/*=1.f*/)
 {
 	FImGuiImageBindingParams Params{};
+	Params.Id = m_SharedFontAtlas->TexRef;
 	Params.Size = ImVec2(LocalSize.X, LocalSize.Y) * DrawScale;
 	if (!SlateBrush)
 	{
@@ -543,6 +546,10 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(FSlateShaderR
 	{
 		Params = RegisterOneFrameResource(ToImTextureID(SlateShaderResource), FImGuiTextureResource(SlateShaderResource), SlateShaderResource->GetWidth(), SlateShaderResource->GetHeight());
 	}
+	else
+	{
+		Params.Id = m_SharedFontAtlas->TexRef;
+	}
 	return Params;
 }
 
@@ -553,6 +560,10 @@ FImGuiImageBindingParams UImGuiSubsystem::RegisterOneFrameResource(UTexture2D* T
 	if (Texture)
 	{
 		Params = RegisterOneFrameResource(ToImTextureID(Texture), FImGuiTextureResource(Texture->GetResource()), Texture->GetSizeX(), Texture->GetSizeY());
+	}
+	else
+	{
+		Params.Id = m_SharedFontAtlas->TexRef;
 	}
 	return Params;
 }

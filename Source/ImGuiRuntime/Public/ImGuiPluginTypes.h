@@ -196,11 +196,12 @@ struct FImGuiNamedScope final : FNoncopyable
 };
 
 // params used to create image widgets, works for slate icons too (they are atlased)
+// NOTE: using ImVec2(0,0) for invalid image (maps to 2x2 white pixel), can switch to ImGui::GetFontTexUvWhitePixel() if this setup breaks at some point
 struct FImGuiImageBindingParams
 {
 	ImVec2 Size = ImVec2(0.f, 0.f);
 	ImVec2 UV0  = ImVec2(0.f, 0.f);
-	ImVec2 UV1  = ImVec2(1.f, 1.f);
+	ImVec2 UV1  = ImVec2(0.f, 0.f);
 	ImTextureRef Id;
 
 	ImTextureID GetTexID()	const { return Id.GetTexID(); }
