@@ -25,6 +25,11 @@ static FAutoConsoleVariableRef CVarRenderCaptureNextImGuiFrame(
 	GCaptureNextGpuFrames,
 	TEXT("Enable capturing of ImGui rendering for the next N draws"));
 
+static TAutoConsoleVariable<bool> CVarDisableMouseCursorBitmaps(
+	TEXT("imgui.DisableMouseCursorBitmaps"),
+	true,
+	TEXT("Don't build software mouse cursors into ImGui texture atlas (saves a little texture memory)"));
+
 #if WITH_FREETYPE
 #include "imgui/misc/freetype/imgui_freetype.cpp"
 
@@ -134,6 +139,10 @@ void UImGuiSubsystem::Initialize()
 	m_SharedFontAtlas->TexMinWidth	= 512;
 	m_SharedFontAtlas->TexMinHeight	= 512;
 	m_SharedFontAtlas->RefCount = 1; // add reference to make sure ImGuiContext cannot release the font atlas
+	if (CVarDisableMouseCursorBitmaps.GetValueOnAnyThread())
+	{
+		m_SharedFontAtlas->Flags = ImFontAtlasFlags_NoMouseCursors;
+	}
 #if WITH_FREETYPE
 	if (CVarEnableFreeType.GetValueOnAnyThread())
 	{
