@@ -56,6 +56,11 @@ struct FImGuiTickContext
 		{
 			return false;
 		}
+		if (ImGui::GetCurrentWindow()->DC.LayoutType == ImGuiLayoutType_Vertical)
+		{
+			// no need to offset cursor
+			return true;
+		}
 
 		const float ItemSpacing = ImGui::GetStyle().ItemSpacing.x;
 
@@ -78,6 +83,11 @@ struct FImGuiTickContext
 		if (!ensure(MainMenuBar_bIsTicking && MainMenuBar_bTickingRightAlignedItems))
 		{
 			return false;
+		}
+		if (ImGui::GetCurrentWindow()->DC.LayoutType == ImGuiLayoutType_Vertical)
+		{
+			// no need to offset cursor
+			return true;
 		}
 
 		if (MainMenuBar_RightDirCursorPosX - RequestedWidth > MainMenuBar_RightDirOffsetX)

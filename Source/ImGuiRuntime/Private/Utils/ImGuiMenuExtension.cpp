@@ -823,7 +823,7 @@ namespace ImGuiUtils
 
 			SetupDockNode();
 
-			auto RunMainMenuTickLogic = [&](bool bDrawRightAlignedItems)
+			auto RunMainMenuTickLogic = [&]()
 				{
 					TickContext->MainMenuBar_bIsTicking = true;
 					TickContext->MainMenuBar_Height = ImGui::GetFrameHeight();
@@ -850,7 +850,6 @@ namespace ImGuiUtils
 					}
 
 					// draw right aligned menu items
-					if (bDrawRightAlignedItems)
 					{
 						TickContext->MainMenuBar_bTickingRightAlignedItems = true;
 						TickContext->MainMenuBar_RightDirOffsetX = ImGui::GetCursorPosX();
@@ -949,7 +948,7 @@ namespace ImGuiUtils
 								m_bOpenMenu = false;
 							}
 
-							RunMainMenuTickLogic(false);
+							RunMainMenuTickLogic();
 
 							if (bIsViewportToolbarHidden)
 							{
@@ -991,7 +990,7 @@ namespace ImGuiUtils
 				ImGui::PushStyleVar(ImGuiStyleVar_Alpha, FMath::Min(1.f, m_MenuBarAlpha));
 				if (ImGui::BeginMainMenuBar())
 				{
-					RunMainMenuTickLogic(true);
+					RunMainMenuTickLogic();
 
 					auto IsAnyMenuItemActive = [&]()
 						{
