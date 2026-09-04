@@ -28,7 +28,8 @@ static FAutoConsoleVariableRef CVarRenderCaptureNextImGuiFrame(
 static TAutoConsoleVariable<bool> CVarDisableMouseCursorBitmaps(
 	TEXT("imgui.DisableMouseCursorBitmaps"),
 	true,
-	TEXT("Don't build software mouse cursors into ImGui texture atlas (saves a little texture memory)"));
+	TEXT("Don't build software mouse cursors into ImGui texture atlas (saves a little texture memory)"),
+	ECVF_ReadOnly);
 
 #if WITH_FREETYPE
 #include "imgui/misc/freetype/imgui_freetype.cpp"
