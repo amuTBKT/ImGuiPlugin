@@ -819,7 +819,8 @@ namespace ImGuiUtils
 
 			m_ExpandedMenuIcon = m_ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderOpen"), ImGui::GetTextLineHeight());
 			m_CollapsedMenuIcon = m_ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.FolderClosed"), ImGui::GetTextLineHeight());
-			m_TransparentMenuIcon = m_ImGuiSubsystem->RegisterOneFrameResource(nullptr, ImGui::GetTextLineHeight());
+			// invalid ImTextureID with proper size to keep layout consistent
+			m_TransparentMenuIcon.Size = ImVec2(ImGui::GetTextLineHeight(), ImGui::GetTextLineHeight());
 
 			SetupDockNode();
 
