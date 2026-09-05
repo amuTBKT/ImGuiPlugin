@@ -695,6 +695,9 @@ namespace ImGuiUtils
 		bool m_AutoHideMenuBar = true;
 		float m_MenuBarAlpha = MenuBarVisibilityDuration;
 
+		char FilterStringBuffer[128] = { 0 };
+		TArray<FAnsiString> FilterKeywords;
+
 		ImGuiID MainViewportDockSpaceId = 0;
 		int32 HitTestInvisibilityCounter = 0;
 		FVector2f LastMousePosition = FVector2f::ZeroVector;
@@ -786,6 +789,102 @@ namespace ImGuiUtils
 			}
 		}
 
+		template <typename Func>
+		void ForEachMenuItemSlot(FImGuiMenuContainer::FWidgetSlot& Slot, Func func)
+		{
+			if (Slot.IsMenuItem())
+			{
+				func(Slot);
+			}
+			else
+			{
+				for (auto& Child : Slot.GetChildren())
+				{
+					ForEachMenuItemSlot(Child, func);
+				}
+			}
+		}
+		template <typename Func>
+		void ForEachMenuItemSlot(FImGuiMenuContainer& MenuContainer, Func func)
+		{
+			TArray<FImGuiMenuContainer::FWidgetSlot>& Slots = MenuContainer.WidgetSlots;
+			for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
+			{
+				ForEachMenuItemSlot(Slot, func);
+			}
+		}
+		void TickSearchWindow(bool bOpen, FImGuiMenuContainer& MenuContainer)
+		{
+			if (bOpen)
+			{
+				ImGui::OpenPopup("SearchWindow");
+			}
+
+			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + ImGui::GetMainViewport()->Size * 0.5f, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+			ImGui::SetNextWindowSize(ImVec2(ImGui::GetMainViewport()->Size * 0.35f), ImGuiCond_Always);
+			if (ImGui::BeginPopup("SearchWindow"))
+			{
+				if (ImGui::IsWindowAppearing())
+				{
+					FilterStringBuffer[0] = 0;
+					ImGui::SetKeyboardFocusHere();
+				}
+				ImGui::SetNextItemWidth(-1.f);
+				if (ImGui::InputTextWithHint("##Filter", "Filter items", FilterStringBuffer, sizeof(FilterStringBuffer)))
+				{
+					FilterKeywords.Reset();
+					FAnsiString(FilterStringBuffer).ParseIntoArray(FilterKeywords, " ");
+				}
+
+				if (ImGui::BeginTable("Menus", 2, ImGuiTableFlags_BordersInnerH))
+				{
+					ImGui::TableSetupColumn("##Widget", ImGuiTableColumnFlags_WidthStretch);
+					ImGui::TableSetupColumn("##State", ImGuiTableColumnFlags_WidthFixed);
+
+					ForEachMenuItemSlot(MenuContainer,
+						[&](FImGuiMenuContainer::FWidgetSlot& Slot)
+						{
+							for (const FAnsiString& Keyword : FilterKeywords)
+							{
+								if (!FCStringAnsi::Strifind(*Slot.Path, *Keyword))
+								{
+									return;
+								}
+							}
+
+							FImGuiNamedScope Scope{ Slot.GetName() };
+
+							bool bIsSlotActive = Slot.bIsActive;
+							bool bReadonlyState = EnumHasAnyFlags(Slot.WidgetFlags, EImGuiMainMenuWidgetFlags::SkipWindowCreation | EImGuiMainMenuWidgetFlags::TickInMenuBar);
+
+							ImGui::TableNextColumn();
+							ImGui::TextUnformatted(Slot.GetName());
+							ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_Text, 0.75f));
+							ImGui::TextUnformatted(*Slot.Path);
+							ImGui::PopStyleColor();
+
+							ImGui::TableNextColumn();
+							ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetFontSize() * 0.5f);
+							ImGui::BeginDisabled(bReadonlyState);
+							ImGui::Checkbox("##Active", &Slot.bIsActive);
+							ImGui::EndDisabled();
+
+							if (bReadonlyState)
+							{
+								ImGui::SetItemTooltip("%s", "Activation managed by widget code");
+							}
+							else
+							{
+								ImGui::SetItemTooltip("%s", bIsSlotActive ? "Deactivate" : "Activate");
+							}
+						});
+
+					ImGui::EndTable();
+				}
+				ImGui::EndPopup();
+			}
+		}
+
 		static bool HasAnyDockedWindow(ImGuiDockNode* Node)
 		{
 			if (!Node) return false;
@@ -824,6 +923,7 @@ namespace ImGuiUtils
 
 			SetupDockNode();
 
+			bool bOpenSearchWindow = false;
 			auto RunMainMenuTickLogic = [&]()
 				{
 					TickContext->MainMenuBar_bIsTicking = true;
@@ -863,6 +963,7 @@ namespace ImGuiUtils
 							auto SearchIcon = m_ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.Search"), ImGui::GetTextLineHeight());
 							if (FImGui::MenuItem(TickContext, "##SearchMenu", false, SearchIcon, ImVec2(0.f, 2.5f)))
 							{
+								bOpenSearchWindow = true;
 							}
 							ImGui::SetItemTooltip("%s", "Search menu items");
 						}
@@ -1063,6 +1164,8 @@ namespace ImGuiUtils
 					m_MenuBarAlpha = FMath::Max(0.f, m_MenuBarAlpha - ImGui::GetIO().DeltaTime * 4.f);
 				}
 			}
+
+			TickSearchWindow(bOpenSearchWindow, MenuContainer);
 
 			for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
 			{
