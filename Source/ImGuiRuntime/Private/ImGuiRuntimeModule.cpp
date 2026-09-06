@@ -3,6 +3,10 @@
 #include "Modules/ModuleManager.h"
 #include "Modules/ModuleInterface.h"
 
+#if WITH_ENGINE
+#include "Misc/CoreDelegates.h"
+#endif
+
 #include "ImGuiSubsystem.h"
 
 #ifdef WITH_IMGUI_STATIC_LIB
@@ -59,7 +63,7 @@ private:
 #endif
 
 #if WITH_ENGINE
-		FDelayedAutoRegisterHelper RegisterImGuiSubsystem(EDelayedRegisterRunPhase::EndOfEngineInit,
+		FCoreDelegates::OnPostEngineInit.AddLambda(
 			[]()
 			{
 				UImGuiSubsystem::InitializeSubsystemInstance();
