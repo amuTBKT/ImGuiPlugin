@@ -821,14 +821,16 @@ namespace ImGuiUtils
 			}
 
 			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + ImGui::GetMainViewport()->Size * 0.5f, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-			ImGui::SetNextWindowSize(ImVec2(ImGui::GetMainViewport()->Size * 0.35f), ImGuiCond_Always);
+			ImGui::SetNextWindowSize(ImVec2(ImGui::GetMainViewport()->Size * ImVec2(0.35f, 0.45f)), ImGuiCond_Always);
 			if (ImGui::BeginPopup("SearchWindow"))
 			{
 				if (ImGui::IsWindowAppearing())
 				{
+					FilterKeywords.Reset();
 					FilterStringBuffer[0] = 0;
 					ImGui::SetKeyboardFocusHere();
 				}
+
 				ImGui::SetNextItemWidth(-1.f);
 				if (ImGui::InputTextWithHint("##Filter", "Filter items", FilterStringBuffer, sizeof(FilterStringBuffer)))
 				{
@@ -836,51 +838,62 @@ namespace ImGuiUtils
 					FAnsiString(FilterStringBuffer).ParseIntoArray(FilterKeywords, " ");
 				}
 
-				if (ImGui::BeginTable("Menus", 2, ImGuiTableFlags_BordersInnerH))
+				// TODO: scrollbar looks a bit weird so hiding it for now
+				if (ImGui::BeginChild("ScrollableArea", ImVec2(0.f, 0.f), ImGuiChildFlags_NavFlattened, ImGuiWindowFlags_NoScrollbar))
 				{
-					ImGui::TableSetupColumn("##Widget", ImGuiTableColumnFlags_WidthStretch);
-					ImGui::TableSetupColumn("##State", ImGuiTableColumnFlags_WidthFixed);
+					if (ImGui::IsWindowAppearing())
+					{
+						ImGui::SetScrollHereY(0.0f);
+					}
 
-					ForEachMenuItemSlot(MenuContainer,
-						[&](FImGuiMenuContainer::FWidgetSlot& Slot)
-						{
-							for (const FAnsiString& Keyword : FilterKeywords)
+					if (ImGui::BeginTable("Menu", 2, ImGuiTableFlags_BordersInnerH))
+					{
+						ImGui::TableSetupColumn("##Widget", ImGuiTableColumnFlags_WidthStretch);
+						ImGui::TableSetupColumn("##State", ImGuiTableColumnFlags_WidthFixed);
+
+						ForEachMenuItemSlot(MenuContainer,
+							[&](FImGuiMenuContainer::FWidgetSlot& Slot)
 							{
-								if (!FCStringAnsi::Strifind(*Slot.Path, *Keyword))
+								for (const FAnsiString& Keyword : FilterKeywords)
 								{
-									return;
+									if (!FCStringAnsi::Strifind(*Slot.Path, *Keyword))
+									{
+										return;
+									}
 								}
-							}
 
-							FImGuiNamedScope Scope{ Slot.GetName() };
+								FImGuiNamedScope Scope{ *Slot.Path };
 
-							bool bIsSlotActive = Slot.bIsActive;
-							bool bReadonlyState = EnumHasAnyFlags(Slot.WidgetFlags, EImGuiMainMenuWidgetFlags::SkipWindowCreation | EImGuiMainMenuWidgetFlags::TickInMenuBar);
+								bool bIsSlotActive = Slot.bIsActive;
+								bool bReadonlyState = EnumHasAnyFlags(Slot.WidgetFlags, EImGuiMainMenuWidgetFlags::SkipWindowCreation | EImGuiMainMenuWidgetFlags::TickInMenuBar);
 
-							ImGui::TableNextColumn();
-							ImGui::TextUnformatted(Slot.GetName());
-							ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_Text, 0.75f));
-							ImGui::TextUnformatted(*Slot.Path);
-							ImGui::PopStyleColor();
+								ImGui::TableNextColumn();
+								ImGui::TextUnformatted(Slot.GetName());
+								ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_Text, 0.75f));
+								ImGui::TextUnformatted(*Slot.Path);
+								ImGui::PopStyleColor();
 
-							ImGui::TableNextColumn();
-							ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetFontSize() * 0.5f);
-							ImGui::BeginDisabled(bReadonlyState);
-							ImGui::Checkbox("##Active", &Slot.bIsActive);
-							ImGui::EndDisabled();
+								ImGui::TableNextColumn();
+								ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetFontSize() * 0.5f);
+								ImGui::BeginDisabled(bReadonlyState);
+								ImGui::Checkbox("##Active", &Slot.bIsActive);
+								ImGui::EndDisabled();
 
-							if (bReadonlyState)
-							{
-								ImGui::SetItemTooltip("%s", "Activation managed by widget code");
-							}
-							else
-							{
-								ImGui::SetItemTooltip("%s", bIsSlotActive ? "Deactivate" : "Activate");
-							}
-						});
+								if (bReadonlyState)
+								{
+									ImGui::SetItemTooltip("%s", "Activation managed by widget code");
+								}
+								else
+								{
+									ImGui::SetItemTooltip("%s", bIsSlotActive ? "Deactivate" : "Activate");
+								}
+							});
 
-					ImGui::EndTable();
+						ImGui::EndTable();
+					}
 				}
+				ImGui::EndChild();
+
 				ImGui::EndPopup();
 			}
 		}
