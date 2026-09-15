@@ -658,10 +658,10 @@ void SImGuiWidget::TickImGuiInternal(FImGuiTickContext* TickContext)
 	}
 	else
 	{
-		ImGuiDockNodeFlags DockingFlags = ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoTabBar;
+		ImGuiDockNodeFlags DockingFlags = ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoTabBar | ImGuiDockNodeFlags_NoUndocking;
 		const ImGuiID MainDockSpaceID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), DockingFlags);
 
-		ImGui::SetNextWindowDockID(MainDockSpaceID, ImGuiCond_Always);
+		ImGui::SetNextWindowDockID(MainDockSpaceID, ImGuiCond_Appearing);
 		if (ImGui::Begin("SImGuiWidget_WidgetWindow", nullptr, ImGuiWindowFlags_NoDecoration))
 		{
 			m_OnTickDelegate.ExecuteIfBound(TickContext);
