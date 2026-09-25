@@ -575,6 +575,32 @@ namespace ImGuiUtils
 	private:
 		void BeginFrame()
 		{
+			if (m_PendingVisibilityState.IsSet())
+			{
+				EVisibility NewVisibility = m_PendingVisibilityState.GetValue();
+				if (NewVisibility != EVisibility::Hidden)
+				{
+					m_MenuBarAlpha = MenuBarVisibilityDuration;
+				}
+
+				SetVisibility(NewVisibility);
+				m_PendingVisibilityState.Reset();
+
+				// add dummy ticks to clear active viewport windows, otherwise they will be left behind in unresponsive state
+				if (!GetVisibility().IsVisible())
+				{
+					FImGuiTickScope TickScope{ GetTickContext() };
+
+					// need at least 2 ticks to clear docked windows
+					int32 DummyTickCount = 2;
+					while (DummyTickCount-- > 0)
+					{
+						BeginImGuiFrame(GetCachedGeometry());
+						EndImGuiFrame();
+					}
+				}
+			}
+
 			if (GetVisibility().IsVisible())
 			{
 				FImGuiTickScope TickScope{ GetTickContext() };
@@ -588,20 +614,6 @@ namespace ImGuiUtils
 					bFocusRequested = false;
 					FSlateApplication::Get().SetAllUserFocus(AsShared(), EFocusCause::SetDirectly);
 				}
-			}
-
-			// update visiibility after BeginFrame to ensure viewport windows get destroyed
-			// setting this before would mean nothing gets ticked and viewport windows will stay visible in unresponsive state
-			if (m_PendingVisibilityState.IsSet())
-			{
-				EVisibility NewVisibility = m_PendingVisibilityState.GetValue();
-				if (NewVisibility != EVisibility::Hidden)
-				{
-					m_MenuBarAlpha = MenuBarVisibilityDuration;
-				}
-
-				SetVisibility(NewVisibility);
-				m_PendingVisibilityState.Reset();
 			}
 		}
 
@@ -1089,9 +1101,10 @@ namespace ImGuiUtils
 				{
 					ImGuiViewport* MainViewport = ImGui::GetMainViewport();
 					ImVec2 MenuBarMin = MainViewport->Pos;
-					ImVec2 MenuBarMax = MenuBarMin + ImVec2(MainViewport->Size.x, ImGui::GetFrameHeight() * 0.5f);
+					ImVec2 MenuBarMax = MenuBarMin + ImVec2(MainViewport->Size.x, ImGui::GetFrameHeight());
 
-					if (ImGui::IsMouseHoveringRect(MenuBarMin, MenuBarMax, /*clip=*/false))
+					const bool bIsCursorVisible = FSlateApplication::Get().GetPlatformCursor()->GetType() != EMouseCursor::None;
+					if (bIsCursorVisible && ImGui::IsMouseHoveringRect(MenuBarMin, MenuBarMax, /*clip=*/false))
 					{
 						bKeepMenuBarVisible = true;
 					}
