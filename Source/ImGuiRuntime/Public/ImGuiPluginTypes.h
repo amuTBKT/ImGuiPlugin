@@ -220,7 +220,7 @@ namespace FImGui
 		const float FramePadding = ImGui::GetStyle().FramePadding.x;
 		const bool bIsHorizontalMenu = ImGui::GetCurrentWindow()->DC.LayoutType == ImGuiLayoutType_Horizontal;
 
-		const bool bIsIconOnlyItem = FCStringAnsi::Strstr(Label, "##") == Label;
+		const bool bIsIconOnlyItem = FCStringAnsi::Strstr(Label, "###") == Label;
 		ensureMsgf(bIsHorizontalMenu || !bIsIconOnlyItem, TEXT("Icon only menu item (%hs) should only be used with horizontal menus."), Label);
 
 		// label name with padding for icon
@@ -302,7 +302,7 @@ namespace FImGui
 		const float FramePadding = ImGui::GetStyle().FramePadding.x;
 		const bool bIsHorizontalMenu = ImGui::GetCurrentWindow()->DC.LayoutType == ImGuiLayoutType_Horizontal;
 
-		const bool bIsIconOnlyItem = FCStringAnsi::Strstr(Label, "##") == Label;
+		const bool bIsIconOnlyItem = FCStringAnsi::Strstr(Label, "###") == Label;
 		ensureMsgf(bIsHorizontalMenu || !bIsIconOnlyItem, TEXT("Icon only menu item (%hs) should only be used with horizontal menus."), Label);
 
 		// label name with padding for icon
@@ -325,7 +325,7 @@ namespace FImGui
 				LabelBuffer.Append("\u200A");
 			}
 		}
-		if (FCStringAnsi::Strstr(Label, "##"))
+		if (FCStringAnsi::Strstr(Label, "###"))
 		{
 			LabelBuffer.Append(Label);
 		}

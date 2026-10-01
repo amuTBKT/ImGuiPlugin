@@ -631,10 +631,15 @@ namespace ImGuiUtils
 
 				SetupDockNode();
 
-				if (bFocusRequested && FSlateApplication::IsInitialized())
+				if (bFocusRequested)
 				{
 					bFocusRequested = false;
-					FSlateApplication::Get().SetAllUserFocus(AsShared(), EFocusCause::SetDirectly);
+					FocusRequestedFrameIndex = ImGui::GetFrameCount();
+
+					if (FSlateApplication::IsInitialized())
+					{
+						FSlateApplication::Get().SetAllUserFocus(AsShared(), EFocusCause::SetDirectly);
+					}
 				}
 			}
 		}
@@ -736,6 +741,7 @@ namespace ImGuiUtils
 		int32 HitTestInvisibilityCounter = 0;
 		FVector2f LastMousePosition = FVector2f::ZeroVector;
 		bool bFocusRequested = true;
+		int32 FocusRequestedFrameIndex = -1;
 		TOptional<EVisibility> m_PendingVisibilityState;
 
 		// cached during tick for easier access
@@ -1008,11 +1014,19 @@ namespace ImGuiUtils
 						if (ImGui::GetCurrentWindow()->DC.LayoutType == ImGuiLayoutType_Horizontal)
 						{
 							auto SearchIcon = m_ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.Search"), ImGui::GetTextLineHeight());
-							if (FImGui::MenuItem(TickContext, "##SearchMenu", false, SearchIcon, ImVec2(0.f, 2.5f)))
+							if (FImGui::MenuItem(TickContext, "###SearchMenu", false, SearchIcon, ImVec2(0.f, 2.5f)))
 							{
 								bOpenSearchWindow = true;
 							}
 							ImGui::SetItemTooltip("%s", "Search menu items");
+
+							if ((FocusRequestedFrameIndex + 1 == ImGui::GetFrameCount()) && !IsAnyWindowVisible())
+							{
+								ImGui::SetNavWindow(ImGui::GetCurrentWindow());
+								ImGui::FocusWindow(ImGui::GetCurrentWindow());
+								ImGui::SetFocusID(ImGui::GetID("SearchMenu"), ImGui::GetCurrentWindow());
+								ImGui::SetNavCursorVisibleAfterMove();
+							}
 						}
 
 						for (FImGuiMenuContainer::FWidgetSlot& Slot : Slots)
