@@ -119,6 +119,43 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	// NOTE: This just disables the point sampler override, actual sampler state comes from the texture (doesn't have to be linear)
 	PlatformIO.DrawCallback_SetSamplerLinear = ImDrawCallback_ResetSamplerState;
 
+	FDisplayMetrics DisplayMetrics;
+	FDisplayMetrics::RebuildDisplayMetrics(DisplayMetrics);
+	if (DisplayMetrics.MonitorInfo.IsEmpty())
+	{
+		ImGuiPlatformMonitor PlatformMonitor;
+		PlatformMonitor.MainPos = ImVec2(0.f, 0.f);
+		PlatformMonitor.MainSize = ImVec2(DisplayMetrics.PrimaryDisplayWidth, DisplayMetrics.PrimaryDisplayHeight);
+		PlatformMonitor.WorkPos = ImVec2(DisplayMetrics.PrimaryDisplayWorkAreaRect.Left, DisplayMetrics.PrimaryDisplayWorkAreaRect.Top);
+		PlatformMonitor.WorkSize = ImVec2(DisplayMetrics.PrimaryDisplayWorkAreaRect.Right - DisplayMetrics.PrimaryDisplayWorkAreaRect.Left, DisplayMetrics.PrimaryDisplayWorkAreaRect.Bottom - DisplayMetrics.PrimaryDisplayWorkAreaRect.Top);
+		PlatformMonitor.DpiScale = 1.f;
+		PlatformMonitor.PlatformHandle = nullptr;
+
+		PlatformIO.Monitors.push_back(PlatformMonitor);
+	}
+	else
+	{
+		for (const FMonitorInfo& MonitorInfo : DisplayMetrics.MonitorInfo)
+		{
+			ImGuiPlatformMonitor PlatformMonitor;
+			PlatformMonitor.MainPos = ImVec2((float)MonitorInfo.DisplayRect.Left, (float)MonitorInfo.DisplayRect.Top);
+			PlatformMonitor.MainSize = ImVec2((float)(MonitorInfo.DisplayRect.Right - MonitorInfo.DisplayRect.Left), (float)(MonitorInfo.DisplayRect.Bottom - MonitorInfo.DisplayRect.Top));
+			PlatformMonitor.WorkPos = ImVec2((float)MonitorInfo.WorkArea.Left, (float)MonitorInfo.WorkArea.Top);
+			PlatformMonitor.WorkSize = ImVec2((float)(MonitorInfo.WorkArea.Right - MonitorInfo.WorkArea.Left), (float)(MonitorInfo.WorkArea.Bottom - MonitorInfo.WorkArea.Top));
+			PlatformMonitor.DpiScale = (float)MonitorInfo.DPI / 96.f;
+			PlatformMonitor.PlatformHandle = nullptr;
+
+			if (MonitorInfo.bIsPrimary)
+			{
+				PlatformIO.Monitors.push_front(PlatformMonitor);
+			}
+			else
+			{
+				PlatformIO.Monitors.push_back(PlatformMonitor);
+			}
+		}
+	}
+
 	// viewport setup
 	if ((IO.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) > 0)
 	{
@@ -137,45 +174,6 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 		PlatformIO.Platform_UpdateWindow		= ImGuiUtils::UnrealPlatform_UpdateWindow;
 		PlatformIO.Platform_RenderWindow		= ImGuiUtils::UnrealPlatform_RenderWindow;
 		PlatformIO.Platform_OnChangedViewport	= nullptr;
-
-		FDisplayMetrics DisplayMetrics;
-		FDisplayMetrics::RebuildDisplayMetrics(DisplayMetrics);
-		if (DisplayMetrics.MonitorInfo.IsEmpty())
-		{
-			ImGuiPlatformMonitor ImguiMonitor;
-			ImguiMonitor.MainPos = ImVec2(0.f, 0.f);
-			ImguiMonitor.MainSize = ImVec2(DisplayMetrics.PrimaryDisplayWidth, DisplayMetrics.PrimaryDisplayHeight);
-			ImguiMonitor.WorkPos = ImVec2(DisplayMetrics.PrimaryDisplayWorkAreaRect.Left, DisplayMetrics.PrimaryDisplayWorkAreaRect.Top);
-			ImguiMonitor.WorkSize = ImVec2(DisplayMetrics.PrimaryDisplayWorkAreaRect.Right - DisplayMetrics.PrimaryDisplayWorkAreaRect.Left, DisplayMetrics.PrimaryDisplayWorkAreaRect.Bottom - DisplayMetrics.PrimaryDisplayWorkAreaRect.Top);
-			ImguiMonitor.DpiScale = 1.f;
-			ImguiMonitor.PlatformHandle = nullptr;
-
-			PlatformIO.Monitors.push_back(ImguiMonitor);
-		}
-		else
-		{
-			for (const FMonitorInfo& MonitorInfo : DisplayMetrics.MonitorInfo)
-			{
-				ImGuiPlatformMonitor ImguiMonitor;
-				ImguiMonitor.MainPos = ImVec2((float)MonitorInfo.DisplayRect.Left, (float)MonitorInfo.DisplayRect.Top);
-				ImguiMonitor.MainSize = ImVec2((float)(MonitorInfo.DisplayRect.Right - MonitorInfo.DisplayRect.Left),
-					(float)(MonitorInfo.DisplayRect.Bottom - MonitorInfo.DisplayRect.Top));
-				ImguiMonitor.WorkPos = ImVec2((float)MonitorInfo.WorkArea.Left, (float)MonitorInfo.WorkArea.Top);
-				ImguiMonitor.WorkSize = ImVec2((float)(MonitorInfo.WorkArea.Right - MonitorInfo.WorkArea.Left),
-					(float)(MonitorInfo.WorkArea.Bottom - MonitorInfo.WorkArea.Top));
-				ImguiMonitor.DpiScale = MonitorInfo.DPI / 96.f;
-				ImguiMonitor.PlatformHandle = nullptr;
-
-				if (MonitorInfo.bIsPrimary)
-				{
-					PlatformIO.Monitors.push_front(ImguiMonitor);
-				}
-				else
-				{
-					PlatformIO.Monitors.push_back(ImguiMonitor);
-				}
-			}
-		}
 
 		ImGuiUtils::FImGuiViewportData* MainViewportData = IM_NEW(ImGuiUtils::FImGuiViewportData)();
 		MainViewportData->ViewportWindow = nullptr;
