@@ -571,6 +571,28 @@ namespace ImGuiUtils
 			bFocusRequested = true;
 			m_PendingVisibilityState = EVisibility::Visible;
 		}
+		bool IsMenuBarVisible() const { return m_MenuBarAlpha > UE_KINDA_SMALL_NUMBER; }
+
+		bool IsAnyWindowVisible() const
+		{
+			for (ImGuiWindow* Window : GetImGuiContext()->Windows)
+			{
+				if (Window->Name[0] == '#')
+				{
+					continue;
+				}
+				if (FCStringAnsi::Strnicmp(Window->Name, "WindowOverViewport_", FCStringAnsi::Strlen("WindowOverViewport_")) == 0)
+				{
+					continue;
+				}
+
+				if ((Window->WasActive && !Window->Hidden) && Window->LastFrameActive + 1 >= ImGui::GetFrameCount())
+				{
+					return true;
+				}
+			}
+			return false;
+		}
 
 	private:
 		void BeginFrame()
@@ -1483,7 +1505,8 @@ namespace ImGuiUtils
 			}
 			else if (MainMenuWidget)
 			{
-				if (MainMenuWidget->GetVisibility() == EVisibility::Hidden)
+				bool bIsKindOfHidden = (!MainMenuWidget->IsMenuBarVisible() && !MainMenuWidget->IsAnyWindowVisible());
+				if (bIsKindOfHidden || MainMenuWidget->GetVisibility() == EVisibility::Hidden)
 				{
 					MainMenuWidget->ShowWidget();
 					ImGuiFocusHandler::SetUIFocus();
@@ -1523,7 +1546,8 @@ namespace ImGuiUtils
 
 			if (MainMenuWidget)
 			{
-				if (MainMenuWidget->GetVisibility() == EVisibility::Hidden)
+				bool bIsKindOfHidden = (!MainMenuWidget->IsMenuBarVisible() && !MainMenuWidget->IsAnyWindowVisible());
+				if (bIsKindOfHidden || MainMenuWidget->GetVisibility() == EVisibility::Hidden)
 				{
 					MainMenuWidget->ShowWidget();
 					ImGuiFocusHandler::SetUIFocus();
