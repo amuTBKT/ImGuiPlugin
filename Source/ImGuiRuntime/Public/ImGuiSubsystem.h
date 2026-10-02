@@ -111,12 +111,18 @@ public:
 #ifdef IMGUI_ALLOW_MENUBAR_EXTENSION
 	IMGUIRUNTIME_API void RegisterMainMenuWidget(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
-		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None) const;
+		FOnTickImGuiWidgetDelegate TickDelegate, FSimpleDelegate OnClosedDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None) const;
+	void RegisterMainMenuWidget(
+		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
+		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None) const
+	{
+		RegisterMainMenuWidget(World, WidgetPath, WidgetToolTip, nullptr, MoveTemp(TickDelegate), FSimpleDelegate(), WidgetFlags);
+	}
 	void RegisterMainMenuWidget(
 		const UWorld* World, const char* WidgetPath,
 		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags = EImGuiMainMenuWidgetFlags::None) const
 	{
-		RegisterMainMenuWidget(World, WidgetPath, "", nullptr, MoveTemp(TickDelegate), WidgetFlags);
+		RegisterMainMenuWidget(World, WidgetPath, nullptr, nullptr, MoveTemp(TickDelegate), FSimpleDelegate(), WidgetFlags);
 	}
 	IMGUIRUNTIME_API void UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath) const;
 	IMGUIRUNTIME_API bool* GetMainMenuWidgetActiveState(const UWorld* World, const char* WidgetPath) const;

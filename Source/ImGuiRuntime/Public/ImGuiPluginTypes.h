@@ -422,8 +422,15 @@ static FORCEINLINE FImGuiShaderState MakeImGuiShaderState(EImGuiShaderState Shad
 // params used to register an ImGui widget as standalone or main menu widget
 struct FImGuiWidgetRegisterParams
 {
-	// ImGui widget init function (called during module load)
+	// Widget init function (optional)
 	void(*InitFunction)(void);
+
+	/*
+	*  Widget/Window closed callback (optional)
+	*  For standalone widgets : When slate widget is destroyed
+	*  For menu widgets		  : When ImGui window is closed
+	*/
+	void(*OnWindowClosed)(void);
 
 	// ImGui widget tick function
 	void(*TickFunction)(FImGuiTickContext* Context);
@@ -435,7 +442,7 @@ struct FImGuiWidgetRegisterParams
 	const char* WidgetPath = nullptr;
 
 	// widget tooltip
-	const char* WidgetDescription = "";
+	const char* WidgetDescription = nullptr;
 
 	// to enable ImGui viewport support for the widget
 	bool bEnableViewports = true;
@@ -462,7 +469,7 @@ struct FImGuiWidgetRegisterParams
 
 	bool IsValid() const
 	{
-		return InitFunction && TickFunction && WidgetPath && WidgetDescription;
+		return TickFunction && WidgetPath;
 	}
 };
 

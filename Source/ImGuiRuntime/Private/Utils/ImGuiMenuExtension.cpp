@@ -194,11 +194,12 @@ namespace ImGuiUtils
 				}
 			}
 
-			explicit FWidgetSlot(FAnsiString InPath, FAnsiString InToolTip, const FSlateBrush* InIcon, FOnTickImGuiWidgetDelegate InTickDelegate, EImGuiMainMenuWidgetFlags InWidgetFlags)
+			explicit FWidgetSlot(FAnsiString InPath, FAnsiString InToolTip, const FSlateBrush* InIcon, FOnTickImGuiWidgetDelegate InTickDelegate, FSimpleDelegate InOnClosedDelegate, EImGuiMainMenuWidgetFlags InWidgetFlags)
 				: Path(MoveTemp(InPath))
 				, ToolTip(MoveTemp(InToolTip))
 				, Icon(InIcon)
 				, Storage(TInPlaceType<FOnTickImGuiWidgetDelegate>(), MoveTemp(InTickDelegate))
+				, OnClosedDelegate(MoveTemp(InOnClosedDelegate))
 				, WidgetFlags(InWidgetFlags)
 			{
 				if (Path.FindLastChar('.', SlotNameOffset))
@@ -226,6 +227,7 @@ namespace ImGuiUtils
 			FAnsiString ToolTip;
 			const FSlateBrush* Icon = nullptr;
 			TVariant<FOnTickImGuiWidgetDelegate, TArray<FWidgetSlot>> Storage;
+			FSimpleDelegate OnClosedDelegate;
 			int32 SlotNameOffset = 0;
 			// is the menu item active and drawing the widget window
 			bool bIsActive = false;
@@ -238,6 +240,7 @@ namespace ImGuiUtils
 			FAnsiString					WidgetToolTip;
 			const FSlateBrush*			WidgetIcon = nullptr;
 			FOnTickImGuiWidgetDelegate	TickDelegate;
+			FSimpleDelegate				OnClosedDelegate;
 			EImGuiMainMenuWidgetFlags	WidgetFlags = EImGuiMainMenuWidgetFlags::None;
 
 			bool operator==(const FAnsiStringView& Other) const
@@ -339,9 +342,9 @@ namespace ImGuiUtils
 		{
 			check(!QueueWidgetSlotChanges);
 
-			for (const auto& Item : WidgetSlotsToAdd)
+			for (auto& Item : WidgetSlotsToAdd)
 			{
-				RegisterWidget(*Item.WidgetPath, *Item.WidgetToolTip, Item.WidgetIcon, Item.TickDelegate, Item.WidgetFlags);
+				RegisterWidget(*Item.WidgetPath, *Item.WidgetToolTip, Item.WidgetIcon, MoveTemp(Item.TickDelegate), MoveTemp(Item.OnClosedDelegate), Item.WidgetFlags);
 			}
 			WidgetSlotsToAdd.Reset();
 
@@ -354,7 +357,7 @@ namespace ImGuiUtils
 
 		void RegisterWidget(
 			const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
-			FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags)
+			FOnTickImGuiWidgetDelegate TickDelegate, FSimpleDelegate OnClosedDelegate, EImGuiMainMenuWidgetFlags WidgetFlags)
 		{
 			if (!ensureAlways(WidgetPath && FCStringAnsi::Strlen(WidgetPath) > 0))
 			{
@@ -363,7 +366,7 @@ namespace ImGuiUtils
 
 			if (QueueWidgetSlotChanges)
 			{
-				WidgetSlotsToAdd.Emplace(WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, WidgetFlags);
+				WidgetSlotsToAdd.Emplace(WidgetPath, WidgetToolTip, WidgetIcon, MoveTemp(TickDelegate), MoveTemp(OnClosedDelegate), WidgetFlags);
 				WidgetSlotsToRemove.Remove(WidgetSlotsToAdd.Last());
 				return;
 			}
@@ -377,7 +380,7 @@ namespace ImGuiUtils
 				}
 				else
 				{
-					FWidgetSlot NewSlot = FWidgetSlot{ FAnsiString(WidgetPath), FAnsiString(WidgetToolTip), WidgetIcon, TickDelegate, WidgetFlags };
+					FWidgetSlot NewSlot = FWidgetSlot{ FAnsiString(WidgetPath), FAnsiString(WidgetToolTip), WidgetIcon, MoveTemp(TickDelegate), MoveTemp(OnClosedDelegate), WidgetFlags };
 					LoadSlotState(NewSlot);
 
 					AddSlotSorted(ParentSlot->GetChildren(), MoveTemp(NewSlot));
@@ -392,7 +395,7 @@ namespace ImGuiUtils
 				}
 				else
 				{
-					AddSlotSorted(WidgetSlots, FWidgetSlot{ FAnsiString(WidgetPath), FAnsiString(WidgetToolTip), WidgetIcon, TickDelegate, WidgetFlags });
+					AddSlotSorted(WidgetSlots, FWidgetSlot{ FAnsiString(WidgetPath), FAnsiString(WidgetToolTip), WidgetIcon, MoveTemp(TickDelegate), MoveTemp(OnClosedDelegate), WidgetFlags });
 				}
 			}
 		}
@@ -620,6 +623,18 @@ namespace ImGuiUtils
 						BeginImGuiFrame(GetCachedGeometry());
 						EndImGuiFrame();
 					}
+
+					// widget was hidden, call the OnClosed delegates here
+					// TODO: feels a bit hacky to call this manually maybe it should be a bit more automagical.
+					FImGuiMenuContainer& MenuContainer = GetMenuContainerForWorld(GetWorld());
+					ForEachMenuItemSlot(MenuContainer,
+						[&](FImGuiMenuContainer::FWidgetSlot& Slot)
+						{
+							if (Slot.bIsActive)
+							{
+								Slot.OnClosedDelegate.ExecuteIfBound();
+							}
+						});
 				}
 			}
 
@@ -779,6 +794,10 @@ namespace ImGuiUtils
 				if (bWasSlotActive != Slot.bIsActive)
 				{
 					MenuContainer.SaveSlotState(Slot);
+					if (!Slot.bIsActive)
+					{
+						Slot.OnClosedDelegate.ExecuteIfBound();
+					}
 				}
 			}
 			else if (!Slot.GetChildren().IsEmpty())
@@ -816,6 +835,10 @@ namespace ImGuiUtils
 						if (bWasActive != Slot.bIsActive)
 						{
 							MenuContainer.SaveSlotState(Slot);
+							if (!Slot.bIsActive)
+							{
+								Slot.OnClosedDelegate.ExecuteIfBound();
+							}
 						}
 					}
 				}
@@ -1902,6 +1925,7 @@ namespace ImGuiUtils
 				SNew(SImGuiWidget)
 				.MainViewportWindow(SpawnTabArgs.GetOwnerWindow())
 				.OnTickDelegate(FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction))
+				.OnClosedDelegate(RegisterParams.OnWindowClosed ? FSimpleDelegate::CreateStatic(RegisterParams.OnWindowClosed) : FSimpleDelegate())
 				.ConfigFileName(RegisterParams.GetWidetName())
 				.bEnableViewports(RegisterParams.bEnableViewports)
 				.bTickDelegateCreatesWindow(RegisterParams.bSkipWindowCreation)
@@ -1986,7 +2010,7 @@ FImGuiTickContext* GetMainMenuWidgetTickContextForWorld(const UWorld* World)
 
 void RegisterMainMenuWidgetForWorld(
 	const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
-	FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags)
+	FOnTickImGuiWidgetDelegate TickDelegate, FSimpleDelegate OnClosedDelegate, EImGuiMainMenuWidgetFlags WidgetFlags)
 {
 	if (!ensureAlways(ImGuiUtils::MenuExtensionHandle))
 	{
@@ -1994,7 +2018,7 @@ void RegisterMainMenuWidgetForWorld(
 	}
 
 	auto& MenuContainer = ImGuiUtils::GetMenuContainerForWorld(World);
-	MenuContainer.RegisterWidget(WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, WidgetFlags);
+	MenuContainer.RegisterWidget(WidgetPath, WidgetToolTip, WidgetIcon, MoveTemp(TickDelegate), MoveTemp(OnClosedDelegate), WidgetFlags);
 }
 
 void UnregisterMainMenuWidgetForWorld(const UWorld* World, const char* WidgetPath)
@@ -2052,20 +2076,24 @@ FAutoRegisterMainMenuWidget::FAutoRegisterMainMenuWidget(FImGuiWidgetRegisterPar
 
 	if (UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get())
 	{
-		RegisterParams.InitFunction();
+		if (RegisterParams.InitFunction) RegisterParams.InitFunction();
 		ImGuiUtils::GetMenuContainerForWorld(nullptr).RegisterWidget(
 			RegisterParams.WidgetPath, RegisterParams.WidgetDescription, RegisterParams.WidgetIcon.GetOptionalIcon(),
-			FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction), WidgetFlags);
+			FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction),
+			RegisterParams.OnWindowClosed ? FSimpleDelegate::CreateStatic(RegisterParams.OnWindowClosed) : FSimpleDelegate(),
+			WidgetFlags);
 	}
 	else
 	{
 		UImGuiSubsystem::OnSubsystemInitialized.AddLambda(
 			[RegisterParams, WidgetFlags](UImGuiSubsystem* ImGuiSubsystem)
 			{
-				RegisterParams.InitFunction();
+				if (RegisterParams.InitFunction) RegisterParams.InitFunction();
 				ImGuiUtils::GetMenuContainerForWorld(nullptr).RegisterWidget(
 					RegisterParams.WidgetPath, RegisterParams.WidgetDescription, RegisterParams.WidgetIcon.GetOptionalIcon(),
-					FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction), WidgetFlags);
+					FOnTickImGuiWidgetDelegate::CreateStatic(RegisterParams.TickFunction),
+					RegisterParams.OnWindowClosed ? FSimpleDelegate::CreateStatic(RegisterParams.OnWindowClosed) : FSimpleDelegate(),
+					WidgetFlags);
 			});
 	}
 }
@@ -2093,7 +2121,7 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegiste
 
 	if (UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get())
 	{
-		RegisterParams.InitFunction();
+		if (RegisterParams.InitFunction) RegisterParams.InitFunction();
 		FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.GetWidetName()), FOnSpawnTab::CreateStatic(&ImGuiUtils::SpawnWidgetTab, RegisterParams))
 			.SetGroup(ImGuiUtils::GetMenuGroup(RegisterParams.WidgetPath))
 			.SetDisplayName(FText::FromString(UTF8_TO_TCHAR(RegisterParams.GetWidetName())))
@@ -2105,7 +2133,7 @@ FAutoRegisterStandaloneWidget::FAutoRegisterStandaloneWidget(FImGuiWidgetRegiste
 		UImGuiSubsystem::OnSubsystemInitialized.AddLambda(
 			[RegisterParams](UImGuiSubsystem* ImGuiSubsystem)
 			{
-				RegisterParams.InitFunction();
+				if (RegisterParams.InitFunction) RegisterParams.InitFunction();
 				FGlobalTabmanager::Get()->RegisterNomadTabSpawner(FName(RegisterParams.GetWidetName()), FOnSpawnTab::CreateStatic(&ImGuiUtils::SpawnWidgetTab, RegisterParams))
 					.SetGroup(ImGuiUtils::GetMenuGroup(RegisterParams.WidgetPath))
 					.SetDisplayName(FText::FromString(UTF8_TO_TCHAR(RegisterParams.GetWidetName())))

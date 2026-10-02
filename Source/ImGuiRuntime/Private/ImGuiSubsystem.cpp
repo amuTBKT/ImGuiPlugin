@@ -240,14 +240,14 @@ bool UImGuiSubsystem::SaveConfigToDisk() const
 #ifdef IMGUI_ALLOW_MENUBAR_EXTENSION
 void UImGuiSubsystem::RegisterMainMenuWidget(
 	const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush* WidgetIcon,
-	FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags) const
+	FOnTickImGuiWidgetDelegate TickDelegate, FSimpleDelegate OnClosedDelegate, EImGuiMainMenuWidgetFlags WidgetFlags) const
 {
 	// defined in ImGuiMenuExtension.cpp
 	extern void RegisterMainMenuWidgetForWorld(
 		const UWorld* World, const char* WidgetPath, const char* WidgetToolTip, const FSlateBrush * WidgetIcon,
-		FOnTickImGuiWidgetDelegate TickDelegate, EImGuiMainMenuWidgetFlags WidgetFlags);
+		FOnTickImGuiWidgetDelegate TickDelegate, FSimpleDelegate OnClosedDelegate, EImGuiMainMenuWidgetFlags WidgetFlags);
 
-	RegisterMainMenuWidgetForWorld(World, WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, WidgetFlags);
+	RegisterMainMenuWidgetForWorld(World, WidgetPath, WidgetToolTip, WidgetIcon, TickDelegate, OnClosedDelegate, WidgetFlags);
 }
 
 void UImGuiSubsystem::UnregisterMainMenuWidget(const UWorld* World, const char* WidgetPath) const

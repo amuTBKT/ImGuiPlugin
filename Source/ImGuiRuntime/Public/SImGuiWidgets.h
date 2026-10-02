@@ -125,6 +125,7 @@ public:
 	SLATE_BEGIN_ARGS(SImGuiWidget)
 		: _MainViewportWindow(nullptr)
 		, _OnTickDelegate()
+		, _OnClosedDelegate()
 		, _ConfigFileName(nullptr)
 		, _bEnableViewports(true)
 		, _bTickDelegateCreatesWindow(false)
@@ -132,6 +133,7 @@ public:
 		}
 		SLATE_ARGUMENT(TSharedPtr<SWindow>, MainViewportWindow);
 		SLATE_EVENT(FOnTickImGuiWidgetDelegate, OnTickDelegate);
+		SLATE_EVENT(FSimpleDelegate, OnClosedDelegate);
 		SLATE_ARGUMENT(const ANSICHAR*, ConfigFileName);
 		SLATE_ARGUMENT(bool, bEnableViewports);
 		SLATE_ARGUMENT(bool, bTickDelegateCreatesWindow);
@@ -139,10 +141,13 @@ public:
 
 	void Construct(const FArguments& InArgs);
 
+	virtual ~SImGuiWidget();
+
 private:
 	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) override;
 
 private:
 	FOnTickImGuiWidgetDelegate m_OnTickDelegate = {};
+	FSimpleDelegate m_OnClosedDelegate = {};
 	bool m_bSkipWindowCreation = false;
 };

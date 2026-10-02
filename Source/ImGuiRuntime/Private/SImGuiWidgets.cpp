@@ -643,7 +643,13 @@ void SImGuiWidget::Construct(const FArguments& InArgs)
 		.bEnableViewports(InArgs._bEnableViewports));
 
 	m_OnTickDelegate = InArgs._OnTickDelegate;
+	m_OnClosedDelegate = InArgs._OnClosedDelegate;
 	m_bSkipWindowCreation = InArgs._bTickDelegateCreatesWindow;
+}
+
+SImGuiWidget::~SImGuiWidget()
+{
+	m_OnClosedDelegate.ExecuteIfBound();
 }
 
 void SImGuiWidget::TickImGuiInternal(FImGuiTickContext* TickContext)
