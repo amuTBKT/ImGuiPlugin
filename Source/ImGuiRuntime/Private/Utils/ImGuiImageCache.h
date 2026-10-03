@@ -147,7 +147,7 @@ namespace ImGuiUtils
 									const float SVGScaleY = (float)AtlasRect.h / Image->height;
 
 									const int32 Stride = FontAtlas->TexData->Width * BytesPerPixel;
-									nsvgRasterizeFull(Rasterizer, Image, 0, 0, SVGScaleX, SVGScaleY, (uint8*)FontAtlas->TexData->GetPixelsAt(AtlasRect.x, AtlasRect.y), AtlasRect.w, AtlasRect.w, Stride);
+									nsvgRasterizeFull(Rasterizer, Image, 0, 0, SVGScaleX, SVGScaleY, (uint8*)FontAtlas->TexData->GetPixelsAt(AtlasRect.x, AtlasRect.y), AtlasRect.w, AtlasRect.h, Stride);
 
 									nsvgDeleteRasterizer(Rasterizer);
 								}
