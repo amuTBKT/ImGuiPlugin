@@ -95,6 +95,8 @@ private:
 
 	virtual void TickImGuiInternal(FImGuiTickContext* TickContext) = 0;
 
+	void ApplyTheme();
+
 private:
 	ImGuiContext* m_ImGuiContext = nullptr;
 	ImPlotContext* m_ImPlotContext = nullptr;
@@ -115,6 +117,9 @@ private:
 #if WITH_EDITOR
 	mutable uint64 m_LastPaintFrameCounter = 0u;
 #endif
+
+	TArray<FLinearColor> m_SlateColorsVec4;
+	TArray<uint32>		 m_SlateColorsU32;
 };
 
 /* Dynamic widgets (ColorPicker etc..) */

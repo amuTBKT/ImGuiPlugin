@@ -18,6 +18,8 @@
 #include "Framework/Application/IInputProcessor.h"
 #include "Framework/Application/SlateApplication.h"
 
+#include "Styling/StyleColors.h"
+
 #if WITH_EDITOR
 
 // new tools menu api starting from 5.6
@@ -787,7 +789,7 @@ namespace ImGuiUtils
 					}
 					if (Slot.ToolTip.Len() > 0)
 					{
-						ImGui::SetItemTooltip("%s", *Slot.ToolTip);
+						FImGui::SetItemTooltip("%s", *Slot.ToolTip);
 					}
 				}
 
@@ -883,6 +885,7 @@ namespace ImGuiUtils
 				ImGui::OpenPopup("SearchWindow");
 			}
 
+			ImGui::PushStyleColor(ImGuiCol_PopupBg, ImGui::GetColorU32(ImGuiCol_WindowBg, 0.98f));
 			ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + ImGui::GetMainViewport()->Size * 0.5f, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 			ImGui::SetNextWindowSize(ImVec2(ImGui::GetMainViewport()->Size * ImVec2(0.35f, 0.45f)), ImGuiCond_Always);
 			if (ImGui::BeginPopup("SearchWindow"))
@@ -895,7 +898,7 @@ namespace ImGuiUtils
 				}
 
 				ImGui::SetNextItemWidth(-1.f);
-				if (ImGui::InputTextWithHint("##Filter", "Filter items", FilterStringBuffer, sizeof(FilterStringBuffer)))
+				if (FImGui::EditableTextBox(FImGui::GetCurrentTickContext(), "##Filter", "Filter items", FilterStringBuffer, sizeof(FilterStringBuffer)))
 				{
 					FilterKeywords.Reset();
 					FAnsiString(FilterStringBuffer).ParseIntoArray(FilterKeywords, " ");
@@ -944,11 +947,11 @@ namespace ImGuiUtils
 
 								if (bReadonlyState)
 								{
-									ImGui::SetItemTooltip("%s", "Activation managed by widget code");
+									FImGui::SetItemTooltip("%s", "Activation managed by widget code");
 								}
 								else
 								{
-									ImGui::SetItemTooltip("%s", bIsSlotActive ? "Deactivate" : "Activate");
+									FImGui::SetItemTooltip("%s", bIsSlotActive ? "Deactivate" : "Activate");
 								}
 							});
 
@@ -959,6 +962,7 @@ namespace ImGuiUtils
 
 				ImGui::EndPopup();
 			}
+			ImGui::PopStyleColor();
 		}
 
 		static bool HasAnyDockedWindow(ImGuiDockNode* Node)
@@ -1037,11 +1041,11 @@ namespace ImGuiUtils
 						if (ImGui::GetCurrentWindow()->DC.LayoutType == ImGuiLayoutType_Horizontal)
 						{
 							auto SearchIcon = m_ImGuiSubsystem->RegisterOneFrameResource(IMGUI_STYLE_ICON_BRUSH("CoreStyle", "Icons.Search"), ImGui::GetTextLineHeight());
-							if (FImGui::MenuItem(TickContext, "###SearchMenu", false, SearchIcon, ImVec2(0.f, 2.5f)))
+							if (FImGui::MenuItem(TickContext, "###SearchMenu", false, SearchIcon, ImVec2(0.f, ImGui::GetStyle().FramePadding.y)))
 							{
 								bOpenSearchWindow = true;
 							}
-							ImGui::SetItemTooltip("%s", "Search menu items");
+							FImGui::SetItemTooltip("%s", "Search menu items");
 
 							if ((FocusRequestedFrameIndex + 1 == ImGui::GetFrameCount()) && !IsAnyWindowVisible())
 							{
@@ -1095,6 +1099,8 @@ namespace ImGuiUtils
 					TickContext->MainMenuBar_bIsTicking = false;
 				};
 
+			ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetColorU32(ImGuiCol_HeaderActive));
+			ImGui::PushStyleColor(ImGuiCol_Border, FImGui::GetSlateColorU32(TickContext, EStyleColor::DropdownOutline));
 #if WITH_EDITOR
 			if (m_bIsAddedToLevelViewport)
 			{
@@ -1249,6 +1255,7 @@ namespace ImGuiUtils
 					m_MenuBarAlpha = FMath::Max(0.f, m_MenuBarAlpha - ImGui::GetIO().DeltaTime * 4.f);
 				}
 			}
+			ImGui::PopStyleColor(2);
 
 			TickSearchWindow(bOpenSearchWindow, MenuContainer);
 

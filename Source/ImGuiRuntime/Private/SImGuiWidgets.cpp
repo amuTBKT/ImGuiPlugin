@@ -4,6 +4,7 @@
 
 #include "Misc/App.h"
 #include "Widgets/SWindow.h"
+#include "Styling/StyleColors.h"
 #include "Application/ThrottleManager.h"
 #include "Framework/Application/SlateApplication.h"
 
@@ -52,6 +53,16 @@ static const char* GetNetImGuiClientName()
 }
 #endif
 
+TAutoConsoleVariable<int32> CVarImGuiTheme(
+	TEXT("imgui.Theme"),
+	3,
+	TEXT("ImGui widget theme\n")
+	TEXT(" 0: Dark theme\n")
+	TEXT(" 1: Light theme\n")
+	TEXT(" 2: Classic theme\n")
+	TEXT(" 3: Unreal theme (default)\n"),
+	ECVF_Default);
+
 void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 {
 	UImGuiSubsystem* ImGuiSubsystem = UImGuiSubsystem::Get();
@@ -64,6 +75,8 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 	m_TickContext = MakeUnique<FImGuiTickContext>();
 	m_TickContext->ImguiContext = m_ImGuiContext;
 	m_TickContext->ImplotContext = m_ImPlotContext;
+	m_TickContext->SlateColorsVec4 = &m_SlateColorsVec4;
+	m_TickContext->SlateColorsU32 = &m_SlateColorsU32;
 	FImGuiTickContext::SetTickContextUserData(m_ImGuiContext, m_TickContext.Get());
 
 	if (InArgs._ConfigFileName && FCStringAnsi::Strlen(InArgs._ConfigFileName) > 2)
@@ -185,8 +198,12 @@ void SImGuiWidgetBase::Construct(const FArguments& InArgs)
 		MainViewport->PlatformUserData = MainViewportData;
 	}
 
-	// TODO: setting?
-	ImGui::StyleColorsDark();
+	static auto CVarTheme = IConsoleManager::Get().FindConsoleVariable(TEXT("imgui.Theme"));
+	if (ensure(CVarTheme))
+	{
+		CVarTheme->OnChangedDelegate().AddSPLambda(this, [this](IConsoleVariable* Var) { ApplyTheme(); });
+	}
+	ApplyTheme();
 
 #ifdef WITH_NET_IMGUI
 	NetImgui::Startup();
@@ -204,6 +221,12 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 	// cleanup references to this widget
 	{
 		FImGuiTickScope TickScope{ m_TickContext.Get() };
+
+		static auto CVarTheme = IConsoleManager::Get().FindConsoleVariable(TEXT("imgui.Theme"));
+		if (CVarTheme)
+		{
+			CVarTheme->OnChangedDelegate().RemoveAll(this);
+		}
 
 #ifdef WITH_NET_IMGUI
 		NetImgui::Shutdown();
@@ -230,6 +253,79 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 	// NOTE: widget drawers should be queued before context
 	ImGuiUtils::DeferredDeletionQueue.DeferredDeleteObjects(MoveTemp(m_WidgetDrawers[0]), MoveTemp(m_WidgetDrawers[1]), m_ImGuiContext);
 	m_ImGuiContext = nullptr;
+}
+
+void SImGuiWidgetBase::ApplyTheme()
+{
+	// always initialize Slate colors
+	m_SlateColorsVec4.SetNum((uint32)EStyleColor::MAX);
+	m_SlateColorsU32.SetNum((uint32)EStyleColor::MAX);
+	for (uint32 ColorId = 0; ColorId < (uint32)EStyleColor::MAX; ++ColorId)
+	{
+		m_SlateColorsU32[ColorId] = FSlateColor((EStyleColor)ColorId).GetSpecifiedColor().ToFColorSRGB().DWColor();
+		m_SlateColorsVec4[ColorId] = BitCast<FLinearColor>(ImColor(m_SlateColorsU32[ColorId]));
+	}
+
+	ImGuiStyle& Style = (m_ImGuiContext->Style = ImGuiStyle());
+	if (CVarImGuiTheme.GetValueOnAnyThread() == 3)
+	{
+		ImGui::StyleColorsDark(&Style);
+
+		Style.GrabRounding = 3.f;
+		Style.FrameRounding = 3.f;
+		Style.ScrollbarSize = 12.f;
+		Style.FrameBorderSize = 1.f;
+		Style.ScrollbarRounding = 8.f;
+		Style.TabBarOverlineSize = 2.f;
+		Style.SelectableRounding = 3.f;
+		Style.FramePadding = ImVec2(8.f, 4.f);
+		Style.ButtonTextAlign = ImVec2(0.5f, 0.5f); //NOTE: Slate prefers Left aligned
+
+		Style.Colors[ImGuiCol_TitleBg] = ImColor(0xFF151515);
+		Style.Colors[ImGuiCol_TitleBgActive] = ImColor(0xFF151515);
+		Style.Colors[ImGuiCol_TitleBgCollapsed] = ImColor(0x82151515);
+		Style.Colors[ImGuiCol_Tab] = ImColor(0xFF151515);
+		Style.Colors[ImGuiCol_TabDimmed] = ImColor(0xFF151515);
+		Style.Colors[ImGuiCol_TabSelected] = ImColor(0xFF242424);
+		Style.Colors[ImGuiCol_TabDimmedSelected] = ImColor(0xFF242424);
+		Style.Colors[ImGuiCol_TabHovered] = ImColor(0xFF212121);
+		Style.Colors[ImGuiCol_TabSelectedOverline] = ImColor(m_SlateColorsU32[(uint32)EStyleColor::Primary]);
+		Style.Colors[ImGuiCol_TabDimmedSelectedOverline] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Primary] * FLinearColor(1.f, 1.f, 1.f, 0.5f));
+		Style.Colors[ImGuiCol_DockingPreview] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Select] * FLinearColor(1.f, 1.f, 1.f, 0.5f));
+
+		Style.Colors[ImGuiCol_WindowBg] = ImColor(0xFA242424);
+		Style.Colors[ImGuiCol_PopupBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Dropdown] * FLinearColor(1.f, 1.f, 1.f, 0.94f));
+		Style.Colors[ImGuiCol_FrameBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Input]);
+		Style.Colors[ImGuiCol_FrameBgActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Input]);
+		Style.Colors[ImGuiCol_FrameBgHovered] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Input]);
+		Style.Colors[ImGuiCol_Header] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Header]);
+		Style.Colors[ImGuiCol_HeaderActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Select]);
+		Style.Colors[ImGuiCol_HeaderHovered] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::PrimaryHover]);
+		Style.Colors[ImGuiCol_Button] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Secondary]);
+		Style.Colors[ImGuiCol_ButtonActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Header]);
+		Style.Colors[ImGuiCol_ButtonHovered] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Hover]);
+		Style.Colors[ImGuiCol_SliderGrab] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Secondary]);
+		Style.Colors[ImGuiCol_SliderGrabActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Header]);
+		Style.Colors[ImGuiCol_CheckMark] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Primary]);
+		Style.Colors[ImGuiCol_CheckboxSelectedBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Input]);
+		Style.Colors[ImGuiCol_TextSelectedBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Highlight]);
+		Style.Colors[ImGuiCol_NavCursor] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Highlight]);
+		Style.Colors[ImGuiCol_Border] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::InputOutline]);
+		Style.Colors[ImGuiCol_TableHeaderBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Header]);
+		Style.Colors[ImGuiCol_TableRowBg] = ImColor(0xFF191919);
+		Style.Colors[ImGuiCol_TableRowBgAlt] = ImColor(0xFF2B2B2B);
+		Style.Colors[ImGuiCol_ScrollbarBg] = ImColor(0);
+	}
+	else
+	{
+		switch (CVarImGuiTheme.GetValueOnAnyThread())
+		{
+		default: ensureAlwaysMsgf(false, TEXT("ImGui theme not handled!"));
+		case 0: ImGui::StyleColorsDark(&Style); break;
+		case 1: ImGui::StyleColorsLight(&Style); break;
+		case 2: ImGui::StyleColorsClassic(&Style); break;
+		}
+	}
 }
 
 void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry)

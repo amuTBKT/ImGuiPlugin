@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "Misc/Optional.h"
 #include "Textures/SlateIcon.h"
 
 #include "imgui/imgui_internal.h"
@@ -37,17 +38,19 @@ struct FImGuiTickContext
 	// drawing remotely to NetImGui server
 	bool bIsDrawingRemotely = false;
 
-	// updating the main menu bar
-	// TODO: is there a better way to detect if we are inside `BeginMainMenuBar`/`EndMainMenuBar` block?
+	// main menu bar
 	bool  MainMenuBar_bIsTicking = false;
 	bool  MainMenuBar_bTickingRightAlignedItems = false;
 	float MainMenuBar_Height = 0.f;
 	float MainMenuBar_RightDirOffsetX = 0.f;
 	float MainMenuBar_RightDirOffsetY = 0.f;
 	float MainMenuBar_RightDirCursorPosX = 0.f;
-
 	// allow callback to modify enabled state (alternative to UImGuiSubsystem::GetMainMenuWidgetActiveState(...))
 	bool* MainMenuBar_CurrentItemEnabledState = nullptr;
+
+	// Unreal theme colors (mirrors EStyleColor)
+	const TArray<FLinearColor>* SlateColorsVec4 = nullptr;
+	const TArray<uint32>*		SlateColorsU32 = nullptr;
 
 	// this is different from `AllocateSpaceForRightAlignedMenuWidget` as ImGui::BeginMenu has some custom logic to handle item spacing
 	bool AllocateSpaceForRightAlignedMenuItem(const char* Label)
@@ -195,6 +198,80 @@ struct FImGuiNamedScope final : FNoncopyable
 	}
 };
 
+// scoped style edits
+struct FImGuiScopedStyleEdit : FNoncopyable
+{
+	template <typename... Args>
+	FImGuiScopedStyleEdit(Args&&... args)
+	{
+		static_assert(sizeof...(args) % 2 == 0);
+		ProcessStyleVarsImpl(std::forward_as_tuple(std::forward<Args>(args)...), std::make_index_sequence<sizeof...(args) / 2>{});
+	}
+
+	~FImGuiScopedStyleEdit()
+	{
+		ImGui::PopStyleVar(StyleVarCount);
+		ImGui::PopStyleColor(StyleColorCount);
+	}
+
+private:
+	template <typename Tuple, size_t... Is>
+	void ProcessStyleVarsImpl(Tuple&& t, std::index_sequence<Is...>)
+	{
+		(PushVarImpl(std::get<Is * 2>(t), std::get<Is * 2 + 1>(t)), ...);
+	}
+
+	// style vars
+	void PushVarImpl(ImGuiStyleVar_ idx, float var)
+	{
+		StyleVarCount++;
+		ImGui::PushStyleVar(idx, var);
+	}
+	void PushVarImpl(ImGuiStyleVar_ idx, ImVec2&& var)
+	{
+		StyleVarCount++;
+		ImGui::PushStyleVar(idx, MoveTemp(var));
+	}
+	void PushVarImpl(ImGuiStyleVar_ idx, const ImVec2& var)
+	{
+		StyleVarCount++;
+		ImGui::PushStyleVar(idx, var);
+	}
+
+	// style colors
+	void PushVarImpl(ImGuiCol_ idx, uint32 col)
+	{
+		StyleColorCount++;
+		ImGui::PushStyleColor(idx, col);
+	}
+	void PushVarImpl(ImGuiCol_ idx, const ImColor& col)
+	{
+		StyleColorCount++;
+		ImGui::PushStyleColor(idx, (ImVec4)col);
+	}
+	void PushVarImpl(ImGuiCol_ idx, ImVec4&& col)
+	{
+		StyleColorCount++;
+		ImGui::PushStyleColor(idx, MoveTemp(col));
+	}
+	void PushVarImpl(ImGuiCol_ idx, const ImVec4& col)
+	{
+		StyleColorCount++;
+		ImGui::PushStyleColor(idx, col);
+	}
+	void PushVarImpl(ImGuiCol_ idx, const FColor& col)
+	{
+		PushVarImpl(idx, col.DWColor());
+	}
+	void PushVarImpl(ImGuiCol_ idx, const FLinearColor& col)
+	{
+		PushVarImpl(idx, col.ToFColorSRGB());
+	}
+
+	int32 StyleColorCount = 0;
+	int32 StyleVarCount = 0;
+};
+
 // params used to create image widgets, works for slate icons too (they are atlased)
 // NOTE: using ImVec2(0,0) for invalid image (maps to 2x2 white pixel), can switch to ImGui::GetFontTexUvWhitePixel() if this setup breaks at some point
 struct FImGuiImageBindingParams
@@ -210,8 +287,33 @@ struct FImGuiImageBindingParams
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
+struct FButtonStyle;
+struct FCheckBoxStyle;
+struct FSearchBoxStyle;
+struct FComboButtonStyle;
+
 namespace FImGui
 {
+	FORCEINLINE FImGuiTickContext* GetTickContext(ImGuiContext* Context)
+	{
+		return FImGuiTickContext::GetTickContextFromImGuiContext(Context);
+	}
+	FORCEINLINE FImGuiTickContext* GetCurrentTickContext()
+	{
+		return FImGuiTickContext::GetTickContextFromImGuiContext(ImGui::GetCurrentContext());
+	}
+
+	template <typename StyleColor>
+	FORCEINLINE ImVec4 GetSlateColorVec4(const FImGuiTickContext* TickContext, StyleColor SlateColorId)
+	{
+		return BitCast<ImVec4>((*TickContext->SlateColorsVec4)[static_cast<int32>(SlateColorId)]);
+	}
+	template <typename StyleColor>
+	FORCEINLINE ImU32  GetSlateColorU32(const FImGuiTickContext* TickContext, StyleColor SlateColorId)
+	{
+		return (*TickContext->SlateColorsU32)[static_cast<int32>(SlateColorId)];
+	}
+
 	// utility function to allow adding icon to menu item
 	FORCEINLINE bool MenuItem(FImGuiTickContext* TickContext, const char* Label, bool bIsActive, const FImGuiImageBindingParams& Icon, ImVec2 IconOffset = ImVec2(0.f, 0.f))
 	{
@@ -394,6 +496,175 @@ namespace FImGui
 	{
 		return SubMenu(TickContext, Label, MenuFunc, Icon, Icon, IconOffset);
 	}
+
+	FORCEINLINE bool ImageButton(const char* str_id, const FImGuiImageBindingParams& image, const ImVec4& bg_col = ImVec4(0, 0, 0, 0), const ImVec4& tint_col = ImVec4(1, 1, 1, 1))
+	{
+		return ImGui::ImageButton(str_id, image.Id, image.Size, image.UV0, image.UV1, bg_col, tint_col);
+	}
+	FORCEINLINE void Image(const FImGuiImageBindingParams& image, const ImVec4& tint_col = ImVec4(1, 1, 1, 1))
+	{
+		ImGui::ImageWithBg(image.Id, image.Size, image.UV0, image.UV1, /*bg_col=*/ImVec4(0, 0, 0, 0), tint_col);
+	}
+
+	IMGUIRUNTIME_API void DrawSlateBrush(const FImGuiTickContext* TickContext, const FSlateBrush& Brush, ImVec2 RectMin, ImVec2 RectMax, TOptional<ImVec4> Tint = {}, TOptional<ImU32> BorderColor = {});
+
+	IMGUIRUNTIME_API bool Button(FImGuiTickContext* TickContext, const char* Label, const FButtonStyle& ButtonStyle, const ImVec4& ContentPadding);
+	FORCEINLINE bool Button(FImGuiTickContext* TickContext, const char* Label, const FButtonStyle& ButtonStyle)
+	{
+		ImVec2 FramePadding = ImGui::GetStyle().FramePadding;
+		return Button(TickContext, Label, ButtonStyle, ImVec4(FramePadding.x, FramePadding.y, FramePadding.x, FramePadding.y));
+	}
+
+	IMGUIRUNTIME_API bool Button(FImGuiTickContext* TickContext, const char* Id, const FImGuiImageBindingParams& Image, const FButtonStyle& ButtonStyle, const ImVec4& ContentPadding);
+	FORCEINLINE bool Button(FImGuiTickContext* TickContext, const char* Id, const FImGuiImageBindingParams& Image, const FButtonStyle& ButtonStyle)
+	{
+		ImVec2 FramePadding = ImGui::GetStyle().FramePadding;
+		return Button(TickContext, Id, Image, ButtonStyle, ImVec4(FramePadding.x, FramePadding.y, FramePadding.x, FramePadding.y));
+	}
+
+	IMGUIRUNTIME_API bool CheckBox(FImGuiTickContext* TickContext, const char* Label, bool* Value, const FCheckBoxStyle& CheckBoxStyle);
+	IMGUIRUNTIME_API bool ToggleButton(FImGuiTickContext* TickContext, const char* Label, bool* Value, const FImGuiImageBindingParams& Image, const FCheckBoxStyle& CheckBoxStyle);
+	FORCEINLINE bool RadioButton(FImGuiTickContext* TickContext, const char* Label, bool* Value, const FCheckBoxStyle& CheckBoxStyle)
+	{
+		bool bTempValue = *Value;
+		bool bPressed = CheckBox(TickContext, Label, &bTempValue, CheckBoxStyle);
+		if (!(*Value) && bPressed)
+		{
+			*Value = bTempValue;
+			return true;
+		}
+		return false;
+	}
+
+	IMGUIRUNTIME_API bool ComboButton(FImGuiTickContext* TickContext, const char* Label, const char* PreviewText, const FComboButtonStyle& ComboButtonStyle);
+	IMGUIRUNTIME_API bool ComboButton(FImGuiTickContext* TickContext, const char* Label, const FImGuiImageBindingParams& Image, const FComboButtonStyle& ComboButtonStyle);
+
+	IMGUIRUNTIME_API bool EditableTextBox(FImGuiTickContext* TickContext, const char* Label, const char* Hint, char* Buffer, size_t BufferSize, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr);
+	IMGUIRUNTIME_API bool SearchTextBox(FImGuiTickContext* TickContext, const char* Label, const char* Hint, char* Buffer, size_t BufferSize, const FSearchBoxStyle& SearchBoxStyle, bool bSetFocus = false, bool bActivateOnNavFocus = false, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr);
+
+	FORCEINLINE bool BeginCombo(FImGuiTickContext* TickContext, const char* Label, const char* PreviewText, const FComboButtonStyle& ComboButtonStyle)
+	{
+		const ImGuiID PopupId = ImHashStr("##ComboPopup", 0, ImGui::GetID(Label));
+		bool bIsPopupOpen = ImGui::IsPopupOpen(PopupId, ImGuiPopupFlags_None);
+		const bool bPressed = ComboButton(TickContext, Label, PreviewText, ComboButtonStyle);
+		if (bPressed && !bIsPopupOpen)
+		{
+			ImGui::OpenPopupEx(PopupId, ImGuiPopupFlags_None);
+		}
+
+		return ImGui::BeginComboPopup(PopupId, ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()), ImGuiComboFlags_None);
+	}
+	FORCEINLINE void EndCombo() { ImGui::EndCombo(); }
+
+	IMGUIRUNTIME_API void PushComboListViewDropdownStyle(FImGuiTickContext* TickContext, bool bDarkTheme);
+	IMGUIRUNTIME_API void PopComboListViewDropdownStyle(FImGuiTickContext* TickContext);
+	IMGUIRUNTIME_API void BeginComboListViewDropdownBody(FImGuiTickContext* TickContext);
+	IMGUIRUNTIME_API void EndComboListViewDropdownBody(FImGuiTickContext* TickContext);
+
+	FORCEINLINE void SetTooltip(const char* fmt, ...)
+	{
+		FImGuiScopedStyleEdit TooltipStyle
+		{
+			ImGuiStyleVar_WindowPadding,	ImVec2(8.f, 8.f),
+			ImGuiCol_PopupBg,				0xF0FFFFFF,
+			ImGuiCol_Text,					0xFF000000,
+		};
+
+		va_list args;
+		va_start(args, fmt);
+		ImGui::SetTooltipV(fmt, args);
+		va_end(args);
+	}
+	FORCEINLINE void SetItemTooltip(const char* fmt, ...)
+	{
+		FImGuiScopedStyleEdit TooltipStyle
+		{
+			ImGuiStyleVar_WindowPadding,	ImVec2(8.f, 8.f),
+			ImGuiCol_PopupBg,				0xF0FFFFFF,
+			ImGuiCol_Text,					0xFF000000,
+		};
+
+		va_list args;
+		va_start(args, fmt);
+		ImGui::SetItemTooltipV(fmt, args);
+		va_end(args);
+	}
+
+	// variants without FImGuiTickContext parameter
+	template <typename StyleColor>
+	FORCEINLINE ImVec4 GetSlateColorVec4(StyleColor SlateColorId)
+	{
+		return GetSlateColorVec4(FImGui::GetCurrentTickContext(), static_cast<int32>(SlateColorId));
+	}
+	template <typename StyleColor>
+	FORCEINLINE ImU32 GetSlateColorU32(StyleColor SlateColorId)
+	{
+		return GetSlateColorU32(FImGui::GetCurrentTickContext(), static_cast<int32>(SlateColorId));
+	}
+	FORCEINLINE bool Button(const char* Label, const FButtonStyle& ButtonStyle, const ImVec4& ContentPadding)
+	{
+		return Button(FImGui::GetCurrentTickContext(), Label, ButtonStyle, ContentPadding);
+	}
+	FORCEINLINE bool Button(const char* Label, const FButtonStyle& ButtonStyle)
+	{
+		return Button(FImGui::GetCurrentTickContext(), Label, ButtonStyle);
+	}
+	FORCEINLINE bool Button(const char* Id, const FImGuiImageBindingParams& Image, const FButtonStyle& ButtonStyle, const ImVec4& ContentPadding)
+	{
+		return Button(FImGui::GetCurrentTickContext(), Id, Image, ButtonStyle, ContentPadding);
+	}
+	FORCEINLINE bool Button(const char* Id, const FImGuiImageBindingParams& Image, const FButtonStyle& ButtonStyle)
+	{
+		return Button(FImGui::GetCurrentTickContext(), Id, Image, ButtonStyle);
+	}
+	FORCEINLINE bool CheckBox(const char* Label, bool* Value, const FCheckBoxStyle& CheckBoxStyle)
+	{
+		return CheckBox(FImGui::GetCurrentTickContext(), Label, Value, CheckBoxStyle);
+	}
+	FORCEINLINE bool ToggleButton(const char* Label, bool* Value, const FImGuiImageBindingParams& Image, const FCheckBoxStyle& CheckBoxStyle)
+	{
+		return ToggleButton(FImGui::GetCurrentTickContext(), Label, Value, Image, CheckBoxStyle);
+	}
+	FORCEINLINE bool RadioButton(const char* Label, bool* Value, const FCheckBoxStyle& CheckBoxStyle)
+	{
+		return RadioButton(FImGui::GetCurrentTickContext(), Label, Value, CheckBoxStyle);
+	}
+	FORCEINLINE bool ComboButton(const char* Label, const char* PreviewText, const FComboButtonStyle& ComboButtonStyle)
+	{
+		return ComboButton(FImGui::GetCurrentTickContext(), Label, PreviewText, ComboButtonStyle);
+	}
+	FORCEINLINE bool ComboButton(const char* Label, const FImGuiImageBindingParams& Image, const FComboButtonStyle& ComboButtonStyle)
+	{
+		return ComboButton(FImGui::GetCurrentTickContext(), Label, Image, ComboButtonStyle);
+	}
+	FORCEINLINE bool EditableTextBox(const char* Label, const char* Hint, char* Buffer, size_t BufferSize, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr)
+	{
+		return EditableTextBox(FImGui::GetCurrentTickContext(), Label, Hint, Buffer, BufferSize, Flags, Callback, UserData);
+	}
+	FORCEINLINE bool SearchTextBox(const char* Label, const char* Hint, char* Buffer, size_t BufferSize, const FSearchBoxStyle& SearchBoxStyle, bool bSetFocus = false, bool bActivateOnNavFocus = false, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr)
+	{
+		return SearchTextBox(FImGui::GetCurrentTickContext(), Label, Hint, Buffer, BufferSize, SearchBoxStyle, bSetFocus, bActivateOnNavFocus, Flags, Callback, UserData);
+	}
+	FORCEINLINE bool BeginCombo(const char* Label, const char* PreviewText, const FComboButtonStyle& ComboButtonStyle)
+	{
+		return BeginCombo(FImGui::GetCurrentTickContext(), Label, PreviewText, ComboButtonStyle);
+	}
+	FORCEINLINE void PushComboListViewDropdownStyle(bool bDarkTheme)
+	{
+		PushComboListViewDropdownStyle(FImGui::GetCurrentTickContext(), bDarkTheme);
+	}
+	FORCEINLINE void PopComboListViewDropdownStyle()
+	{
+		PopComboListViewDropdownStyle(FImGui::GetCurrentTickContext());
+	}
+	FORCEINLINE void BeginComboListViewDropdownBody()
+	{
+		BeginComboListViewDropdownBody(FImGui::GetCurrentTickContext());
+	}
+	FORCEINLINE void EndComboListViewDropdownBody()
+	{
+		EndComboListViewDropdownBody(FImGui::GetCurrentTickContext());
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -408,7 +679,7 @@ enum class EImGuiShaderState : uint32
 {
 	Default				 = 0u,
 	OutputInSRGB		 = 1u << 0,	 // source texture is in sRGB format (internal use only)
-	DisableAlphaBlending = 1u << 1,  // disable alpha writes from shader (outputs Color.a=1)
+	DisableTextureAlpha  = 1u << 1,  // disable texture alpha
 };
 ENUM_CLASS_FLAGS(EImGuiShaderState);
 

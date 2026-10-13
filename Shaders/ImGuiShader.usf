@@ -39,20 +39,19 @@ void MainPS(
 {
 	// read overrides (should match EImGuiShaderState)
 	const bool bOutputInSRGB		 = ((ShaderStateOverrides & 0x1) > 0);
-	const bool bDisableAlphaBlending = ((ShaderStateOverrides & 0x2) > 0);
+	const bool bDisableTextureAlpha	 = ((ShaderStateOverrides & 0x2) > 0);
 
 	float4 TextureColor = Texture2DSample(Texture, TextureSampler, InUV);
 
 	// source texture is SRGB, need to handle the conversion inside shader
 	if (bOutputInSRGB)
 	{
-		TextureColor.xyz = LinearToSrgb(saturate(TextureColor.rgb));
+		TextureColor.rgb = LinearToSrgb(saturate(TextureColor.rgb));
+	}
+	if (bDisableTextureAlpha)
+	{
+		TextureColor.a = 1.f;
 	}
 
 	OutColor = InColor * TextureColor;
-
-	if (bDisableAlphaBlending)
-	{
-		OutColor.a = 1;
-	}
 }
