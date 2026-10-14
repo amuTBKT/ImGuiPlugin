@@ -1,5 +1,6 @@
 // Copyright 2024-26 Amit Kumar Mehar. All Rights Reserved.
 
+#include "ImGuiPluginTypes.h"
 #include "ImGuiSubsystem.h"
 #include "Styling/SlateTypes.h"
 #include "Styling/StyleColors.h"
@@ -391,6 +392,18 @@ namespace FImGui
 		}
 	}
 
+	// used for aligning/stretching widgets vertically
+	// defaulting to VAlign_Center for now
+	float GetCurrentLineHeight(const FImGuiTickContext* TickContext)
+	{
+		float LineHeight = TickContext->ImguiContext->CurrentWindow->DC.CurrLineSize.y;
+		if (LineHeight < KINDA_SMALL_NUMBER)
+		{
+			LineHeight = ImGui::GetFrameHeight();
+		}
+		return LineHeight;
+	}
+
 	// same as ImGui::InvisibleButton but returns whether the button was culled + no nav highlight
 	bool InvisibleButton(const char* str_id, bool& pressed, bool& hovered, const ImVec2& size_arg, ImGuiButtonFlags flags = ImGuiButtonFlags_NoHoveredOnFocus|ImGuiButtonFlags_EnableNav, const ImVec2& offset = ImVec2(0.f, 0.f))
 	{
@@ -517,9 +530,10 @@ namespace FImGui
 		float ButtonOffsetY = 0.f;
 		if (CheckBoxStyle.CheckBoxType == ESlateCheckBoxType::CheckBox)
 		{
-			if (ItemRect.y < ImGui::GetFrameHeight())
+			float CurrLineHeight = GetCurrentLineHeight(TickContext);
+			if (ItemRect.y < CurrLineHeight)
 			{
-				ButtonOffsetY = ImCeil((ImGui::GetFrameHeight() - ItemRect.y) * 0.5f);
+				ButtonOffsetY = ImFloor((CurrLineHeight - ItemRect.y) * 0.5f);
 			}
 		}
 
@@ -738,11 +752,36 @@ namespace FImGui
 		return bPressed;
 	}
 
+	void TextBlock(FImGuiTickContext* TickContext, const char* Text)
+	{
+		FImGuiTickScope Scope{ TickContext };
+
+		float CurrLineHeight = GetCurrentLineHeight(TickContext);
+		ImVec2 FramePadding = ImGui::GetStyle().FramePadding;
+		if (CurrLineHeight != ImGui::GetFrameHeight())
+		{
+			FramePadding.y = ImMax(0.f, FramePadding.y + (CurrLineHeight - ImGui::GetFrameHeight()) * 0.5f);
+		}
+
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, FramePadding);
+		ImGui::AlignTextToFramePadding();
+		ImGui::TextUnformatted(Text);
+		ImGui::PopStyleVar();
+	}
+
 	bool EditableTextBox(FImGuiTickContext* TickContext, const char* Label, const char* Hint, char* Buffer, size_t BufferSize, ImGuiInputTextFlags Flags, ImGuiInputTextCallback Callback, void* UserData)
 	{
 		FImGuiTickScope Scope{ TickContext };
 
+		float CurrLineHeight = GetCurrentLineHeight(TickContext);
+		float FramePaddingY = ImGui::GetStyle().FramePadding.y;
+		if (CurrLineHeight != ImGui::GetFrameHeight())
+		{
+			FramePaddingY = ImMax(0.f, FramePaddingY + (CurrLineHeight - ImGui::GetFrameHeight()) * 0.5f);
+		}
+
 		ImGui::PushStyleColor(ImGuiCol_NavCursor, 0);
+		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.f, FramePaddingY));
 		bool bTextChanged;
 		if (Hint)
 		{
@@ -752,6 +791,7 @@ namespace FImGui
 		{
 			bTextChanged = ImGui::InputText(Label, Buffer, BufferSize, Flags, Callback, UserData);
 		}
+		ImGui::PopStyleVar();
 		ImGui::PopStyleColor();
 
 		if (ImGui::IsItemActive() || IsItemHighlighted())
@@ -792,17 +832,17 @@ namespace FImGui
 
 		ImVec2 OriginalCursorPos = ImGui::GetCursorPos();
 		float ItemWidth = ImGui::CalcItemWidth();
+		float CurrLineHeight = GetCurrentLineHeight(TickContext);
 
 		ImGui::BeginGroup();
 		{
 			static const char* InputTextLabel = "##Filter";
 			const ImGuiID InputTextId = ImGui::GetID(InputTextLabel);
 
-			int32 FrameHeight = ImGui::GetFrameHeight();
 			float FramePaddingY = ImGui::GetStyle().FramePadding.y;
-			if ((FrameHeight & 0x1) > 0)
+			if (CurrLineHeight != ImGui::GetFrameHeight())
 			{
-				FramePaddingY += 0.5f;
+				FramePaddingY = ImMax(0.f, FramePaddingY + (CurrLineHeight - ImGui::GetFrameHeight()) * 0.5f);
 			}
 
 			ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0.f, FramePaddingY));
@@ -820,10 +860,10 @@ namespace FImGui
 			FVector2f ImageSize = (SearchBoxStyle.ImageSizeOverride.IsSet() ? FVector2f(SearchBoxStyle.ImageSizeOverride.GetValue()) : ImageBrush->GetImageSize()) * ImGui::GetStyle().FontScaleMain;
 
 			// calculate InputText rect for hover test (for background image)
-			ImRect InputTextRect{ ImGui::GetCursorScreenPos(), ImGui::GetCursorScreenPos() + ImVec2(ItemWidth, ImGui::GetFrameHeight()) };
+			ImRect InputTextRect{ ImGui::GetCursorScreenPos(), ImGui::GetCursorScreenPos() + ImVec2(ItemWidth, CurrLineHeight) };
 			if (SearchBoxStyle.TextBoxStyle.BackgroundImageNormal.OutlineSettings.RoundingType == ESlateBrushRoundingType::HalfHeightRadius)
 			{
-				InputTextRect.Max.x -= ImGui::GetFrameHeight() * 0.5f;
+				InputTextRect.Max.x -= CurrLineHeight * 0.5f;
 			}
 			else
 			{
@@ -834,7 +874,7 @@ namespace FImGui
 			const bool bActive = ImGui::GetActiveID() == InputTextId;
 			const bool bInputTextHovered = ((GImGui->CurrentItemFlags & ImGuiItemFlags_Disabled) == 0) && ImGui::IsMouseHoveringRect(InputTextRect.Min, InputTextRect.Max);
 			const FSlateBrush* BackgroundBrush = bActive ? &SearchBoxStyle.TextBoxStyle.BackgroundImageFocused : (bInputTextHovered ? &SearchBoxStyle.TextBoxStyle.BackgroundImageHovered : &SearchBoxStyle.TextBoxStyle.BackgroundImageNormal);
-			DrawSlateBrush(TickContext, *BackgroundBrush, ImGui::GetCursorScreenPos(), ImGui::GetCursorScreenPos() + ImVec2(ItemWidth, ImGui::GetFrameHeight()), {}, IsItemHighlighted(InputTextId) ? ImGui::GetColorU32(ImGuiCol_NavCursor) : TOptional<ImU32>{});
+			DrawSlateBrush(TickContext, *BackgroundBrush, ImGui::GetCursorScreenPos(), ImGui::GetCursorScreenPos() + ImVec2(ItemWidth, CurrLineHeight), {}, IsItemHighlighted(InputTextId) ? ImGui::GetColorU32(ImGuiCol_NavCursor) : TOptional<ImU32>{});
 
 			uint32 FocusedForegroundColor = GetSlateColorU32(SearchBoxStyle.TextBoxStyle.FocusedForegroundColor, TickContext);
 			uint32 NormalForegroundColor = GetSlateColorU32(SearchBoxStyle.TextBoxStyle.ForegroundColor, TickContext);
@@ -847,7 +887,7 @@ namespace FImGui
 				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + SearchBoxStyle.ImagePadding.Left + (SearchBoxStyle.ImagePadding.Left + SearchBoxStyle.ImagePadding.Right) * 0.5f);
 				if (FCStringAnsi::Strlen(Buffer) > 0)
 				{
-					ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetFrameHeight() * 0.5f - ImageSize.Y * 0.5f);
+					ImGui::SetCursorPosY(ImGui::GetCursorPosY() + CurrLineHeight * 0.5f - ImageSize.Y * 0.5f);
 					bClearText = ImGui::InvisibleButton("Clear", ImVec2(ImageSize.X, ImageSize.Y));
 
 					if (((GImGui->CurrentItemFlags & ImGuiItemFlags_Disabled) == 0) && ImGui::IsMouseHoveringRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()))
@@ -857,7 +897,7 @@ namespace FImGui
 				}
 				else
 				{
-					ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetFrameHeight() * 0.5f - ImageSize.Y * 0.5f);
+					ImGui::SetCursorPosY(ImGui::GetCursorPosY() + CurrLineHeight * 0.5f - ImageSize.Y * 0.5f);
 					ImGui::Dummy(ImVec2(ImageSize.X, ImageSize.Y));
 
 					if (bActive)
@@ -896,7 +936,7 @@ namespace FImGui
 				}
 
 				ImGui::PushStyleColor(ImGuiCol_Text, bActive ? FocusedForegroundColor : NormalForegroundColor);
-				ImGui::SetNextItemWidth(ItemWidth - ImGui::GetFrameHeight() - 16.f);
+				ImGui::SetNextItemWidth(ItemWidth - CurrLineHeight - 16.f);
 				if (bClearText)
 				{
 					Buffer[0] = 0;

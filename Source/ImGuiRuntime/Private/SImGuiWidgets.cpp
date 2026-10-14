@@ -278,7 +278,7 @@ void SImGuiWidgetBase::ApplyTheme()
 		Style.ScrollbarRounding = 8.f;
 		Style.TabBarOverlineSize = 2.f;
 		Style.SelectableRounding = 3.f;
-		Style.FramePadding = ImVec2(8.f, 4.f);
+		Style.FramePadding = ImVec2(4.f, 4.f);
 		Style.ButtonTextAlign = ImVec2(0.5f, 0.5f); //NOTE: Slate prefers Left aligned
 
 		Style.Colors[ImGuiCol_TitleBg] = ImColor(0xFF151515);

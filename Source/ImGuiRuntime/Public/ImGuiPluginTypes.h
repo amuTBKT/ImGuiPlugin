@@ -539,6 +539,7 @@ namespace FImGui
 	IMGUIRUNTIME_API bool ComboButton(FImGuiTickContext* TickContext, const char* Label, const char* PreviewText, const FComboButtonStyle& ComboButtonStyle);
 	IMGUIRUNTIME_API bool ComboButton(FImGuiTickContext* TickContext, const char* Label, const FImGuiImageBindingParams& Image, const FComboButtonStyle& ComboButtonStyle);
 
+	IMGUIRUNTIME_API void TextBlock(FImGuiTickContext* TickContext, const char* Text);
 	IMGUIRUNTIME_API bool EditableTextBox(FImGuiTickContext* TickContext, const char* Label, const char* Hint, char* Buffer, size_t BufferSize, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr);
 	IMGUIRUNTIME_API bool SearchTextBox(FImGuiTickContext* TickContext, const char* Label, const char* Hint, char* Buffer, size_t BufferSize, const FSearchBoxStyle& SearchBoxStyle, bool bSetFocus = false, bool bActivateOnNavFocus = false, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr);
 
@@ -636,6 +637,10 @@ namespace FImGui
 	FORCEINLINE bool ComboButton(const char* Label, const FImGuiImageBindingParams& Image, const FComboButtonStyle& ComboButtonStyle)
 	{
 		return ComboButton(FImGui::GetCurrentTickContext(), Label, Image, ComboButtonStyle);
+	}
+	FORCEINLINE void TextBlock(const char* Text)
+	{
+		TextBlock(FImGui::GetCurrentTickContext(), Text);
 	}
 	FORCEINLINE bool EditableTextBox(const char* Label, const char* Hint, char* Buffer, size_t BufferSize, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr)
 	{
