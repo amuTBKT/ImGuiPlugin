@@ -108,7 +108,7 @@ private:
 	// initial zoom support
 	float m_WindowScale = 1.f;
 
-	mutable uint8 m_CachedImGuiCursor = 0;
+	mutable int8 m_CachedImGuiCursor = 0;
 	bool m_IsDragOverActive = false;
 	TSharedPtr<class FDragDropOperation> LastDragDropOperation;
 

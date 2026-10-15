@@ -680,7 +680,7 @@ FCursorReply SImGuiWidgetBase::OnCursorQuery(const FGeometry& WidgetGeometry, co
 		return FCursorReply::Unhandled();
 	}
 
-	return (m_CachedImGuiCursor == ImGuiMouseCursor_None) ? FCursorReply::Unhandled() : FCursorReply::Cursor(ImGuiUtils::ImGuiToUnrealCursor(m_CachedImGuiCursor));
+	return (m_CachedImGuiCursor == ImGuiMouseCursor_None) ? FCursorReply::Cursor(EMouseCursor::None) : FCursorReply::Cursor(ImGuiUtils::ImGuiToUnrealCursor(m_CachedImGuiCursor));
 }
 
 static bool AllowDragDropOperation(const FDragDropOperation* Operation)
