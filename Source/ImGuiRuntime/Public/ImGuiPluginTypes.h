@@ -540,7 +540,17 @@ namespace FImGui
 	IMGUIRUNTIME_API bool ComboButton(FImGuiTickContext* TickContext, const char* Label, const char* PreviewText, const FComboButtonStyle& ComboButtonStyle);
 	IMGUIRUNTIME_API bool ComboButton(FImGuiTickContext* TickContext, const char* Label, const FImGuiImageBindingParams& Image, const FComboButtonStyle& ComboButtonStyle);
 
-	IMGUIRUNTIME_API void TextBlock(FImGuiTickContext* TickContext, const char* Text);
+	IMGUIRUNTIME_API void TextBlock(FImGuiTickContext* TickContext, const char* Text, const char* TextEnd = nullptr);
+	FORCEINLINE void TextBlockf(FImGuiTickContext* TickContext, const char* Fmt, ...)
+	{
+		va_list args;
+		va_start(args, Fmt);
+		const char* Text, *TextEnd;
+		ImFormatStringToTempBufferV(&Text, &TextEnd, Fmt, args);
+		va_end(args);
+
+		TextBlock(TickContext, Text, TextEnd);
+	}
 	IMGUIRUNTIME_API bool EditableTextBox(FImGuiTickContext* TickContext, const char* Label, const char* Hint, char* Buffer, size_t BufferSize, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr);
 	IMGUIRUNTIME_API bool SearchTextBox(FImGuiTickContext* TickContext, const char* Label, const char* Hint, char* Buffer, size_t BufferSize, const FSearchBoxStyle& SearchBoxStyle, bool bSetFocus = false, bool bActivateOnNavFocus = false, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr);
 
@@ -568,7 +578,7 @@ namespace FImGui
 	IMGUIRUNTIME_API void BeginComboListViewDropdownBody(FImGuiTickContext* TickContext);
 	IMGUIRUNTIME_API void EndComboListViewDropdownBody(FImGuiTickContext* TickContext);
 
-	FORCEINLINE void SetTooltip(const char* fmt, ...)
+	FORCEINLINE void SetTooltip(const char* Fmt, ...)
 	{
 		FImGuiScopedStyleEdit TooltipStyle
 		{
@@ -578,11 +588,11 @@ namespace FImGui
 		};
 
 		va_list args;
-		va_start(args, fmt);
-		ImGui::SetTooltipV(fmt, args);
+		va_start(args, Fmt);
+		ImGui::SetTooltipV(Fmt, args);
 		va_end(args);
 	}
-	FORCEINLINE void SetItemTooltip(const char* fmt, ...)
+	FORCEINLINE void SetItemTooltip(const char* Fmt, ...)
 	{
 		FImGuiScopedStyleEdit TooltipStyle
 		{
@@ -592,8 +602,8 @@ namespace FImGui
 		};
 
 		va_list args;
-		va_start(args, fmt);
-		ImGui::SetItemTooltipV(fmt, args);
+		va_start(args, Fmt);
+		ImGui::SetItemTooltipV(Fmt, args);
 		va_end(args);
 	}
 
@@ -644,9 +654,19 @@ namespace FImGui
 	{
 		return ComboButton(FImGui::GetCurrentTickContext(), Label, Image, ComboButtonStyle);
 	}
-	FORCEINLINE void TextBlock(const char* Text)
+	FORCEINLINE void TextBlock(const char* Text, const char* TextEnd = nullptr)
 	{
-		TextBlock(FImGui::GetCurrentTickContext(), Text);
+		TextBlock(FImGui::GetCurrentTickContext(), Text, TextEnd);
+	}
+	FORCEINLINE void TextBlockf(const char* Fmt, ...)
+	{
+		va_list args;
+		va_start(args, Fmt);
+		const char* Text, *TextEnd;
+		ImFormatStringToTempBufferV(&Text, &TextEnd, Fmt, args);
+		va_end(args);
+
+		TextBlock(FImGui::GetCurrentTickContext(), Text, TextEnd);
 	}
 	FORCEINLINE bool EditableTextBox(const char* Label, const char* Hint, char* Buffer, size_t BufferSize, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr)
 	{
@@ -655,6 +675,11 @@ namespace FImGui
 	FORCEINLINE bool SearchTextBox(const char* Label, const char* Hint, char* Buffer, size_t BufferSize, const FSearchBoxStyle& SearchBoxStyle, bool bSetFocus = false, bool bActivateOnNavFocus = false, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr)
 	{
 		return SearchTextBox(FImGui::GetCurrentTickContext(), Label, Hint, Buffer, BufferSize, SearchBoxStyle, bSetFocus, bActivateOnNavFocus, Flags, Callback, UserData);
+	}
+	template <typename T>
+	FORCEINLINE bool SpinBox(const char* Label, T& v, const FSpinBoxStyle& SpinBoxStyle, T v_speed = 1, T v_min = 0, T v_max = 0, const char* format = "%d", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput)
+	{
+		return SpinBox(FImGui::GetCurrentTickContext(), Label, v, SpinBoxStyle, v_speed, v_min, v_max, format, flags);
 	}
 	FORCEINLINE bool BeginCombo(const char* Label, const char* PreviewText, const FComboButtonStyle& ComboButtonStyle)
 	{

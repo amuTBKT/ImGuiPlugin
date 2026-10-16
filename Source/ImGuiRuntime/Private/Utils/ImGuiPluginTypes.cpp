@@ -756,7 +756,7 @@ namespace FImGui
 		return bPressed;
 	}
 
-	void TextBlock(FImGuiTickContext* TickContext, const char* Text)
+	void TextBlock(FImGuiTickContext* TickContext, const char* Text, const char* TextEnd)
 	{
 		FImGuiTickScope Scope{ TickContext };
 
@@ -769,7 +769,7 @@ namespace FImGui
 
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, FramePadding);
 		ImGui::AlignTextToFramePadding();
-		ImGui::TextUnformatted(Text);
+		ImGui::TextUnformatted(Text, TextEnd);
 		ImGui::PopStyleVar();
 	}
 
