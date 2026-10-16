@@ -1071,14 +1071,22 @@ namespace FImGui
 				ImVec2 rect_min = frame_bb.Min + ImVec2(ContentPadding.Left + SpinBoxStyle.TextPadding.Left, ContentPadding.Top + SpinBoxStyle.TextPadding.Top);
 				ImVec2 rect_max = frame_bb.Max - ImVec2(ContentPadding.Right + SpinBoxStyle.TextPadding.Right, ContentPadding.Bottom + SpinBoxStyle.TextPadding.Bottom);
 				const bool clamp_enabled = TempInputIsClampEnabled(flags, data_type, p_min, p_max);
+
+				const ImVec2 Backup_CursorPosPrevLine = window->DC.CursorPosPrevLine;
+				const ImVec2 Backup_PrevLineSize = window->DC.PrevLineSize;
+				const float Backup_PrevLineTextBaseOffset = window->DC.PrevLineTextBaseOffset;
 				value_changed = ImGui::TempInputScalar({ rect_min, rect_max }, id, "##SpinBox", data_type, p_data, format, clamp_enabled ? p_min : NULL, clamp_enabled ? p_max : NULL);
+				// restore prev line data as the input widget doesn't span the entire frame rect
+				window->DC.CursorPosPrevLine = Backup_CursorPosPrevLine;
+				window->DC.PrevLineSize = Backup_PrevLineSize;
+				window->DC.PrevLineTextBaseOffset = Backup_PrevLineTextBaseOffset;
 
 				ImGui::SetItemKeyOwner(ImGuiKey_MouseWheelY);
 
 				if (ImAbs(ImGui::GetIO().MouseWheel) > KINDA_SMALL_NUMBER && ImGui::IsMouseHoveringRect(rect_min, rect_max))
 				{
 					T new_value = (ImGui::GetIO().MouseWheel > 0.f ? (*p_data + v_speed) : (*p_data - v_speed));
-					if (p_min && p_max)
+					if (clamp_enabled)
 					{
 						new_value = ImClamp(new_value, *p_min, *p_max);
 					}
@@ -1116,7 +1124,7 @@ namespace FImGui
 		DrawSlateBrush(TickContext, *BackgroundBrush, frame_bb.Min, frame_bb.Max, {}, IsItemHighlighted() ? ImGui::GetColorU32(ImGuiCol_NavCursor) : TOptional<ImU32>{});
 
 		// draw fill
-		if (p_min && p_max)
+		if (p_min && p_max && (*p_min != *p_max))
 		{
 			const FSlateBrush* FillBrush = bActive ? &SpinBoxStyle.ActiveFillBrush : (hovered ? &SpinBoxStyle.HoveredFillBrush : &SpinBoxStyle.InactiveFillBrush);
 			if (hovered && !FillBrush->IsSet())
@@ -1146,21 +1154,21 @@ namespace FImGui
 
 		return value_changed;
 	}
-	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, float& p_data, const FSpinBoxStyle& SpinBoxStyle, float v_speed, const float* p_min, const float* p_max, const char* format, ImGuiSliderFlags flags)
+	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, float& v, const FSpinBoxStyle& SpinBoxStyle, float v_speed, float v_min, float v_max, const char* format, ImGuiSliderFlags flags)
 	{
-		return SpinBoxT(TickContext, Label, ImGuiDataType_Float, &p_data, SpinBoxStyle, v_speed, p_min, p_max, format, flags);
+		return SpinBoxT(TickContext, Label, ImGuiDataType_Float, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
 	}
-	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, double& p_data, const FSpinBoxStyle& SpinBoxStyle, double v_speed, const double* p_min, const double* p_max, const char* format, ImGuiSliderFlags flags)
+	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, double& v, const FSpinBoxStyle& SpinBoxStyle, double v_speed, double v_min, double v_max, const char* format, ImGuiSliderFlags flags)
 	{
-		return SpinBoxT(TickContext, Label, ImGuiDataType_Double, &p_data, SpinBoxStyle, v_speed, p_min, p_max, format, flags);
+		return SpinBoxT(TickContext, Label, ImGuiDataType_Double, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
 	}
-	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, int32& p_data, const FSpinBoxStyle& SpinBoxStyle, int32 v_speed, const int32* p_min, const int32* p_max, const char* format, ImGuiSliderFlags flags)
+	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, int32& v, const FSpinBoxStyle& SpinBoxStyle, int32 v_speed, int32 v_min, int32 v_max, const char* format, ImGuiSliderFlags flags)
 	{
-		return SpinBoxT(TickContext, Label, ImGuiDataType_S32, &p_data, SpinBoxStyle, v_speed, p_min, p_max, format, flags);
+		return SpinBoxT(TickContext, Label, ImGuiDataType_S32, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
 	}
-	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, uint32& p_data, const FSpinBoxStyle& SpinBoxStyle, uint32 v_speed, const uint32* p_min, const uint32* p_max, const char* format, ImGuiSliderFlags flags)
+	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, uint32& v, const FSpinBoxStyle& SpinBoxStyle, uint32 v_speed, uint32 v_min, uint32 v_max, const char* format, ImGuiSliderFlags flags)
 	{
-		return SpinBoxT(TickContext, Label, ImGuiDataType_U32, &p_data, SpinBoxStyle, v_speed, p_min, p_max, format, flags);
+		return SpinBoxT(TickContext, Label, ImGuiDataType_U32, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
 	}
 
 	void PushComboListViewDropdownStyle(FImGuiTickContext* TickContext, bool bDarkTheme)
