@@ -674,7 +674,7 @@ namespace FImGui
 		return SearchTextBox(FImGui::GetCurrentTickContext(), Label, Hint, Buffer, BufferSize, SearchBoxStyle, bSetFocus, bActivateOnNavFocus, Flags, Callback, UserData);
 	}
 	template <typename T>
-	FORCEINLINE bool SpinBox(const char* Label, T& v, const FSpinBoxStyle& SpinBoxStyle, T v_speed = 1, T v_min = 0, T v_max = 0, const char* format = "%d", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput)
+	FORCEINLINE bool SpinBox(const char* Label, T& v, const FSpinBoxStyle& SpinBoxStyle, T v_speed = 1, T v_min = 0, T v_max = 0, const char* format = nullptr, ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput)
 	{
 		return SpinBox(FImGui::GetCurrentTickContext(), Label, v, SpinBoxStyle, v_speed, v_min, v_max, format, flags);
 	}
