@@ -292,6 +292,7 @@ struct FSpinBoxStyle;
 struct FCheckBoxStyle;
 struct FSearchBoxStyle;
 struct FComboButtonStyle;
+enum class EStyleColor : uint8;
 
 namespace FImGui
 {
@@ -304,15 +305,13 @@ namespace FImGui
 		return FImGuiTickContext::GetTickContextFromImGuiContext(ImGui::GetCurrentContext());
 	}
 
-	template <typename StyleColor>
-	FORCEINLINE ImVec4 GetSlateColorVec4(const FImGuiTickContext* TickContext, StyleColor SlateColorId)
+	FORCEINLINE ImVec4 GetSlateColorVec4(const FImGuiTickContext* TickContext, EStyleColor StyleColor)
 	{
-		return BitCast<ImVec4>((*TickContext->SlateColorsVec4)[static_cast<int32>(SlateColorId)]);
+		return BitCast<ImVec4>((*TickContext->SlateColorsVec4)[static_cast<int32>(StyleColor)]);
 	}
-	template <typename StyleColor>
-	FORCEINLINE ImU32  GetSlateColorU32(const FImGuiTickContext* TickContext, StyleColor SlateColorId)
+	FORCEINLINE ImU32 GetSlateColorU32(const FImGuiTickContext* TickContext, EStyleColor StyleColor)
 	{
-		return (*TickContext->SlateColorsU32)[static_cast<int32>(SlateColorId)];
+		return (*TickContext->SlateColorsU32)[static_cast<int32>(StyleColor)];
 	}
 
 	// utility function to allow adding icon to menu item
@@ -608,15 +607,13 @@ namespace FImGui
 	}
 
 	// variants without FImGuiTickContext parameter
-	template <typename StyleColor>
-	FORCEINLINE ImVec4 GetSlateColorVec4(StyleColor SlateColorId)
+	FORCEINLINE ImVec4 GetSlateColorVec4(EStyleColor StyleColor)
 	{
-		return GetSlateColorVec4(FImGui::GetCurrentTickContext(), static_cast<int32>(SlateColorId));
+		return GetSlateColorVec4(FImGui::GetCurrentTickContext(), StyleColor);
 	}
-	template <typename StyleColor>
-	FORCEINLINE ImU32 GetSlateColorU32(StyleColor SlateColorId)
+	FORCEINLINE ImU32 GetSlateColorU32(EStyleColor StyleColor)
 	{
-		return GetSlateColorU32(FImGui::GetCurrentTickContext(), static_cast<int32>(SlateColorId));
+		return GetSlateColorU32(FImGui::GetCurrentTickContext(), StyleColor);
 	}
 	FORCEINLINE bool Button(const char* Label, const FButtonStyle& ButtonStyle, const ImVec4& ContentPadding)
 	{
