@@ -90,7 +90,7 @@ namespace FImGui
 		{
 			if (BorderColor.IsSet())
 			{
-				ImGui::GetWindowDrawList()->AddRect(RectMin, RectMax, BorderColor.GetValue(), ImGui::GetStyle().FrameRounding, 1.f);
+				ImGui::GetWindowDrawList()->AddRect(RectMin, RectMax, ImGui::GetColorU32(BorderColor.GetValue()), ImGui::GetStyle().FrameRounding, 1.f);
 			}
 			return;
 		}
@@ -368,7 +368,7 @@ namespace FImGui
 
 		if (Brush.OutlineSettings.Width > 0.f)
 		{
-			ImU32 Color = BorderColor.IsSet() ? BorderColor.GetValue() : GetSlateColorU32(Brush.OutlineSettings.Color, TickContext);
+			ImU32 Color = BorderColor.IsSet() ? BorderColor.GetValue() : ImGui::GetColorU32(GetSlateColorU32(Brush.OutlineSettings.Color, TickContext));
 			DrawList->AddRect(RectMin, RectMax, Color, Rounding, Brush.OutlineSettings.Width);
 		}
 		else if (BorderColor.IsSet())
