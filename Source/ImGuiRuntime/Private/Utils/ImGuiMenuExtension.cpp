@@ -11,14 +11,13 @@
 #include "Algo/BinarySearch.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Styling/StyleColors.h"
 #include "Engine/GameViewportClient.h"
 #include "Framework/Commands/InputChord.h"
 #include "Framework/Application/SlateUser.h"
 #include "Runtime/Launch/Resources/Version.h"
 #include "Framework/Application/IInputProcessor.h"
 #include "Framework/Application/SlateApplication.h"
-
-#include "Styling/StyleColors.h"
 
 #if WITH_EDITOR
 
@@ -27,7 +26,6 @@
 #if USE_TOOLMENU_API
 #include "ToolMenus.h"
 #include "Widgets/SBoxPanel.h"
-#include "Styling/StyleColors.h"
 #include "Widgets/Images/SImage.h"
 #include "LevelEditorMenuContext.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
@@ -1102,7 +1100,6 @@ namespace ImGuiUtils
 			ImGui::PushStyleColor(ImGuiCol_Header, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Select));
 			ImGui::PushStyleColor(ImGuiCol_HeaderActive, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Select));
 			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Select));
-			ImGui::PushStyleColor(ImGuiCol_Border, FImGui::GetSlateColorVec4(TickContext, EStyleColor::DropdownOutline));
 #if WITH_EDITOR
 			if (m_bIsAddedToLevelViewport)
 			{
@@ -1134,6 +1131,9 @@ namespace ImGuiUtils
 					m_bIsMenuOpen = ImGui::IsPopupOpen(LevelEditorPopupMenuName, ImGuiPopupFlags_None);
 					if (m_bIsMenuOpen)
 					{
+						ImGui::PushStyleColor(ImGuiCol_PopupBg, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Dropdown));
+						ImGui::PushStyleColor(ImGuiCol_Border, FImGui::GetSlateColorVec4(TickContext, EStyleColor::DropdownOutline));
+
 						ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + m_MenuOffset, ImGuiCond_Always);
 						if (ImGui::Begin(LevelEditorPopupMenuName, nullptr, ImGuiWindowFlags_Popup | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
 						{
@@ -1150,6 +1150,8 @@ namespace ImGuiUtils
 							}
 						}
 						ImGui::EndPopup();
+
+						ImGui::PopStyleColor(2);
 					}
 				}
 			}
@@ -1257,7 +1259,7 @@ namespace ImGuiUtils
 					m_MenuBarAlpha = FMath::Max(0.f, m_MenuBarAlpha - ImGui::GetIO().DeltaTime * 4.f);
 				}
 			}
-			ImGui::PopStyleColor(4);
+			ImGui::PopStyleColor(3);
 
 			TickSearchWindow(bOpenSearchWindow, MenuContainer);
 
