@@ -1099,8 +1099,10 @@ namespace ImGuiUtils
 					TickContext->MainMenuBar_bIsTicking = false;
 				};
 
-			ImGui::PushStyleColor(ImGuiCol_Header, ImGui::GetColorU32(ImGuiCol_HeaderActive));
-			ImGui::PushStyleColor(ImGuiCol_Border, FImGui::GetSlateColorU32(TickContext, EStyleColor::DropdownOutline));
+			ImGui::PushStyleColor(ImGuiCol_Header, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Select));
+			ImGui::PushStyleColor(ImGuiCol_HeaderActive, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Select));
+			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Select));
+			ImGui::PushStyleColor(ImGuiCol_Border, FImGui::GetSlateColorVec4(TickContext, EStyleColor::DropdownOutline));
 #if WITH_EDITOR
 			if (m_bIsAddedToLevelViewport)
 			{
@@ -1255,7 +1257,7 @@ namespace ImGuiUtils
 					m_MenuBarAlpha = FMath::Max(0.f, m_MenuBarAlpha - ImGui::GetIO().DeltaTime * 4.f);
 				}
 			}
-			ImGui::PopStyleColor(2);
+			ImGui::PopStyleColor(4);
 
 			TickSearchWindow(bOpenSearchWindow, MenuContainer);
 

@@ -294,13 +294,13 @@ void SImGuiWidgetBase::ApplyTheme()
 		Style.Colors[ImGuiCol_DockingPreview] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Select] * FLinearColor(1.f, 1.f, 1.f, 0.5f));
 
 		Style.Colors[ImGuiCol_WindowBg] = ImColor(0xFA242424);
-		Style.Colors[ImGuiCol_PopupBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Dropdown] * FLinearColor(1.f, 1.f, 1.f, 0.94f));
+		Style.Colors[ImGuiCol_PopupBg] = ImColor(0xFA242424);
 		Style.Colors[ImGuiCol_FrameBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Input]);
 		Style.Colors[ImGuiCol_FrameBgActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Input]);
 		Style.Colors[ImGuiCol_FrameBgHovered] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Input]);
-		Style.Colors[ImGuiCol_Header] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Header]);
-		Style.Colors[ImGuiCol_HeaderActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Select]);
-		Style.Colors[ImGuiCol_HeaderHovered] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::PrimaryHover]);
+		Style.Colors[ImGuiCol_Header] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Secondary]);
+		Style.Colors[ImGuiCol_HeaderActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Header]);
+		Style.Colors[ImGuiCol_HeaderHovered] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Hover]);
 		Style.Colors[ImGuiCol_Button] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Secondary]);
 		Style.Colors[ImGuiCol_ButtonActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Header]);
 		Style.Colors[ImGuiCol_ButtonHovered] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Hover]);

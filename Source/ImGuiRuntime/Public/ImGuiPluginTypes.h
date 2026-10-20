@@ -141,7 +141,6 @@ struct FImGuiTickScope : FNoncopyable
 		{
 			EndContext(PrevContext);
 		}
-		PrevContext = nullptr;
 	}
 
 	FORCEINLINE static FImGuiTickContext* BeginContext(FImGuiTickContext* Context)
@@ -170,7 +169,7 @@ struct FImGuiTickScope : FNoncopyable
 };
 
 // scope to resolve label/name conflicts
-struct FImGuiNamedScope final : FNoncopyable
+struct FImGuiNamedScope : FNoncopyable
 {
 	explicit FImGuiNamedScope(int32 ScopeId)
 	{
@@ -497,13 +496,17 @@ namespace FImGui
 		return SubMenu(TickContext, Label, MenuFunc, Icon, Icon, IconOffset);
 	}
 
-	FORCEINLINE bool ImageButton(const char* str_id, const FImGuiImageBindingParams& image, const ImVec4& bg_col = ImVec4(0, 0, 0, 0), const ImVec4& tint_col = ImVec4(1, 1, 1, 1))
+	FORCEINLINE void ImageWithBg(const FImGuiImageBindingParams& image, const ImVec4& bg_col = ImVec4(0, 0, 0, 0), const ImVec4& tint_col = ImVec4(1, 1, 1, 1))
 	{
-		return ImGui::ImageButton(str_id, image.Id, image.Size, image.UV0, image.UV1, bg_col, tint_col);
+		ImGui::ImageWithBg(image.Id, image.Size, image.UV0, image.UV1, bg_col, tint_col);
 	}
 	FORCEINLINE void Image(const FImGuiImageBindingParams& image, const ImVec4& tint_col = ImVec4(1, 1, 1, 1))
 	{
-		ImGui::ImageWithBg(image.Id, image.Size, image.UV0, image.UV1, /*bg_col=*/ImVec4(0, 0, 0, 0), tint_col);
+		FImGui::ImageWithBg(image, /*bg_col=*/ImVec4(0, 0, 0, 0), tint_col);
+	}
+	FORCEINLINE bool ImageButton(const char* str_id, const FImGuiImageBindingParams& image, const ImVec4& bg_col = ImVec4(0, 0, 0, 0), const ImVec4& tint_col = ImVec4(1, 1, 1, 1))
+	{
+		return ImGui::ImageButton(str_id, image.Id, image.Size, image.UV0, image.UV1, bg_col, tint_col);
 	}
 
 	IMGUIRUNTIME_API void DrawSlateBrush(const FImGuiTickContext* TickContext, const FSlateBrush& Brush, ImVec2 RectMin, ImVec2 RectMax, TOptional<ImVec4> Tint = {}, TOptional<ImU32> BorderColor = {});
