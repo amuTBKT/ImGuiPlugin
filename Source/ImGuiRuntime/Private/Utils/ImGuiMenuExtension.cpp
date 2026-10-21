@@ -52,7 +52,7 @@
 
 static TAutoConsoleVariable<bool> CVarAddImGuiWidgetToLevelViewport(
 	TEXT("imgui.UseLevelViewport"),
-	false,
+	true,
 	TEXT("Prefer LevelViewport over Tabbed window for hosting ImGui editor widget.\n")
 	TEXT("This only applies for the Editor context, doesn't affect PIE or Game context."),
 	ECVF_ReadOnly);
@@ -553,7 +553,7 @@ namespace ImGuiUtils
 
 #if WITH_EDITOR
 		bool IsMenuOpen() const { return m_bIsMenuOpen; }
-		void OpenMenu() { m_bOpenMenu = true; m_MenuRequestedFrameIndex = GetImGuiContext()->FrameCount; }
+		void OpenMenu() { m_MenuRequestedFrameIndex = GetImGuiContext()->FrameCount; }
 		void SetMenuOffset(ImVec2 Offset) { m_PendingMenuOffset = Offset; }
 		TSharedPtr<SLevelViewport> GetLevelViewport() const { return m_LevelViewport.Pin(); }
 		TSharedPtr<SWidget> GetLevelViewportOverlayWidget() const { return m_LevelViewportOverlayWidget.Pin(); }
@@ -735,7 +735,6 @@ namespace ImGuiUtils
 
 		// when added to level viewport
 #if WITH_EDITOR
-		bool m_bOpenMenu = true;
 		bool m_bIsMenuOpen = false;
 		int32 m_MenuRequestedFrameIndex = 0;
 		bool m_bIsAddedToLevelViewport = false;
@@ -938,7 +937,7 @@ namespace ImGuiUtils
 								ImGui::PopStyleColor();
 
 								ImGui::TableNextColumn();
-								ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetFontSize() * 0.5f);
+								ImGui::SetCursorPosY(ImFloor(ImGui::GetCursorPosY() + ImGui::GetFontSize() * 0.5f));
 								ImGui::BeginDisabled(bReadonlyState);
 								ImGui::Checkbox("##Active", &Slot.bIsActive);
 								ImGui::EndDisabled();
@@ -1110,18 +1109,20 @@ namespace ImGuiUtils
 				const bool bIsViewportToolbarHidden = GLevelEditorModeTools().IsViewportUIHidden();
 #endif
 
-				// NOTE: 2 frames delay to make sure the widget has ticked atleast once to adjust viewport offset
-				// plus to make sure windows opening on the same frame don't dismiss the menu bar popup.
-				if (ImGui::GetFrameCount() > (m_MenuRequestedFrameIndex + 2))
+				// NOTE: 2 frame delay to make sure the widget has ticked atleast once to adjust viewport offset
+				if (ImGui::GetFrameCount() > (m_MenuRequestedFrameIndex + 1))
 				{
 					// HACK: this should match the value in `UnrealPlatform_CreateWindow` for auto focus to work properly.
 					// the logic here manually calls ImGui::Begin to make sure the popup window name matches this value.
 					static const char* LevelEditorPopupMenuName = "Menu##LevelEditor";
 
-					if (m_bOpenMenu)
+					// NOTE: make sure windows opening on the same frame don't dismiss the menu bar popup
+					// some widgets can spawn window after first tick, so spam OpenPopup for a few additional frames
+					if ((ImGui::GetFrameCount() - m_MenuRequestedFrameIndex) <= 4)
 					{
 						ImGui::OpenPopup(LevelEditorPopupMenuName, ImGuiPopupFlags_NoReopen);
 					}
+
 					if (m_PendingMenuOffset)
 					{
 						m_MenuOffset = m_PendingMenuOffset.GetValue() - ImGui::GetMainViewport()->Pos + ImVec2(0.f, 2.f);
@@ -1137,11 +1138,6 @@ namespace ImGuiUtils
 						ImGui::SetNextWindowPos(ImGui::GetMainViewport()->Pos + m_MenuOffset, ImGuiCond_Always);
 						if (ImGui::Begin(LevelEditorPopupMenuName, nullptr, ImGuiWindowFlags_Popup | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove))
 						{
-							if (m_bOpenMenu && ImGui::IsWindowAppearing())
-							{
-								m_bOpenMenu = false;
-							}
-
 							RunMainMenuTickLogic();
 
 							if (bIsViewportToolbarHidden)
