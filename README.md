@@ -99,6 +99,5 @@ Keyboard shortcuts for toggling MenuBar and UI focus can be defined in `DefaultI
 ToggleMenuKeyChord=(Key=F2,bShift=True)
 SetUIFocusKeyChord=(Key=F1,bShift=True)
 ```
-UI focus simply makes the cursor visible and releases the mouse capture from game viewport.
-Toggle menu simple calls `imgui.ToggleMenu` console command.<br>
-Clients can also call `serverexec imgui.ToggleMenu` to open the menu on server build. In editor this will open a standalone window hosting the ImGui widget, on packaged server NetImGui can be used to connect to the server build.
+UI focus simply makes the cursor visible and releases the mouse capture from game viewport.<br>
+Toggle menu simply calls `imgui.ToggleMenu` console command. Clients can also call `serverexec imgui.ToggleMenu` to open the menu on server build. In editor this will open a standalone window hosting the ImGui widget, on packaged server NetImGui can be used to connect to the server build.
