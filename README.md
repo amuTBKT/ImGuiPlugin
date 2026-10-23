@@ -6,9 +6,11 @@ The plugin stays up to date with latest ImGui releases and supports all the majo
 * [Docking](https://github.com/ocornut/imgui/wiki/Docking)
 * [Multi-Viewports](https://github.com/ocornut/imgui/wiki/Multi-Viewports)
 * [Dynamic fonts](https://github.com/ocornut/imgui/issues/8465)
-* [FreeType](https://github.com/ocornut/imgui/tree/master/misc/freetype) font loader
+* [FreeType font loader](https://github.com/ocornut/imgui/tree/master/misc/freetype)
 * [NetImGui](#netimgui)
 * [Unreal themes](#unreal-themes)
+* Support for Unreal textures and Slate brushes
+* Native and Slate rendering path
 * [MenuBar support](#menubar)
 
 ## Installation
@@ -23,8 +25,7 @@ Calling `Source/Thirdparty/ImGui/Build.bat` from MSVC command prompt (x64 Native
 Make sure to regenerate project files or touch `Source/Thirdparty/ImGui/ImGui.Build.cs` in order to update the library dependency.
 
 ## Usage
-At it's core the plugin is just a Slate widget with ImGui renderer, yes it's that simple :)
-
+Simple utility widget
 ```cpp
 #ifdef WITH_IMGUI
 
@@ -69,12 +70,12 @@ namespace ImGuiScratchPad
 Please note, in packaged builds this fallbacks to Option#B
 * Option#B creates a menu bar entry owned and managed by LevelViewport.
 * `UImGuiSubsystem::RegisterMainMenuWidget` can be used to register widgets dynamically.
-* `SImGuiWidget` works similar to any other slate widget and can be added to level viewport, Slate windows or Slate containers.
+* `SImGuiWidget` works similar to any other Slate widget and can be added to level viewport, Slate windows or Slate containers.
 
 ### NetImGui
 The plugin allows connecting to [NetImGui](https://github.com/amuTBKT/netImgui) server for remote drawing.<br>
 Adding `-NetImGuiPort=PORT` to commandline should allow connecting from NetImGui server. In order to keep the setup simple connecting to server from app is not supported.<br>
-NetImGui is only supported in packaged builds.
+NOTE: NetImGui is not supported in Editor/Program builds.
 
 ### Unreal themes
 The plugin supports 4 themes which can be changed using `imgui.Theme` console variable
@@ -83,6 +84,8 @@ The plugin supports 4 themes which can be changed using `imgui.Theme` console va
 - `imgui.Theme 2` : For ImGui Classic theme
 - `imgui.Theme 3` : For Unreal theme (default)
 ![Themes](Gallery/themes.png)
+`FImGui` namespace defines custom ImGui widgets for Unreal theme, designed to match Slate styling.
+![UnrealWidget](Gallery/unreal_theme_widgets.png)
 
 ### MenuBar
 The plugin allows registering widget to MenuBar owned by PIE/Editor contexts. In packaged builds there is only a single primary menu bar context available.
@@ -97,3 +100,5 @@ ToggleMenuKeyChord=(Key=F2,bShift=True)
 SetUIFocusKeyChord=(Key=F1,bShift=True)
 ```
 UI focus simply makes the cursor visible and releases the mouse capture from game viewport.
+Toggle menu simple calls `imgui.ToggleMenu` console command.<br>
+Clients can also call `serverexec imgui.ToggleMenu` to open the menu on server build. In editor this will open a standalone window hosting the ImGui widget, on packaged server NetImGui can be used to connect to the server build.
