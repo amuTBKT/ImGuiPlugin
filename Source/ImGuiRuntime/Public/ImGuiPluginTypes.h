@@ -356,10 +356,6 @@ namespace FImGui
 			ImGui::BeginGroup();
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + HalfItemSpacing);
 		}
-		else
-		{
-			ImGui::BeginGroup();
-		}
 
 		float CursorPosX = ImGui::GetCursorPosX();
 		bool bPressed = ImGui::MenuItem(*LabelBuffer, nullptr, bIsActive);
@@ -385,9 +381,10 @@ namespace FImGui
 				ImGui::Dummy(ImVec2(MenuItemExtentMaxX - ImGui::GetItemRectMax().x - ItemSpacing, 0.f));
 			}
 		}
-		ImGui::EndGroup();
+
 		if (bIsHorizontalMenu)
 		{
+			ImGui::EndGroup();
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() - HalfItemSpacing);
 		}
 
@@ -447,10 +444,6 @@ namespace FImGui
 			ImGui::BeginGroup();
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() + HalfItemSpacing);
 		}
-		else
-		{
-			ImGui::BeginGroup();
-		}
 
 		float CursorPosX = ImGui::GetCursorPosX();
 		const bool bOpen = ImGui::BeginMenu(*LabelBuffer);
@@ -481,9 +474,10 @@ namespace FImGui
 				ImGui::Dummy(ImVec2(MenuItemExtentMaxX - ImGui::GetItemRectMax().x - ItemSpacing, 0.f));
 			}
 		}
-		ImGui::EndGroup();
+
 		if (bIsHorizontalMenu)
 		{
+			ImGui::EndGroup();
 			ImGui::SetCursorPosX(ImGui::GetCursorPosX() - HalfItemSpacing);
 		}
 
