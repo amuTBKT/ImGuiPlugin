@@ -736,13 +736,13 @@ struct FImGuiWidgetRegisterParams
 	// ImGui widget tick function
 	void(*TickFunction)(FImGuiTickContext* Context);
 
-	// optional icon to use for the widget menu item
-	FSlateIcon WidgetIcon;
-
 	// full path to widget (example: "Tools.MyWidget")
 	const char* WidgetPath = nullptr;
 
-	// widget tooltip
+	// icon to use for the widget menu item (optional)
+	FSlateIcon WidgetIcon;
+
+	// widget tooltip (optional)
 	const char* WidgetDescription = nullptr;
 
 	// to enable ImGui viewport support for the widget
