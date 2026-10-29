@@ -1096,9 +1096,9 @@ namespace ImGuiUtils
 					TickContext->MainMenuBar_bIsTicking = false;
 				};
 
-			ImGui::PushStyleColor(ImGuiCol_Header, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Select));
-			ImGui::PushStyleColor(ImGuiCol_HeaderActive, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Select));
-			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Select));
+			ImGui::PushStyleColor(ImGuiCol_Header, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Primary));
+			ImGui::PushStyleColor(ImGuiCol_HeaderActive, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Primary));
+			ImGui::PushStyleColor(ImGuiCol_HeaderHovered, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Primary));
 #if WITH_EDITOR
 			if (m_bIsAddedToLevelViewport)
 			{

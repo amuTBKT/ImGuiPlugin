@@ -569,7 +569,7 @@ namespace FImGui
 	}
 	FORCEINLINE void EndCombo() { ImGui::EndCombo(); }
 
-	IMGUIRUNTIME_API void PushComboListViewDropdownStyle(FImGuiTickContext* TickContext, bool bDarkTheme);
+	IMGUIRUNTIME_API void PushComboListViewDropdownStyle(FImGuiTickContext* TickContext, bool bNormalDropdown = false, bool bDrawBorder = true);
 	IMGUIRUNTIME_API void PopComboListViewDropdownStyle(FImGuiTickContext* TickContext);
 	IMGUIRUNTIME_API void BeginComboListViewDropdownBody(FImGuiTickContext* TickContext);
 	IMGUIRUNTIME_API void EndComboListViewDropdownBody(FImGuiTickContext* TickContext);
@@ -679,9 +679,9 @@ namespace FImGui
 	{
 		return BeginCombo(FImGui::GetCurrentTickContext(), Label, PreviewText, ComboButtonStyle);
 	}
-	FORCEINLINE void PushComboListViewDropdownStyle(bool bDarkTheme)
+	FORCEINLINE void PushComboListViewDropdownStyle(bool bNormalDropdown = false, bool bDrawBorder = true)
 	{
-		PushComboListViewDropdownStyle(FImGui::GetCurrentTickContext(), bDarkTheme);
+		PushComboListViewDropdownStyle(FImGui::GetCurrentTickContext(), bNormalDropdown, bDrawBorder);
 	}
 	FORCEINLINE void PopComboListViewDropdownStyle()
 	{

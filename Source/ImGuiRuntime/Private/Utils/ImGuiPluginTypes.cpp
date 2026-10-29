@@ -79,7 +79,6 @@ namespace FImGui
 		const FImGuiTickContext* TickContext, const FSlateBrush& Brush, ImVec2 RectMin, ImVec2 RectMax,
 		TOptional<ImVec4> Tint, TOptional<ImU32> BorderColor)
 	{
-
 		ImVec2 RectSize = RectMax - RectMin;
 		if (ImMin(RectSize.x, RectSize.y) <= KINDA_SMALL_NUMBER)
 		{
@@ -804,7 +803,7 @@ namespace FImGui
 		}
 		else
 		{
-			ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(ImGui::GetStyle().Colors[ImGuiCol_Border] * (ImGui::IsItemHovered() ? 1.5f : 1.f)), ImGui::GetStyle().FrameRounding);
+			ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(GetSlateColorVec4(TickContext, ImGui::IsItemHovered() ? EStyleColor::Hover : EStyleColor::InputOutline)), ImGui::GetStyle().FrameRounding);
 		}
 
 		return bTextChanged;
@@ -1171,35 +1170,31 @@ namespace FImGui
 		return SpinBoxT(TickContext, Label, ImGuiDataType_U32, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
 	}
 
-	void PushComboListViewDropdownStyle(FImGuiTickContext* TickContext, bool bDarkTheme)
+	void PushComboListViewDropdownStyle(FImGuiTickContext* TickContext, bool bNormalDropdown, bool bDrawBorder)
 	{
-		ImVec4 BackgroundColor;
-		if (bDarkTheme)
-		{
-			BackgroundColor = ImColor(0xF01A1A1A);
-		}
-		else
-		{
-			BackgroundColor = FImGui::GetSlateColorVec4(TickContext, EStyleColor::Dropdown) * ImVec4(1.f, 1.f, 1.f, 0.94f);
-		}
+		ImVec4 BackgroundColor = FImGui::GetSlateColorVec4(TickContext, bNormalDropdown ? EStyleColor::Dropdown : EStyleColor::Recessed) * ImVec4(1.f, 1.f, 1.f, 0.94f);
+		ImVec4 WindowBorderColor = FImGui::GetSlateColorVec4(TickContext, bNormalDropdown ? EStyleColor::DropdownOutline : EStyleColor::InputOutline) * ImVec4(1.f, 1.f, 1.f, 0.94f);
+
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(1.f, 1.f));
 		ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.f);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
-		ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 0.f);
+		ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, bDrawBorder ? 1.f : 0.f);
 		ImGui::PushStyleColor(ImGuiCol_FrameBg, BackgroundColor);
 		ImGui::PushStyleColor(ImGuiCol_PopupBg, BackgroundColor);
+		ImGui::PushStyleColor(ImGuiCol_Border, WindowBorderColor);
 	}
 	void PopComboListViewDropdownStyle(FImGuiTickContext* TickContext)
 	{
-		ImGui::PopStyleColor(2);
+		ImGui::PopStyleColor(3);
 		ImGui::PopStyleVar(4);
 	}
 	void BeginComboListViewDropdownBody(FImGuiTickContext* TickContext)
 	{
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2());
 		ImGui::PushStyleColor(ImGuiCol_Header, FImGui::GetSlateColorVec4(TickContext, EStyleColor::SelectInactive));
-		ImGui::PushStyleColor(ImGuiCol_HeaderActive, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Select));
-		ImGui::PushStyleColor(ImGuiCol_HeaderHovered, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Select));
+		ImGui::PushStyleColor(ImGuiCol_HeaderActive, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Primary));
+		ImGui::PushStyleColor(ImGuiCol_HeaderHovered, FImGui::GetSlateColorVec4(TickContext, EStyleColor::Primary));
+		ImGui::PushStyleColor(ImGuiCol_Border, FImGui::GetSlateColorVec4(TickContext, EStyleColor::InputOutline));
 
 		// account for selectable half space padding
 		ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ImGui::GetStyle().ItemSpacing.y);
@@ -1207,7 +1202,7 @@ namespace FImGui
 	void EndComboListViewDropdownBody(FImGuiTickContext* TickContext)
 	{
 		ImGui::PopStyleVar();
-		ImGui::PopStyleColor(3);
+		ImGui::PopStyleColor(4);
 
 		// account for selectable half space padding
 		ImGui::Dummy(ImVec2(0.f, 1.f));

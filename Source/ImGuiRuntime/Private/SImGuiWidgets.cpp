@@ -281,20 +281,21 @@ void SImGuiWidgetBase::ApplyTheme()
 		Style.FramePadding = ImVec2(4.f, 4.f);
 		Style.ButtonTextAlign = ImVec2(0.5f, 0.5f); //NOTE: Slate prefers Left aligned
 
-		Style.Colors[ImGuiCol_TitleBg] = ImColor(0xFF151515);
-		Style.Colors[ImGuiCol_TitleBgActive] = ImColor(0xFF151515);
-		Style.Colors[ImGuiCol_TitleBgCollapsed] = ImColor(0x82151515);
-		Style.Colors[ImGuiCol_Tab] = ImColor(0xFF151515);
-		Style.Colors[ImGuiCol_TabDimmed] = ImColor(0xFF151515);
-		Style.Colors[ImGuiCol_TabSelected] = ImColor(0xFF242424);
-		Style.Colors[ImGuiCol_TabDimmedSelected] = ImColor(0xFF242424);
+		Style.Colors[ImGuiCol_TitleBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Title]);
+		Style.Colors[ImGuiCol_TitleBgActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Title]);
+		Style.Colors[ImGuiCol_TitleBgCollapsed] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Title]) * ImVec4(1.f, 1.f, 1.f, 0.75f);
+		Style.Colors[ImGuiCol_Tab] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Title]);
+		Style.Colors[ImGuiCol_TabDimmed] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Title]);
+		Style.Colors[ImGuiCol_TabSelected] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Panel]);
+		Style.Colors[ImGuiCol_TabDimmedSelected] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Panel]);
 		Style.Colors[ImGuiCol_TabHovered] = ImColor(0xFF212121);
 		Style.Colors[ImGuiCol_TabSelectedOverline] = ImColor(m_SlateColorsU32[(uint32)EStyleColor::Primary]);
 		Style.Colors[ImGuiCol_TabDimmedSelectedOverline] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Primary] * FLinearColor(1.f, 1.f, 1.f, 0.5f));
-		Style.Colors[ImGuiCol_DockingPreview] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Select] * FLinearColor(1.f, 1.f, 1.f, 0.5f));
+		Style.Colors[ImGuiCol_DockingPreview] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Primary] * FLinearColor(1.f, 1.f, 1.f, 0.5f));
+		Style.Colors[ImGuiCol_MenuBarBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Recessed]);
 
-		Style.Colors[ImGuiCol_WindowBg] = ImColor(0xFA242424);
-		Style.Colors[ImGuiCol_PopupBg] = ImColor(0xFA242424);
+		Style.Colors[ImGuiCol_WindowBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Panel]) * ImVec4(1.f, 1.f, 1.f, 0.98f);
+		Style.Colors[ImGuiCol_PopupBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Panel]) * ImVec4(1.f, 1.f, 1.f, 0.98f);
 		Style.Colors[ImGuiCol_FrameBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Input]);
 		Style.Colors[ImGuiCol_FrameBgActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Input]);
 		Style.Colors[ImGuiCol_FrameBgHovered] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Input]);
@@ -309,12 +310,22 @@ void SImGuiWidgetBase::ApplyTheme()
 		Style.Colors[ImGuiCol_CheckMark] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Primary]);
 		Style.Colors[ImGuiCol_CheckboxSelectedBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Input]);
 		Style.Colors[ImGuiCol_TextSelectedBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Highlight]);
-		Style.Colors[ImGuiCol_NavCursor] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Highlight]);
+		Style.Colors[ImGuiCol_NavCursor] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Primary]);
 		Style.Colors[ImGuiCol_Border] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::InputOutline]);
 		Style.Colors[ImGuiCol_TableHeaderBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Header]);
-		Style.Colors[ImGuiCol_TableRowBg] = ImColor(0xFF191919);
-		Style.Colors[ImGuiCol_TableRowBgAlt] = ImColor(0xFF2B2B2B);
+		Style.Colors[ImGuiCol_TableRowBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Recessed]);
+		Style.Colors[ImGuiCol_TableRowBgAlt] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Background]);
 		Style.Colors[ImGuiCol_ScrollbarBg] = ImColor(0);
+		Style.Colors[ImGuiCol_ScrollbarGrab] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Hover]);
+		Style.Colors[ImGuiCol_ScrollbarGrabActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Hover2]);
+		Style.Colors[ImGuiCol_ScrollbarGrabHovered] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Hover2]);
+		Style.Colors[ImGuiCol_Separator] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::InputOutline]);
+		Style.Colors[ImGuiCol_SeparatorActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Primary]);
+		Style.Colors[ImGuiCol_SeparatorHovered] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Primary]);
+		Style.Colors[ImGuiCol_ResizeGrip] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Primary]) * ImVec4(1.f, 1.f, 1.f, 0.5f);
+		Style.Colors[ImGuiCol_ResizeGripActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Primary]) * ImVec4(1.f, 1.f, 1.f, 0.95f);
+		Style.Colors[ImGuiCol_ResizeGripHovered] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Primary]) * ImVec4(1.f, 1.f, 1.f, 0.75f);
+		Style.Colors[ImGuiCol_Text] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::ForegroundHover]);
 	}
 	else
 	{
@@ -326,6 +337,9 @@ void SImGuiWidgetBase::ApplyTheme()
 		case 2: ImGui::StyleColorsClassic(&Style); break;
 		}
 	}
+
+	// restore widget state
+	Style.FontScaleMain = m_WindowScale;
 }
 
 void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry)
@@ -337,6 +351,8 @@ void SImGuiWidgetBase::BeginImGuiFrame(const FGeometry& WidgetGeometry)
 	{
 		return;
 	}
+
+	//ApplyTheme(); DEBUG, TODO: bind to theme changed events
 
 	TSharedPtr<FDragDropOperation> CurrentDragDropOperation = FSlateApplication::IsInitialized() ? FSlateApplication::Get().GetDragDroppingContent() : nullptr;
 	if (LastDragDropOperation.IsValid() && !CurrentDragDropOperation.IsValid())
