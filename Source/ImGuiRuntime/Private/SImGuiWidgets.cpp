@@ -276,10 +276,10 @@ void SImGuiWidgetBase::ApplyTheme()
 		Style.ScrollbarSize = 12.f;
 		Style.FrameBorderSize = 1.f;
 		Style.ScrollbarRounding = 8.f;
-		Style.TabBarOverlineSize = 2.f;
-		Style.SelectableRounding = 3.f;
+		Style.TabBarOverlineSize = 2.f;				// NOTE: +1px as window border occludes 1px (not noticeable in default themes as they use translucent border color)
+		Style.SelectableRounding = 0.f;				// Unreal prefers sharp corners with rounded nav cursor (that  will require ImGui mod)
 		Style.FramePadding = ImVec2(4.f, 4.f);
-		Style.ButtonTextAlign = ImVec2(0.5f, 0.5f); //NOTE: Slate prefers Left aligned
+		Style.ButtonTextAlign = ImVec2(0.5f, 0.5f); // NOTE: Slate prefers Left aligned
 
 		Style.Colors[ImGuiCol_TitleBg] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Title]);
 		Style.Colors[ImGuiCol_TitleBgActive] = BitCast<ImVec4>(m_SlateColorsVec4[(uint32)EStyleColor::Title]);
