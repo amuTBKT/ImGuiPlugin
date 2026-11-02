@@ -42,15 +42,12 @@ namespace FImGui
 		case ESlateColorStylingMode::UseColor_Foreground:
 		case ESlateColorStylingMode::UseColor_Foreground_Subdued:
 			return ImVec4(1.f, 1.f, 1.f, 1.f);
-			break;
 
 		case ESlateColorStylingMode::UseColor_Specified:
 			return ImColor(PrivateAccess::SpecifiedColor(Color).ToFColorSRGB().DWColor());
-			break;
 
 		case ESlateColorStylingMode::UseColor_ColorTable:
 			return BitCast<ImVec4>((*TickContext->SlateColorsVec4)[(uint32)PrivateAccess::ColorTableId(Color)]);
-			break;
 		}
 	}
 	ImU32 GetSlateColorU32(const FSlateColor& Color, const FImGuiTickContext* TickContext)
@@ -62,15 +59,12 @@ namespace FImGui
 		case ESlateColorStylingMode::UseColor_Foreground:
 		case ESlateColorStylingMode::UseColor_Foreground_Subdued:
 			return 0xFFFFFFFF;
-			break;
 
 		case ESlateColorStylingMode::UseColor_Specified:
 			return PrivateAccess::SpecifiedColor(Color).ToFColorSRGB().DWColor();
-			break;
 
 		case ESlateColorStylingMode::UseColor_ColorTable:
 			return (*TickContext->SlateColorsU32)[(uint32)PrivateAccess::ColorTableId(Color)];
-			break;
 		}
 	}
 
