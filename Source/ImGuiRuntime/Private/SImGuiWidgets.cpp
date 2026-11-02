@@ -244,11 +244,11 @@ SImGuiWidgetBase::~SImGuiWidgetBase()
 
 		ImGuiPlatformIO& PlatformIO = ImGui::GetPlatformIO();
 		PlatformIO.Platform_ClipboardUserData = nullptr;
-	}
 
-	// probably don't need to defer delete this
-	ImPlot::DestroyContext(m_ImPlotContext);
-	m_ImPlotContext = nullptr;
+		// probably don't need to defer delete this
+		ImPlot::DestroyContext(m_ImPlotContext);
+		m_ImPlotContext = nullptr;
+	}
 
 	// NOTE: widget drawers should be queued before context
 	ImGuiUtils::DeferredDeletionQueue.DeferredDeleteObjects(MoveTemp(m_WidgetDrawers[0]), MoveTemp(m_WidgetDrawers[1]), m_ImGuiContext);

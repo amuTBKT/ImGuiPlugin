@@ -153,8 +153,8 @@ struct FImGuiTickScope : FNoncopyable
 		}
 		else if (PrevContext)
 		{
-			check(PrevContext->ImguiContext == ImGui::GetCurrentContext());
-			check(PrevContext->ImplotContext == ImPlot::GetCurrentContext());
+			ensure(PrevContext->ImguiContext == ImGui::GetCurrentContext());
+			ensure(PrevContext->ImplotContext == ImPlot::GetCurrentContext());
 		}
 		return PrevContext;
 	}

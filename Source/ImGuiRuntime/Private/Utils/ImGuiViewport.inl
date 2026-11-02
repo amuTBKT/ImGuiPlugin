@@ -42,13 +42,14 @@ namespace ImGuiUtils
 
 				if (Object.Storage.IsType<ImGuiContext*>())
 				{
+					ImGuiContext* PrevContext = ImGui::GetCurrentContext();
 					ImGuiContext* Context = Object.Storage.Get<ImGuiContext*>();
 					ImGui::SetCurrentContext(Context);
 					{
 						ImGui::DestroyPlatformWindows();
 						ImGui::DestroyContext(Context);
 					}
-					ImGui::SetCurrentContext(nullptr);
+					ImGui::SetCurrentContext(PrevContext == Context ? nullptr : PrevContext);
 				}
 
 				ObjectsPendingDelete.RemoveAt(0, EAllowShrinking::No);
