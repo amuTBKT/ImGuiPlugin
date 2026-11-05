@@ -766,10 +766,8 @@ namespace FImGui
 		ImGui::PopStyleVar();
 	}
 
-	bool EditableTextBox(FImGuiTickContext* TickContext, const char* Label, const char* Hint, char* Buffer, size_t BufferSize, ImGuiInputTextFlags Flags, ImGuiInputTextCallback Callback, void* UserData)
+	static void PushInputTextStyling(FImGuiTickContext* TickContext)
 	{
-		FImGuiTickScope Scope{ TickContext };
-
 		float CurrLineHeight = GetCurrentLineHeight(TickContext);
 		float FramePaddingY = ImGui::GetStyle().FramePadding.y;
 		if (CurrLineHeight != ImGui::GetFrameHeight())
@@ -779,26 +777,30 @@ namespace FImGui
 
 		ImGui::PushStyleColor(ImGuiCol_NavCursor, 0);
 		ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8.f, FramePaddingY));
-		bool bTextChanged;
-		if (Hint)
-		{
-			bTextChanged = ImGui::InputTextWithHint(Label, Hint, Buffer, BufferSize, Flags, Callback, UserData);
-		}
-		else
-		{
-			bTextChanged = ImGui::InputText(Label, Buffer, BufferSize, Flags, Callback, UserData);
-		}
+	}
+	static void PopInputTextStyling(FImGuiTickContext* TickContext)
+	{
 		ImGui::PopStyleVar();
 		ImGui::PopStyleColor();
 
+		const ImRect& NavRect = TickContext->ImguiContext->LastItemData.NavRect;
 		if (ImGui::IsItemActive() || IsItemHighlighted())
 		{
-			ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(ImGuiCol_NavCursor), ImGui::GetStyle().FrameRounding);
+			ImGui::GetWindowDrawList()->AddRect(NavRect.Min, NavRect.Max, ImGui::GetColorU32(ImGuiCol_NavCursor), ImGui::GetStyle().FrameRounding);
 		}
 		else
 		{
-			ImGui::GetWindowDrawList()->AddRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(), ImGui::GetColorU32(GetSlateColorVec4(TickContext, ImGui::IsItemHovered() ? EStyleColor::Hover : EStyleColor::InputOutline)), ImGui::GetStyle().FrameRounding);
+			ImGui::GetWindowDrawList()->AddRect(NavRect.Min, NavRect.Max, ImGui::GetColorU32(GetSlateColorVec4(TickContext, ImGui::IsItemHovered() ? EStyleColor::Hover : EStyleColor::InputOutline)), ImGui::GetStyle().FrameRounding);
 		}
+	}
+
+	bool EditableTextBox(FImGuiTickContext* TickContext, const char* Label, const char* Hint, char* Buffer, size_t BufferSize, ImGuiInputTextFlags Flags, ImGuiInputTextCallback Callback, void* UserData)
+	{
+		FImGuiTickScope Scope{ TickContext };
+
+		PushInputTextStyling(TickContext);
+		bool bTextChanged = Hint ? ImGui::InputTextWithHint(Label, Hint, Buffer, BufferSize, Flags, Callback, UserData) : ImGui::InputText(Label, Buffer, BufferSize, Flags, Callback, UserData);
+		PopInputTextStyling(TickContext);
 
 		return bTextChanged;
 	}
@@ -963,7 +965,7 @@ namespace FImGui
 	{
 		if ((flags & ImGuiSliderFlags_ClampOnInput) && (p_min != NULL || p_max != NULL))
 		{
-			const int clamp_range_dir = (p_min != NULL && p_max != NULL) ? ImGui::DataTypeCompare(data_type, p_min, p_max) : 0; // -1 when *p_min < *p_max, == 0 when *p_min == *p_max
+			const int32 clamp_range_dir = (p_min != NULL && p_max != NULL) ? ImGui::DataTypeCompare(data_type, p_min, p_max) : 0; // -1 when *p_min < *p_max, == 0 when *p_min == *p_max
 			if (p_min == NULL || p_max == NULL || clamp_range_dir < 0)
 				return true;
 			if (clamp_range_dir == 0)
@@ -1124,7 +1126,7 @@ namespace FImGui
 			{
 				FillBrush = &SpinBoxStyle.ActiveFillBrush;
 			}
-			float fill_x = ImLerp(frame_bb.Min.x, frame_bb.Max.x, 1.f - ImClamp((float)(*p_max - *p_data) / (float)(*p_max - *p_min), 0.f, 1.f));
+			float fill_x = ImLerp(frame_bb.Min.x, frame_bb.Max.x, 1.f - ImClamp(float((double)(*p_max - *p_data) / (double)(*p_max - *p_min)), 0.f, 1.f));
 
 			ImVec2 fill_min = frame_bb.Min + ImVec2(SpinBoxStyle.InsetPadding.Left, SpinBoxStyle.InsetPadding.Top) * 2.f;
 			ImVec2 fill_max = ImVec2(fill_x, frame_bb.Max.y) - ImVec2(SpinBoxStyle.InsetPadding.Right, SpinBoxStyle.InsetPadding.Bottom) * 2.f;
@@ -1147,6 +1149,30 @@ namespace FImGui
 
 		return value_changed;
 	}
+	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, int8& v, const FSpinBoxStyle& SpinBoxStyle, int8 v_speed, int8 v_min, int8 v_max, const char* format, ImGuiSliderFlags flags)
+	{
+		return SpinBoxT(TickContext, Label, ImGuiDataType_S8, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
+	}
+	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, int16& v, const FSpinBoxStyle& SpinBoxStyle, int16 v_speed, int16 v_min, int16 v_max, const char* format, ImGuiSliderFlags flags)
+	{
+		return SpinBoxT(TickContext, Label, ImGuiDataType_S16, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
+	}
+	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, int32& v, const FSpinBoxStyle& SpinBoxStyle, int32 v_speed, int32 v_min, int32 v_max, const char* format, ImGuiSliderFlags flags)
+	{
+		return SpinBoxT(TickContext, Label, ImGuiDataType_S32, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
+	}
+	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, uint8& v, const FSpinBoxStyle& SpinBoxStyle, uint8 v_speed, uint8 v_min, uint8 v_max, const char* format, ImGuiSliderFlags flags)
+	{
+		return SpinBoxT(TickContext, Label, ImGuiDataType_U8, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
+	}
+	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, uint16& v, const FSpinBoxStyle& SpinBoxStyle, uint16 v_speed, uint16 v_min, uint16 v_max, const char* format, ImGuiSliderFlags flags)
+	{
+		return SpinBoxT(TickContext, Label, ImGuiDataType_U16, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
+	}
+	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, uint32& v, const FSpinBoxStyle& SpinBoxStyle, uint32 v_speed, uint32 v_min, uint32 v_max, const char* format, ImGuiSliderFlags flags)
+	{
+		return SpinBoxT(TickContext, Label, ImGuiDataType_U32, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
+	}
 	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, float& v, const FSpinBoxStyle& SpinBoxStyle, float v_speed, float v_min, float v_max, const char* format, ImGuiSliderFlags flags)
 	{
 		return SpinBoxT(TickContext, Label, ImGuiDataType_Float, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
@@ -1155,13 +1181,29 @@ namespace FImGui
 	{
 		return SpinBoxT(TickContext, Label, ImGuiDataType_Double, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
 	}
-	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, int32& v, const FSpinBoxStyle& SpinBoxStyle, int32 v_speed, int32 v_min, int32 v_max, const char* format, ImGuiSliderFlags flags)
+
+	bool InputFloat(FImGuiTickContext* TickContext, const char* label, float* v, const char* format, ImGuiInputTextFlags flags)
 	{
-		return SpinBoxT(TickContext, Label, ImGuiDataType_S32, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
+		PushInputTextStyling(TickContext);
+		bool bValueChanged = ImGui::InputScalar(label, ImGuiDataType_Float, (void*)v, /*step=*/nullptr, /*step_fast=*/nullptr, format, flags);
+		PopInputTextStyling(TickContext);
+		return bValueChanged;
 	}
-	bool SpinBox(FImGuiTickContext* TickContext, const char* Label, uint32& v, const FSpinBoxStyle& SpinBoxStyle, uint32 v_speed, uint32 v_min, uint32 v_max, const char* format, ImGuiSliderFlags flags)
+	bool InputInt(FImGuiTickContext* TickContext, const char* label, int32* v, ImGuiInputTextFlags flags)
 	{
-		return SpinBoxT(TickContext, Label, ImGuiDataType_U32, &v, SpinBoxStyle, v_speed, &v_min, &v_max, format, flags);
+		PushInputTextStyling(TickContext);
+		// Hexadecimal input provided as a convenience but the flag name is awkward. Typically you'd use InputText() to parse your own data, if you want to handle prefixes.
+		const char* format = (flags & ImGuiInputTextFlags_CharsHexadecimal) ? "%08X" : "%d";
+		bool bValueChanged = ImGui::InputScalar(label, ImGuiDataType_S32, (void*)v, /*step=*/nullptr, /*step_fast=*/nullptr, format, flags);
+		PopInputTextStyling(TickContext);
+		return bValueChanged;
+	}
+	bool InputDouble(FImGuiTickContext* TickContext, const char* label, double* v, const char* format, ImGuiInputTextFlags flags)
+	{
+		PushInputTextStyling(TickContext);
+		bool bValueChanged = ImGui::InputScalar(label, ImGuiDataType_Double, (void*)v, /*step=*/nullptr, /*step_fast=*/nullptr, format, flags);
+		PopInputTextStyling(TickContext);
+		return bValueChanged;
 	}
 
 	void PushComboListViewDropdownStyle(FImGuiTickContext* TickContext, bool bNormalDropdown, bool bDrawBorder)

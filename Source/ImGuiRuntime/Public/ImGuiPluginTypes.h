@@ -313,6 +313,13 @@ namespace FImGui
 		return (*TickContext->SlateColorsU32)[static_cast<int32>(StyleColor)];
 	}
 
+	// ImGui::SameLine but manages offset from current cursor position
+	FORCEINLINE void SameLine(float OffsetX = 0.f)
+	{
+		ImGui::SameLine();
+		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + OffsetX);
+	}
+
 	// utility function to allow adding icon to menu item
 	FORCEINLINE bool MenuItem(FImGuiTickContext* TickContext, const char* Label, bool bIsActive, const FImGuiImageBindingParams& Icon, ImVec2 IconOffset = ImVec2(0.f, 0.f))
 	{
@@ -550,10 +557,18 @@ namespace FImGui
 	IMGUIRUNTIME_API bool EditableTextBox(FImGuiTickContext* TickContext, const char* Label, const char* Hint, char* Buffer, size_t BufferSize, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr);
 	IMGUIRUNTIME_API bool SearchTextBox(FImGuiTickContext* TickContext, const char* Label, const char* Hint, char* Buffer, size_t BufferSize, const FSearchBoxStyle& SearchBoxStyle, bool bSetFocus = false, bool bActivateOnNavFocus = false, ImGuiInputTextFlags Flags = 0, ImGuiInputTextCallback Callback = nullptr, void* UserData = nullptr);
 
-	IMGUIRUNTIME_API bool SpinBox(FImGuiTickContext* TickContext, const char* Label, float& v, const FSpinBoxStyle& SpinBoxStyle, float v_speed = 1.f, float v_min = 0.f, float v_max = 0.f, const char* format = "%.3f", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput);
-	IMGUIRUNTIME_API bool SpinBox(FImGuiTickContext* TickContext, const char* Label, double& v, const FSpinBoxStyle& SpinBoxStyle, double v_speed = 1., double v_min = 0., double v_max = 0., const char* format = "%.3f", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput);
+	IMGUIRUNTIME_API bool SpinBox(FImGuiTickContext* TickContext, const char* Label, int8& v, const FSpinBoxStyle& SpinBoxStyle, int8 v_speed = 1, int8 v_min = 0, int8 v_max = 0, const char* format = "%d", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput);
+	IMGUIRUNTIME_API bool SpinBox(FImGuiTickContext* TickContext, const char* Label, int16& v, const FSpinBoxStyle& SpinBoxStyle, int16 v_speed = 1, int16 v_min = 0, int16 v_max = 0, const char* format = "%d", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput);
 	IMGUIRUNTIME_API bool SpinBox(FImGuiTickContext* TickContext, const char* Label, int32& v, const FSpinBoxStyle& SpinBoxStyle, int32 v_speed = 1, int32 v_min = 0, int32 v_max = 0, const char* format = "%d", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput);
+	IMGUIRUNTIME_API bool SpinBox(FImGuiTickContext* TickContext, const char* Label, uint8& v, const FSpinBoxStyle& SpinBoxStyle, uint8 v_speed = 1, uint8 v_min = 0, uint8 v_max = 0, const char* format = "%d", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput);
+	IMGUIRUNTIME_API bool SpinBox(FImGuiTickContext* TickContext, const char* Label, uint16& v, const FSpinBoxStyle& SpinBoxStyle, uint16 v_speed = 1, uint16 v_min = 0, uint16 v_max = 0, const char* format = "%d", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput);
 	IMGUIRUNTIME_API bool SpinBox(FImGuiTickContext* TickContext, const char* Label, uint32& v, const FSpinBoxStyle& SpinBoxStyle, uint32 v_speed = 1, uint32 v_min = 0, uint32 v_max = 0, const char* format = "%d", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput);
+	IMGUIRUNTIME_API bool SpinBox(FImGuiTickContext* TickContext, const char* Label, float& v, const FSpinBoxStyle& SpinBoxStyle, float v_speed = 1.f, float v_min = 0.f, float v_max = 0.f, const char* format = "%.3f", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput);
+	IMGUIRUNTIME_API bool SpinBox(FImGuiTickContext* TickContext, const char* Label, double& v, const FSpinBoxStyle& SpinBoxStyle, double v_speed = 1.0, double v_min = 0.0, double v_max = 0.0, const char* format = "%.6f", ImGuiSliderFlags flags = ImGuiSliderFlags_ClampOnInput);
+
+	IMGUIRUNTIME_API bool InputFloat(FImGuiTickContext* TickContext, const char* label, float* v, const char* format = "%.3f", ImGuiInputTextFlags flags = 0);
+	IMGUIRUNTIME_API bool InputInt(FImGuiTickContext* TickContext, const char* label, int32* v, ImGuiInputTextFlags flags = 0);
+	IMGUIRUNTIME_API bool InputDouble(FImGuiTickContext* TickContext, const char* label, double* v, const char* format = "%.6f", ImGuiInputTextFlags flags = 0);
 
 	FORCEINLINE bool BeginCombo(FImGuiTickContext* TickContext, const char* Label, const char* PreviewText, const FComboButtonStyle& ComboButtonStyle)
 	{
@@ -675,6 +690,20 @@ namespace FImGui
 	{
 		return SpinBox(FImGui::GetCurrentTickContext(), Label, v, SpinBoxStyle, v_speed, v_min, v_max, format, flags);
 	}
+
+	FORCEINLINE bool InputFloat(const char* label, float* v, const char* format = "%.3f", ImGuiInputTextFlags flags = 0)
+	{
+		return InputFloat(FImGui::GetCurrentTickContext(), label, v, format, flags);
+	}
+	FORCEINLINE bool InputInt(const char* label, int32* v, ImGuiInputTextFlags flags = 0)
+	{
+		return InputInt(FImGui::GetCurrentTickContext(), label, v, flags);
+	}
+	FORCEINLINE bool InputDouble(const char* label, double* v, const char* format = "%.6f", ImGuiInputTextFlags flags = 0)
+	{
+		return InputDouble(FImGui::GetCurrentTickContext(), label, v, format, flags);
+	}
+
 	FORCEINLINE bool BeginCombo(const char* Label, const char* PreviewText, const FComboButtonStyle& ComboButtonStyle)
 	{
 		return BeginCombo(FImGui::GetCurrentTickContext(), Label, PreviewText, ComboButtonStyle);
