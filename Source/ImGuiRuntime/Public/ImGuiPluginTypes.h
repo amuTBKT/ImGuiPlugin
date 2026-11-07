@@ -320,6 +320,19 @@ namespace FImGui
 		ImGui::SetCursorPosX(ImGui::GetCursorPosX() + OffsetX);
 	}
 
+	// ImGui::SeparatorText with Slate styling
+	FORCEINLINE void SeparatorText(const char* Label)
+	{
+		ImGui::PushStyleVarX(ImGuiStyleVar_SeparatorTextAlign, 0.f);
+		ImGui::PushStyleVarX(ImGuiStyleVar_SeparatorTextPadding, 0.f);
+		ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_Separator));
+
+		ImGui::SeparatorText(Label);
+
+		ImGui::PopStyleVar(2);
+		ImGui::PopStyleColor();
+	}
+
 	// utility function to allow adding icon to menu item
 	FORCEINLINE bool MenuItem(FImGuiTickContext* TickContext, const char* Label, bool bIsActive, const FImGuiImageBindingParams& Icon, ImVec2 IconOffset = ImVec2(0.f, 0.f))
 	{
@@ -616,6 +629,10 @@ namespace FImGui
 		va_start(args, Fmt);
 		ImGui::SetItemTooltipV(Fmt, args);
 		va_end(args);
+	}
+	FORCEINLINE void SetItemTooltipUnformatted(const char* Tooltip)
+	{
+		SetItemTooltip("%s", Tooltip);
 	}
 
 	// variants without FImGuiTickContext parameter
