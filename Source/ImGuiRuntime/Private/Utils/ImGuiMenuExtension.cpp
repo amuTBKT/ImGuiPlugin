@@ -786,7 +786,7 @@ namespace ImGuiUtils
 					}
 					if (Slot.ToolTip.Len() > 0)
 					{
-						FImGui::SetItemTooltip("%s", *Slot.ToolTip);
+						FImGui::SetItemTooltip(*Slot.ToolTip);
 					}
 				}
 
@@ -944,11 +944,11 @@ namespace ImGuiUtils
 
 								if (bReadonlyState)
 								{
-									FImGui::SetItemTooltip("%s", "Activation managed by widget code");
+									FImGui::SetItemTooltip("Activation managed by widget code");
 								}
 								else
 								{
-									FImGui::SetItemTooltip("%s", bIsSlotActive ? "Deactivate" : "Activate");
+									FImGui::SetItemTooltip(bIsSlotActive ? "Deactivate" : "Activate");
 								}
 							});
 
@@ -1042,7 +1042,7 @@ namespace ImGuiUtils
 							{
 								bOpenSearchWindow = true;
 							}
-							FImGui::SetItemTooltip("%s", "Search menu items");
+							FImGui::SetItemTooltip("Search menu items");
 
 							if ((FocusRequestedFrameIndex + 1 == ImGui::GetFrameCount()) && !IsAnyWindowVisible())
 							{

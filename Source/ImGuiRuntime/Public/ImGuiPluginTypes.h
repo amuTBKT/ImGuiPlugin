@@ -333,6 +333,34 @@ namespace FImGui
 		ImGui::PopStyleColor();
 	}
 
+	// Allow widgets inside current row to span all columns
+	// can be useful when drawing collapsible table rows with body/content
+	FORCEINLINE float TableBeginContentSpanningAllColumns()
+	{
+		// source: https://github.com/ocornut/imgui/issues/3565#issuecomment-2120416586
+
+		ImGuiTable* Table = ImGui::GetCurrentTable();
+		check(Table);
+
+		ImGui::TableSetColumnIndex(Table->LeftMostEnabledColumn >= 0 ? Table->LeftMostEnabledColumn : 0);
+
+		ImRect& WorkRect = ImGui::GetCurrentWindow()->WorkRect;
+		float RestoreX = WorkRect.Max.x;
+		ImRect BgClipRect = Table->BgClipRect;
+
+		ImGui::PushClipRect(BgClipRect.Min, BgClipRect.Max, 0);
+		WorkRect.Max.x = BgClipRect.Max.x;
+
+		return RestoreX;
+	}
+	FORCEINLINE void TableEndContentSpanningAllColumns(float RestoreX)
+	{
+		// source: https://github.com/ocornut/imgui/issues/3565#issuecomment-2120416586
+
+		ImGui::GetCurrentWindow()->WorkRect.Max.x = RestoreX;
+		ImGui::PopClipRect();
+	}
+
 	// utility function to allow adding icon to menu item
 	FORCEINLINE bool MenuItem(FImGuiTickContext* TickContext, const char* Label, bool bIsActive, const FImGuiImageBindingParams& Icon, ImVec2 IconOffset = ImVec2(0.f, 0.f))
 	{
@@ -602,7 +630,7 @@ namespace FImGui
 	IMGUIRUNTIME_API void BeginComboListViewDropdownBody(FImGuiTickContext* TickContext);
 	IMGUIRUNTIME_API void EndComboListViewDropdownBody(FImGuiTickContext* TickContext);
 
-	FORCEINLINE void SetTooltip(const char* Fmt, ...)
+	FORCEINLINE void SetTooltipf(const char* Fmt, ...)
 	{
 		FImGuiScopedStyleEdit TooltipStyle
 		{
@@ -616,7 +644,7 @@ namespace FImGui
 		ImGui::SetTooltipV(Fmt, args);
 		va_end(args);
 	}
-	FORCEINLINE void SetItemTooltip(const char* Fmt, ...)
+	FORCEINLINE void SetItemTooltipf(const char* Fmt, ...)
 	{
 		FImGuiScopedStyleEdit TooltipStyle
 		{
@@ -630,9 +658,13 @@ namespace FImGui
 		ImGui::SetItemTooltipV(Fmt, args);
 		va_end(args);
 	}
-	FORCEINLINE void SetItemTooltipUnformatted(const char* Tooltip)
+	FORCEINLINE void SetTooltip(const char* Tooltip)
 	{
-		SetItemTooltip("%s", Tooltip);
+		SetTooltipf("%s", Tooltip);
+	}
+	FORCEINLINE void SetItemTooltip(const char* Tooltip)
+	{
+		SetItemTooltipf("%s", Tooltip);
 	}
 
 	// variants without FImGuiTickContext parameter
