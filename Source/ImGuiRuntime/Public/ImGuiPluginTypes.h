@@ -325,11 +325,12 @@ namespace FImGui
 	{
 		ImGui::PushStyleVarX(ImGuiStyleVar_SeparatorTextAlign, 0.f);
 		ImGui::PushStyleVarX(ImGuiStyleVar_SeparatorTextPadding, 0.f);
+		ImGui::PushStyleVar(ImGuiStyleVar_SeparatorTextBorderSize, 1.f);
 		ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetColorU32(ImGuiCol_Separator));
 
 		ImGui::SeparatorText(Label);
 
-		ImGui::PopStyleVar(2);
+		ImGui::PopStyleVar(3);
 		ImGui::PopStyleColor();
 	}
 
