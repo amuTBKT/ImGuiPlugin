@@ -68,11 +68,50 @@ namespace FImGui
 		}
 	}
 
-	// TODO: Based on FSlateElementBatcher::AddBoxElements, requires cleanup
+	FORCEINLINE static void PathRect(ImDrawList& DrawList, const ImVec2& RectMin, const ImVec2& RectMax, const ImVec4& Rounding)
+	{
+		const float RoundingTopLeft = Rounding.x;
+		const float RoundingTopRight = Rounding.y;
+		const float RoundingBottomRight = Rounding.z;
+		const float RoundingBottomLeft = Rounding.w;
+		DrawList.PathArcToFast(ImVec2(RectMin.x + RoundingTopLeft, RectMin.y + RoundingTopLeft), RoundingTopLeft, 6, 9);
+		DrawList.PathArcToFast(ImVec2(RectMax.x - RoundingTopRight, RectMin.y + RoundingTopRight), RoundingTopRight, 9, 12);
+		DrawList.PathArcToFast(ImVec2(RectMax.x - RoundingBottomRight, RectMax.y - RoundingBottomRight), RoundingBottomRight, 0, 3);
+		DrawList.PathArcToFast(ImVec2(RectMin.x + RoundingBottomLeft, RectMax.y - RoundingBottomLeft), RoundingBottomLeft, 3, 6);
+	}
+
+	FORCEINLINE static void AddImageRounded(ImDrawList& DrawList, ImTextureRef Texture, const ImVec2& RectMin, const ImVec2& RectMax, const ImVec2 UV0, const ImVec2& UV1, ImU32 Color, const ImVec4& Rounding)
+	{
+		ImVec2 RectSize = RectMax - RectMin;
+		if (ImMin(RectSize.x, RectSize.y) <= KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+
+		const bool bPushTextureId = DrawList._CmdHeader.TexRef != Texture;
+		if (bPushTextureId)
+		{
+			DrawList.PushTexture(Texture);
+		}
+
+		int32 VertexStartIdx = DrawList.VtxBuffer.Size;
+		PathRect(DrawList, RectMin, RectMax, Rounding);
+		DrawList.PathFillConvex(Color, ImDrawFlags_JoinMiter);
+		int32 VertexEndIdx = DrawList.VtxBuffer.Size;
+		ImGui::ShadeVertsLinearUV(&DrawList, VertexStartIdx, VertexEndIdx, RectMin, RectMax, UV0, UV1, true);
+
+		if (bPushTextureId)
+		{
+			DrawList.PopTexture();
+		}
+	}
+
 	void DrawSlateBrush(
 		const FImGuiTickContext* TickContext, const FSlateBrush& Brush, ImVec2 RectMin, ImVec2 RectMax,
 		TOptional<ImVec4> Tint, TOptional<ImU32> BorderColor)
 	{
+		DECLARE_SCOPE_CYCLE_COUNTER(TEXT("DrawSlateBrush"), STAT_ImGui_DrawSlateBrush, STATGROUP_ImGui);
+
 		ImVec2 RectSize = RectMax - RectMin;
 		if (ImMin(RectSize.x, RectSize.y) <= KINDA_SMALL_NUMBER)
 		{
@@ -88,20 +127,62 @@ namespace FImGui
 			return;
 		}
 
-		float Rounding = 0.f;
+		ImVec4 Rounding;
+		bool bUniformRounding = true;
 		if (Brush.GetDrawType() == ESlateBrushDrawType::RoundedBox)
 		{
 			if (Brush.OutlineSettings.RoundingType == ESlateBrushRoundingType::HalfHeightRadius)
 			{
-				Rounding = RectSize.y * 0.5f;
+				Rounding.x = ImMin(RectSize.x, RectSize.y) * 0.5f;
 			}
 			else
 			{
-				// TODO: non uniform rounding not handled atm
-				//ensure(Brush.OutlineSettings.CornerRadii.X == Brush.OutlineSettings.CornerRadii.Y &&
-				//	Brush.OutlineSettings.CornerRadii.X == Brush.OutlineSettings.CornerRadii.Z &&
-				//	Brush.OutlineSettings.CornerRadii.X == Brush.OutlineSettings.CornerRadii.W);
-				Rounding = Brush.OutlineSettings.CornerRadii.X;
+				if (Brush.OutlineSettings.CornerRadii.X != Brush.OutlineSettings.CornerRadii.Y ||
+					Brush.OutlineSettings.CornerRadii.X != Brush.OutlineSettings.CornerRadii.Z ||
+					Brush.OutlineSettings.CornerRadii.X != Brush.OutlineSettings.CornerRadii.W)
+				{
+					bUniformRounding = false;
+					Rounding = ImVec4(Brush.OutlineSettings.CornerRadii.X, Brush.OutlineSettings.CornerRadii.Y, Brush.OutlineSettings.CornerRadii.Z, Brush.OutlineSettings.CornerRadii.W);
+
+					// TODO: maybe we can skip this clamping logic
+					if (Rounding.x + Rounding.y > RectSize.x)
+					{
+						float F = (Rounding.x > 0 ? 1.f : 0.f) + (Rounding.y > 0 ? 1.f : 0.f);
+						float D = (Rounding.x + Rounding.y) - RectSize.x;
+						Rounding.x = ImMax(0.f, Rounding.x - D / F);
+						Rounding.y = ImMax(0.f, Rounding.y - D / F);
+					}
+					if (Rounding.z + Rounding.w > RectSize.x)
+					{
+						float F = (Rounding.z > 0 ? 1.f : 0.f) + (Rounding.w > 0 ? 1.f : 0.f);
+						float D = (Rounding.z + Rounding.w) - RectSize.x;
+						Rounding.z = ImMax(0.f, Rounding.z - D / F);
+						Rounding.w = ImMax(0.f, Rounding.w - D / F);
+					}
+					if (Rounding.x + Rounding.w > RectSize.y)
+					{
+						float F = (Rounding.x > 0 ? 1.f : 0.f) + (Rounding.w > 0 ? 1.f : 0.f);
+						float D = (Rounding.x + Rounding.w) - RectSize.y;
+						Rounding.x = ImMax(0.f, Rounding.x - D / F);
+						Rounding.w = ImMax(0.f, Rounding.w - D / F);
+					}
+					if (Rounding.y + Rounding.z > RectSize.y)
+					{
+						float F = (Rounding.y > 0 ? 1.f : 0.f) + (Rounding.z > 0 ? 1.f : 0.f);
+						float D = (Rounding.y + Rounding.z) - RectSize.y;
+						Rounding.y = ImMax(0.f, Rounding.y - D / F);
+						Rounding.z = ImMax(0.f, Rounding.z - D / F);
+					}
+				}
+				else
+				{
+					Rounding.x = Brush.OutlineSettings.CornerRadii.X;
+					float MinRectDim = ImMin(RectSize.x, RectSize.y);
+					if (Rounding.x * 2.f > MinRectDim)
+					{
+						Rounding.x = MinRectDim * 0.5f;
+					}
+				}
 			}
 		}
 
@@ -123,23 +204,26 @@ namespace FImGui
 			default:
 			case ESlateBrushDrawType::Box:
 			case ESlateBrushDrawType::RoundedBox:
+			case ESlateBrushDrawType::Image:
 			{
+				// based on FSlateElementBatcher::AddBoxElements
+
 				if (Brush.GetImageType() != ESlateBrushImageType::NoImage)
 				{
 					auto Image = UImGuiSubsystem::Get()->RegisterOneFrameResource(&Brush, FVector2f(RectSize.x, RectSize.y));
 
-					FVector2f StartUV = FVector2f(Image.UV0.x, Image.UV0.y);
-					FVector2f EndUV = FVector2f(Image.UV1.x, Image.UV1.y);
-					FVector2f SizeUV = EndUV - StartUV;
+					ImVec2 StartUV = Image.UV0;
+					ImVec2 EndUV = Image.UV1;
+					ImVec2 SizeUV = EndUV - StartUV;
 
 					float TextureWidth = 1.f;
 					float TextureHeight = 1.f;
-					if (Brush.GetRenderingResource().GetResourceProxy())
+					if (auto ResourceProxy = Brush.GetRenderingResource(FVector2f(RectSize.x, RectSize.y), 1.f).GetResourceProxy())
 					{
-						TextureWidth = Brush.GetRenderingResource().GetResourceProxy()->ActualSize.X;
-						TextureHeight = Brush.GetRenderingResource().GetResourceProxy()->ActualSize.Y;
+						TextureWidth = ResourceProxy->ActualSize.X != 0 ? ResourceProxy->ActualSize.X : 1.f;
+						TextureHeight = ResourceProxy->ActualSize.Y != 0 ? ResourceProxy->ActualSize.Y : 1.f;
 					}
-					FVector2f HalfTexel = FVector2f(0.f, 0.f) / FVector2f(TextureWidth, TextureHeight);; //TODO: not handled
+					ImVec2 HalfTexel = ImVec2(0.f, 0.f) / ImVec2(TextureWidth, TextureHeight); //TODO: not handled
 
 					const ESlateBrushTileType::Type TilingRule = Brush.GetTiling();
 					const bool bTileHorizontal = (TilingRule == ESlateBrushTileType::Both || TilingRule == ESlateBrushTileType::Horizontal);
@@ -151,47 +235,34 @@ namespace FImGui
 
 					float HorizontalTiling = bTileHorizontal ? RectSize.x / TextureWidth : 1.0f;
 					float VerticalTiling = bTileVertical ? RectSize.y / TextureHeight : 1.0f;
-					const FVector2f Tiling(HorizontalTiling, VerticalTiling);
+					const ImVec2 Tiling(HorizontalTiling, VerticalTiling);
 
-					const FVector2f TopLeft = FVector2f(RectMin.x, RectMin.y);
-					const FVector2f BotRight = TopLeft + FVector2f(RectSize.x, RectSize.y);
-					const FVector2f TopRight = FVector2f(BotRight.X, TopLeft.Y);
-					const FVector2f BotLeft = FVector2f(TopLeft.X, BotRight.Y);
-
-					const FMargin& Margin = Brush.GetMargin();
+					const FMargin Margin = (Brush.GetDrawType() != ESlateBrushDrawType::Image) ? Brush.GetMargin() : FMargin(0.f);
 					if (Margin.Left != 0.0f || Margin.Top != 0.0f || Margin.Right != 0.0f || Margin.Bottom != 0.0f)
 					{
-						float LeftMarginU = (Margin.Left > 0.0f)
-							? StartUV.X + Margin.Left * SizeUV.X + HalfTexel.X
-							: StartUV.X;
-						float TopMarginV = (Margin.Top > 0.0f)
-							? StartUV.Y + Margin.Top * SizeUV.Y + HalfTexel.Y
-							: StartUV.Y;
-						float RightMarginU = (Margin.Right > 0.0f)
-							? EndUV.X - Margin.Right * SizeUV.X + HalfTexel.X
-							: EndUV.X;
-						float BottomMarginV = (Margin.Bottom > 0.0f)
-							? EndUV.Y - Margin.Bottom * SizeUV.Y + HalfTexel.Y
-							: EndUV.Y;
+						float LeftMarginU = (Margin.Left > 0.0f) ? StartUV.x + Margin.Left * SizeUV.x + HalfTexel.x : StartUV.x;
+						float TopMarginV = (Margin.Top > 0.0f) ? StartUV.y + Margin.Top * SizeUV.y + HalfTexel.y : StartUV.y;
+						float RightMarginU = (Margin.Right > 0.0f) ? EndUV.x - Margin.Right * SizeUV.x + HalfTexel.x : EndUV.x;
+						float BottomMarginV = (Margin.Bottom > 0.0f) ? EndUV.y - Margin.Bottom * SizeUV.y + HalfTexel.y : EndUV.y;
 
 						if (bMirrorHorizontal || bMirrorVertical)
 						{
-							const FVector2f UVMin = StartUV;
-							const FVector2f UVMax = EndUV;
+							const ImVec2 UVMin = StartUV;
+							const ImVec2 UVMax = EndUV;
 
 							if (bMirrorHorizontal)
 							{
-								StartUV.X = UVMax.X - (StartUV.X - UVMin.X);
-								EndUV.X = UVMax.X - (EndUV.X - UVMin.X);
-								LeftMarginU = UVMax.X - (LeftMarginU - UVMin.X);
-								RightMarginU = UVMax.X - (RightMarginU - UVMin.X);
+								StartUV.x = UVMax.x - (StartUV.x - UVMin.x);
+								EndUV.x = UVMax.x - (EndUV.x - UVMin.x);
+								LeftMarginU = UVMax.x - (LeftMarginU - UVMin.x);
+								RightMarginU = UVMax.x - (RightMarginU - UVMin.x);
 							}
 							if (bMirrorVertical)
 							{
-								StartUV.Y = UVMax.Y - (StartUV.Y - UVMin.Y);
-								EndUV.Y = UVMax.Y - (EndUV.Y - UVMin.Y);
-								TopMarginV = UVMax.Y - (TopMarginV - UVMin.Y);
-								BottomMarginV = UVMax.Y - (BottomMarginV - UVMin.Y);
+								StartUV.y = UVMax.y - (StartUV.y - UVMin.y);
+								EndUV.y = UVMax.y - (EndUV.y - UVMin.y);
+								TopMarginV = UVMax.y - (TopMarginV - UVMin.y);
+								BottomMarginV = UVMax.y - (BottomMarginV - UVMin.y);
 							}
 						}
 
@@ -199,170 +270,384 @@ namespace FImGui
 						float TopMarginY = TextureHeight * Margin.Top;
 						float RightMarginX = RectSize.x - TextureWidth * Margin.Right;
 						float BottomMarginY = RectSize.y - TextureHeight * Margin.Bottom;
-
-						// If the margins are overlapping the margins are too big or the button is too small
-						// so clamp margins to half of the box size
 						if (RightMarginX < LeftMarginX)
 						{
 							LeftMarginX = RectSize.x / 2.f;
 							RightMarginX = LeftMarginX;
 						}
-
 						if (BottomMarginY < TopMarginY)
 						{
 							TopMarginY = RectSize.y / 2.f;
 							BottomMarginY = TopMarginY;
 						}
 
-						FVector2f Position = TopLeft;
-						FVector2f EndPos = BotRight;
+						// TODO: disable rounding when using margin, too much effort to support that :(
+						bUniformRounding = true;
+						Rounding.x = 0.f;
+						if (bUniformRounding && Rounding.x == 0)
+						{
+							DrawList->PushTexture(Image.Id);
 
-						DrawList->PushTexture(Image.Id);
+							DrawList->PrimReserve(54, 16);
+							auto IndexStart = DrawList->_VtxCurrentIdx;
 
-						DrawList->PrimReserve(54, 16);
-						auto IndexStart = DrawList->_VtxCurrentIdx;
+							DrawList->PrimWriteIdx(IndexStart + 0);
+							DrawList->PrimWriteIdx(IndexStart + 1);
+							DrawList->PrimWriteIdx(IndexStart + 2);
+							DrawList->PrimWriteIdx(IndexStart + 2);
+							DrawList->PrimWriteIdx(IndexStart + 1);
+							DrawList->PrimWriteIdx(IndexStart + 3);
 
-						DrawList->PrimWriteIdx(IndexStart + 0);
-						DrawList->PrimWriteIdx(IndexStart + 1);
-						DrawList->PrimWriteIdx(IndexStart + 2);
-						DrawList->PrimWriteIdx(IndexStart + 2);
-						DrawList->PrimWriteIdx(IndexStart + 1);
-						DrawList->PrimWriteIdx(IndexStart + 3);
+							DrawList->PrimWriteIdx(IndexStart + 2);
+							DrawList->PrimWriteIdx(IndexStart + 3);
+							DrawList->PrimWriteIdx(IndexStart + 4);
+							DrawList->PrimWriteIdx(IndexStart + 4);
+							DrawList->PrimWriteIdx(IndexStart + 3);
+							DrawList->PrimWriteIdx(IndexStart + 5);
 
-						DrawList->PrimWriteIdx(IndexStart + 2);
-						DrawList->PrimWriteIdx(IndexStart + 3);
-						DrawList->PrimWriteIdx(IndexStart + 4);
-						DrawList->PrimWriteIdx(IndexStart + 4);
-						DrawList->PrimWriteIdx(IndexStart + 3);
-						DrawList->PrimWriteIdx(IndexStart + 5);
+							DrawList->PrimWriteIdx(IndexStart + 4);
+							DrawList->PrimWriteIdx(IndexStart + 5);
+							DrawList->PrimWriteIdx(IndexStart + 6);
+							DrawList->PrimWriteIdx(IndexStart + 6);
+							DrawList->PrimWriteIdx(IndexStart + 5);
+							DrawList->PrimWriteIdx(IndexStart + 7);
 
-						DrawList->PrimWriteIdx(IndexStart + 4);
-						DrawList->PrimWriteIdx(IndexStart + 5);
-						DrawList->PrimWriteIdx(IndexStart + 6);
-						DrawList->PrimWriteIdx(IndexStart + 6);
-						DrawList->PrimWriteIdx(IndexStart + 5);
-						DrawList->PrimWriteIdx(IndexStart + 7);
+							// Middle
+							DrawList->PrimWriteIdx(IndexStart + 1);
+							DrawList->PrimWriteIdx(IndexStart + 8);
+							DrawList->PrimWriteIdx(IndexStart + 3);
+							DrawList->PrimWriteIdx(IndexStart + 3);
+							DrawList->PrimWriteIdx(IndexStart + 8);
+							DrawList->PrimWriteIdx(IndexStart + 9);
 
-						// Middle
-						DrawList->PrimWriteIdx(IndexStart + 1);
-						DrawList->PrimWriteIdx(IndexStart + 8);
-						DrawList->PrimWriteIdx(IndexStart + 3);
-						DrawList->PrimWriteIdx(IndexStart + 3);
-						DrawList->PrimWriteIdx(IndexStart + 8);
-						DrawList->PrimWriteIdx(IndexStart + 9);
+							DrawList->PrimWriteIdx(IndexStart + 3);
+							DrawList->PrimWriteIdx(IndexStart + 9);
+							DrawList->PrimWriteIdx(IndexStart + 5);
+							DrawList->PrimWriteIdx(IndexStart + 5);
+							DrawList->PrimWriteIdx(IndexStart + 9);
+							DrawList->PrimWriteIdx(IndexStart + 10);
 
-						DrawList->PrimWriteIdx(IndexStart + 3);
-						DrawList->PrimWriteIdx(IndexStart + 9);
-						DrawList->PrimWriteIdx(IndexStart + 5);
-						DrawList->PrimWriteIdx(IndexStart + 5);
-						DrawList->PrimWriteIdx(IndexStart + 9);
-						DrawList->PrimWriteIdx(IndexStart + 10);
+							DrawList->PrimWriteIdx(IndexStart + 5);
+							DrawList->PrimWriteIdx(IndexStart + 10);
+							DrawList->PrimWriteIdx(IndexStart + 7);
+							DrawList->PrimWriteIdx(IndexStart + 7);
+							DrawList->PrimWriteIdx(IndexStart + 10);
+							DrawList->PrimWriteIdx(IndexStart + 11);
 
-						DrawList->PrimWriteIdx(IndexStart + 5);
-						DrawList->PrimWriteIdx(IndexStart + 10);
-						DrawList->PrimWriteIdx(IndexStart + 7);
-						DrawList->PrimWriteIdx(IndexStart + 7);
-						DrawList->PrimWriteIdx(IndexStart + 10);
-						DrawList->PrimWriteIdx(IndexStart + 11);
+							// Bottom
+							DrawList->PrimWriteIdx(IndexStart + 8);
+							DrawList->PrimWriteIdx(IndexStart + 12);
+							DrawList->PrimWriteIdx(IndexStart + 9);
+							DrawList->PrimWriteIdx(IndexStart + 9);
+							DrawList->PrimWriteIdx(IndexStart + 12);
+							DrawList->PrimWriteIdx(IndexStart + 13);
 
-						// Bottom
-						DrawList->PrimWriteIdx(IndexStart + 8);
-						DrawList->PrimWriteIdx(IndexStart + 12);
-						DrawList->PrimWriteIdx(IndexStart + 9);
-						DrawList->PrimWriteIdx(IndexStart + 9);
-						DrawList->PrimWriteIdx(IndexStart + 12);
-						DrawList->PrimWriteIdx(IndexStart + 13);
+							DrawList->PrimWriteIdx(IndexStart + 9);
+							DrawList->PrimWriteIdx(IndexStart + 13);
+							DrawList->PrimWriteIdx(IndexStart + 10);
+							DrawList->PrimWriteIdx(IndexStart + 10);
+							DrawList->PrimWriteIdx(IndexStart + 13);
+							DrawList->PrimWriteIdx(IndexStart + 14);
 
-						DrawList->PrimWriteIdx(IndexStart + 9);
-						DrawList->PrimWriteIdx(IndexStart + 13);
-						DrawList->PrimWriteIdx(IndexStart + 10);
-						DrawList->PrimWriteIdx(IndexStart + 10);
-						DrawList->PrimWriteIdx(IndexStart + 13);
-						DrawList->PrimWriteIdx(IndexStart + 14);
+							DrawList->PrimWriteIdx(IndexStart + 10);
+							DrawList->PrimWriteIdx(IndexStart + 14);
+							DrawList->PrimWriteIdx(IndexStart + 11);
+							DrawList->PrimWriteIdx(IndexStart + 11);
+							DrawList->PrimWriteIdx(IndexStart + 14);
+							DrawList->PrimWriteIdx(IndexStart + 15);
 
-						DrawList->PrimWriteIdx(IndexStart + 10);
-						DrawList->PrimWriteIdx(IndexStart + 14);
-						DrawList->PrimWriteIdx(IndexStart + 11);
-						DrawList->PrimWriteIdx(IndexStart + 11);
-						DrawList->PrimWriteIdx(IndexStart + 14);
-						DrawList->PrimWriteIdx(IndexStart + 15);
+							ImVec2 Position = RectMin;
+							ImVec2 EndPos = RectMax;
+							LeftMarginX += Position.x;
+							RightMarginX += Position.x;
+							TopMarginY += Position.y;
+							BottomMarginY += Position.y;
 
-						LeftMarginX += Position.X;
-						RightMarginX += Position.X;
-						TopMarginY += Position.Y;
-						BottomMarginY += Position.Y;
+							DrawList->PrimWriteVtx(Position, StartUV * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(Position.x, TopMarginY), ImVec2(StartUV.x, TopMarginV) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(LeftMarginX, Position.y), ImVec2(LeftMarginU, StartUV.y) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(LeftMarginX, TopMarginY), ImVec2(LeftMarginU, TopMarginV) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(RightMarginX, Position.y), ImVec2(RightMarginU, StartUV.y) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(RightMarginX, TopMarginY), ImVec2(RightMarginU, TopMarginV) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(EndPos.x, Position.y), ImVec2(EndUV.x, StartUV.y) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(EndPos.x, TopMarginY), ImVec2(EndUV.x, TopMarginV) * Tiling, ImageColor);
 
-						DrawList->PrimWriteVtx(ImVec2(Position.X, Position.Y), ImVec2(StartUV.X, StartUV.Y), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(Position.X, TopMarginY), ImVec2(StartUV.X, TopMarginV), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(LeftMarginX, Position.Y), ImVec2(LeftMarginU, StartUV.Y), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(LeftMarginX, TopMarginY), ImVec2(LeftMarginU, TopMarginV), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(RightMarginX, Position.Y), ImVec2(RightMarginU, StartUV.Y), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(RightMarginX, TopMarginY), ImVec2(RightMarginU, TopMarginV), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(EndPos.X, Position.Y), ImVec2(EndUV.X, StartUV.Y), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(EndPos.X, TopMarginY), ImVec2(EndUV.X, TopMarginV), ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(Position.x, BottomMarginY), ImVec2(StartUV.x, BottomMarginV) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(LeftMarginX, BottomMarginY), ImVec2(LeftMarginU, BottomMarginV) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(RightMarginX, BottomMarginY), ImVec2(RightMarginU, BottomMarginV) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(EndPos.x, BottomMarginY), ImVec2(EndUV.x, BottomMarginV) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(Position.x, EndPos.y), ImVec2(StartUV.x, EndUV.y) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(LeftMarginX, EndPos.y), ImVec2(LeftMarginU, EndUV.y) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(RightMarginX, EndPos.y), ImVec2(RightMarginU, EndUV.y) * Tiling, ImageColor);
+							DrawList->PrimWriteVtx(ImVec2(EndPos.x, EndPos.y), EndUV * Tiling, ImageColor);
 
-						DrawList->PrimWriteVtx(ImVec2(Position.X, BottomMarginY), ImVec2(StartUV.X, BottomMarginV), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(LeftMarginX, BottomMarginY), ImVec2(LeftMarginU, BottomMarginV), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(RightMarginX, BottomMarginY), ImVec2(RightMarginU, BottomMarginV), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(EndPos.X, BottomMarginY), ImVec2(EndUV.X, BottomMarginV), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(Position.X, EndPos.Y), ImVec2(StartUV.X, EndUV.Y), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(LeftMarginX, EndPos.Y), ImVec2(LeftMarginU, EndUV.Y), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(RightMarginX, EndPos.Y), ImVec2(RightMarginU, EndUV.Y), ImageColor);
-						DrawList->PrimWriteVtx(ImVec2(EndPos.X, EndPos.Y), ImVec2(EndUV.X, EndUV.Y), ImageColor);
-
-						DrawList->PopTexture();
+							DrawList->PopTexture();
+						}
+						else
+						{
+						}
 					}
 					else
 					{
 						if (bMirrorHorizontal || bMirrorVertical)
 						{
-							const FVector2f UVMin = StartUV;
-							const FVector2f UVMax = EndUV;
+							const ImVec2 UVMin = StartUV;
+							const ImVec2 UVMax = EndUV;
 
 							if (bMirrorHorizontal)
 							{
-								StartUV.X = UVMax.X - (StartUV.X - UVMin.X);
-								EndUV.X = UVMax.X - (EndUV.X - UVMin.X);
+								StartUV.x = UVMax.x - (StartUV.x - UVMin.x);
+								EndUV.x = UVMax.x - (EndUV.x - UVMin.x);
 							}
 							if (bMirrorVertical)
 							{
-								StartUV.Y = UVMax.Y - (StartUV.Y - UVMin.Y);
-								EndUV.Y = UVMax.Y - (EndUV.Y - UVMin.Y);
+								StartUV.y = UVMax.y - (StartUV.y - UVMin.y);
+								EndUV.y = UVMax.y - (EndUV.y - UVMin.y);
 							}
 						}
 
-						DrawList->AddImage(Image.Id, RectMin, RectMax, ImVec2(StartUV.X, StartUV.Y), ImVec2(EndUV.X, EndUV.Y), ImageColor);
+						if (bUniformRounding)
+						{
+							if (Rounding.x > 0.f)
+							{
+								DrawList->AddImageRounded(Image.Id, RectMin, RectMax, StartUV * Tiling, EndUV * Tiling, ImageColor, Rounding.x);
+							}
+							else
+							{
+								DrawList->AddImage(Image.Id, RectMin, RectMax, StartUV * Tiling, EndUV * Tiling, ImageColor);
+							}
+						}
+						else
+						{
+							AddImageRounded(*DrawList, Image.Id, RectMin, RectMax, StartUV * Tiling, EndUV * Tiling, ImageColor, Rounding);
+						}
 					}
 				}
 				else
 				{
-					DrawList->AddRectFilled(RectMin, RectMax, ImageColor, Rounding);
-				}
-			}break;
-			case ESlateBrushDrawType::Image:
-			{
-				if (/*ensure*/(Brush.GetImageType() != ESlateBrushImageType::NoImage))
-				{
-					auto Image = UImGuiSubsystem::Get()->RegisterOneFrameResource(&Brush, FVector2f(RectSize.x, RectSize.y));
-					DrawList->AddImage(Image.Id, RectMin, RectMax, Image.UV0, Image.UV1, ImageColor);
-				}
-				else
-				{
-					DrawList->AddRectFilled(RectMin, RectMax, ImageColor, Rounding);
+					if (bUniformRounding)
+					{
+						DrawList->AddRectFilled(RectMin, RectMax, ImageColor, Rounding.x);
+					}
+					else
+					{
+						PathRect(*DrawList, RectMin, RectMax, Rounding);
+						DrawList->PathFillConvex(ImageColor, ImDrawFlags_JoinMiter);
+					}
 				}
 			}break;
 			case ESlateBrushDrawType::Border:
 			{
-				check(Brush.ImageType == ESlateBrushImageType::FullColor);
-				DrawList->AddRect(RectMin, RectMax, ImageColor, Rounding);
+				// based on FSlateElementBatcher::AddBorderElement
+
+				if (Brush.GetImageType() != ESlateBrushImageType::NoImage)
+				{
+					auto Image = UImGuiSubsystem::Get()->RegisterOneFrameResource(&Brush, FVector2f(RectSize.x, RectSize.y));
+
+					float TextureWidth = 1.f;
+					float TextureHeight = 1.f;
+					if (auto ResourceProxy = Brush.GetRenderingResource(FVector2f(RectSize.x, RectSize.y), 1.f).GetResourceProxy())
+					{
+						TextureWidth = ResourceProxy->ActualSize.X != 0 ? ResourceProxy->ActualSize.X : 1.f;
+						TextureHeight = ResourceProxy->ActualSize.Y != 0 ? ResourceProxy->ActualSize.Y : 1.f;
+					}
+					ImVec2 HalfTexel = ImVec2(0.f, 0.f) / ImVec2(TextureWidth, TextureHeight); //TODO: not handled
+
+					ImVec2 StartUV = HalfTexel;
+					ImVec2 EndUV = ImVec2(1.f, 1.f) + HalfTexel;
+
+					ImVec2 TextureSizeLocalSpace = ImVec2((float)TextureWidth, (float)TextureHeight);
+
+					FMargin Margin = Brush.GetMargin();
+
+					// Determine the margins for each quad
+					ImVec2 TopLeftMargin(TextureSizeLocalSpace * ImVec2(Margin.Left, Margin.Top));
+					ImVec2 BotRightMargin(RectSize - TextureSizeLocalSpace * ImVec2(Margin.Right, Margin.Bottom));
+
+					float LeftMarginX = TopLeftMargin.x;
+					float TopMarginY = TopLeftMargin.y;
+					float RightMarginX = BotRightMargin.x;
+					float BottomMarginY = BotRightMargin.y;
+
+					// If the margins are overlapping the margins are too big or the button is too small
+					// so clamp margins to half of the box size
+					if (FMath::Abs(RightMarginX) < FMath::Abs(LeftMarginX))
+					{
+						LeftMarginX = RectSize.x / 2.f;
+						RightMarginX = LeftMarginX;
+					}
+
+					if (FMath::Abs(BottomMarginY) < FMath::Abs(TopMarginY))
+					{
+						TopMarginY = RectSize.y / 2.f;
+						BottomMarginY = TopMarginY;
+					}
+
+					// Determine the texture coordinates for each quad
+					float LeftMarginU = FMath::Abs(Margin.Left);
+					float TopMarginV = FMath::Abs(Margin.Top);
+					float RightMarginU = 1.0f - FMath::Abs(Margin.Right);
+					float BottomMarginV = 1.0f - FMath::Abs(Margin.Bottom);
+
+					LeftMarginU += HalfTexel.x;
+					TopMarginV += HalfTexel.y;
+					BottomMarginV += HalfTexel.y;
+					RightMarginU += HalfTexel.x;
+
+					// Determine the amount of tiling needed for the texture in this element.  The formula is number of pixels covered by the tiling portion of the texture / the number number of texels corresponding to the tiled portion of the texture.
+					float TopTiling = 1.0f;
+					float LeftTiling = 1.0f;
+					float Denom = TextureSizeLocalSpace.x * (1.0f - Margin.GetTotalSpaceAlong<Orient_Horizontal>());
+					if (!FMath::IsNearlyZero(Denom))
+					{
+						TopTiling = (RightMarginX - LeftMarginX) / Denom;
+					}
+					Denom = TextureSizeLocalSpace.y * (1.0f - Margin.GetTotalSpaceAlong<Orient_Vertical>());
+					if (!FMath::IsNearlyZero(Denom))
+					{
+						LeftTiling = (BottomMarginY - TopMarginY) / Denom;
+					}
+
+					// Ensure tiling of at least 1.
+					TopTiling = TopTiling >= 1.0f ? TopTiling : 1.0f;
+					LeftTiling = LeftTiling >= 1.0f ? LeftTiling : 1.0f;
+					float RightTiling = LeftTiling;
+					float BottomTiling = TopTiling;
+
+					ImVec2 Position = RectMin;
+					ImVec2 EndPos = RectMax;
+					LeftMarginX += Position.x;
+					RightMarginX += Position.x;
+					TopMarginY += Position.y;
+					BottomMarginY += Position.y;
+
+					DrawList->PushTexture(Image.Id);
+
+					DrawList->PrimReserve(48, 32);
+					auto IndexStart = DrawList->_VtxCurrentIdx;
+
+					// Top
+					DrawList->PrimWriteIdx(IndexStart + 0);
+					DrawList->PrimWriteIdx(IndexStart + 1);
+					DrawList->PrimWriteIdx(IndexStart + 2);
+					DrawList->PrimWriteIdx(IndexStart + 2);
+					DrawList->PrimWriteIdx(IndexStart + 1);
+					DrawList->PrimWriteIdx(IndexStart + 3);
+
+					DrawList->PrimWriteIdx(IndexStart + 4);
+					DrawList->PrimWriteIdx(IndexStart + 5);
+					DrawList->PrimWriteIdx(IndexStart + 6);
+					DrawList->PrimWriteIdx(IndexStart + 6);
+					DrawList->PrimWriteIdx(IndexStart + 5);
+					DrawList->PrimWriteIdx(IndexStart + 7);
+
+					DrawList->PrimWriteIdx(IndexStart + 8);
+					DrawList->PrimWriteIdx(IndexStart + 9);
+					DrawList->PrimWriteIdx(IndexStart + 10);
+					DrawList->PrimWriteIdx(IndexStart + 10);
+					DrawList->PrimWriteIdx(IndexStart + 9);
+					DrawList->PrimWriteIdx(IndexStart + 11);
+
+					// Middle
+					DrawList->PrimWriteIdx(IndexStart + 12);
+					DrawList->PrimWriteIdx(IndexStart + 13);
+					DrawList->PrimWriteIdx(IndexStart + 14);
+					DrawList->PrimWriteIdx(IndexStart + 14);
+					DrawList->PrimWriteIdx(IndexStart + 13);
+					DrawList->PrimWriteIdx(IndexStart + 15);
+
+					DrawList->PrimWriteIdx(IndexStart + 16);
+					DrawList->PrimWriteIdx(IndexStart + 17);
+					DrawList->PrimWriteIdx(IndexStart + 18);
+					DrawList->PrimWriteIdx(IndexStart + 18);
+					DrawList->PrimWriteIdx(IndexStart + 17);
+					DrawList->PrimWriteIdx(IndexStart + 19);
+
+					// Bottom
+					DrawList->PrimWriteIdx(IndexStart + 20);
+					DrawList->PrimWriteIdx(IndexStart + 21);
+					DrawList->PrimWriteIdx(IndexStart + 22);
+					DrawList->PrimWriteIdx(IndexStart + 22);
+					DrawList->PrimWriteIdx(IndexStart + 21);
+					DrawList->PrimWriteIdx(IndexStart + 23);
+
+					DrawList->PrimWriteIdx(IndexStart + 24);
+					DrawList->PrimWriteIdx(IndexStart + 25);
+					DrawList->PrimWriteIdx(IndexStart + 26);
+					DrawList->PrimWriteIdx(IndexStart + 26);
+					DrawList->PrimWriteIdx(IndexStart + 25);
+					DrawList->PrimWriteIdx(IndexStart + 27);
+
+					DrawList->PrimWriteIdx(IndexStart + 28);
+					DrawList->PrimWriteIdx(IndexStart + 29);
+					DrawList->PrimWriteIdx(IndexStart + 30);
+					DrawList->PrimWriteIdx(IndexStart + 30);
+					DrawList->PrimWriteIdx(IndexStart + 29);
+					DrawList->PrimWriteIdx(IndexStart + 31);
+
+					DrawList->PrimWriteVtx(Position, StartUV, ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(Position.x, TopMarginY), ImVec2(StartUV.x, TopMarginV), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(LeftMarginX, Position.y), ImVec2(LeftMarginU, StartUV.y), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(LeftMarginX, TopMarginY), ImVec2(LeftMarginU, TopMarginV), ImageColor);
+
+					DrawList->PrimWriteVtx(ImVec2(LeftMarginX, Position.y), ImVec2(StartUV.x * TopTiling, StartUV.y), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(LeftMarginX, TopMarginY), ImVec2(StartUV.x * TopTiling, TopMarginV), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(RightMarginX, Position.y), ImVec2(EndUV.x * TopTiling, StartUV.y), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(RightMarginX, TopMarginY), ImVec2(EndUV.x * TopTiling, TopMarginV), ImageColor);
+
+					DrawList->PrimWriteVtx(ImVec2(RightMarginX, Position.y), ImVec2(RightMarginU, StartUV.y), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(RightMarginX, TopMarginY), ImVec2(RightMarginU, TopMarginV), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(EndPos.x, Position.y), ImVec2(EndUV.x, StartUV.y), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(EndPos.x, TopMarginY), ImVec2(EndUV.x, TopMarginV), ImageColor);
+
+					DrawList->PrimWriteVtx(ImVec2(Position.x, TopMarginY), ImVec2(StartUV.x, StartUV.y * LeftTiling), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(Position.x, BottomMarginY), ImVec2(StartUV.x, EndUV.y * LeftTiling), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(LeftMarginX, TopMarginY), ImVec2(LeftMarginU, StartUV.y * LeftTiling), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(LeftMarginX, BottomMarginY), ImVec2(LeftMarginU, EndUV.y * LeftTiling), ImageColor);
+
+					DrawList->PrimWriteVtx(ImVec2(RightMarginX, TopMarginY), ImVec2(RightMarginU, StartUV.y * RightTiling), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(RightMarginX, BottomMarginY), ImVec2(RightMarginU, EndUV.y * RightTiling), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(EndPos.x, TopMarginY), ImVec2(EndUV.x, StartUV.y * RightTiling), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(EndPos.x, BottomMarginY), ImVec2(EndUV.x, EndUV.y * RightTiling), ImageColor);
+
+					DrawList->PrimWriteVtx(ImVec2(Position.x, BottomMarginY), ImVec2(StartUV.x, BottomMarginV), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(Position.x, EndPos.y), ImVec2(StartUV.x, EndUV.y), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(LeftMarginX, BottomMarginY), ImVec2(LeftMarginU, BottomMarginV), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(LeftMarginX, EndPos.y), ImVec2(LeftMarginU, EndUV.y), ImageColor);
+
+					DrawList->PrimWriteVtx(ImVec2(LeftMarginX, BottomMarginY), ImVec2(StartUV.x * BottomTiling, BottomMarginV), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(LeftMarginX, EndPos.y), ImVec2(StartUV.x * BottomTiling, EndUV.y), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(RightMarginX, BottomMarginY), ImVec2(EndUV.x * BottomTiling, BottomMarginV), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(RightMarginX, EndPos.y), ImVec2(EndUV.x * BottomTiling, EndUV.y), ImageColor);
+
+					DrawList->PrimWriteVtx(ImVec2(RightMarginX, BottomMarginY), ImVec2(RightMarginU, BottomMarginV), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(RightMarginX, EndPos.y), ImVec2(RightMarginU, EndUV.y), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(EndPos.x, BottomMarginY), ImVec2(EndUV.x, BottomMarginV), ImageColor);
+					DrawList->PrimWriteVtx(ImVec2(EndPos.x, EndPos.y), EndUV, ImageColor);
+
+					DrawList->PopTexture();
+				}
+				else
+				{
+					DrawList->AddRect(RectMin, RectMax, ImageColor);
+				}
+
 			}break;
 			}
 		}
 
-		if (Brush.OutlineSettings.Width > 0.f)
+		if (Brush.GetDrawType() == ESlateBrushDrawType::RoundedBox && Brush.OutlineSettings.Width > 0.f)
 		{
 			ImU32 Color = BorderColor.IsSet() ? BorderColor.GetValue() : ImGui::GetColorU32(GetSlateColorU32(Brush.OutlineSettings.Color, TickContext));
-			DrawList->AddRect(RectMin, RectMax, Color, Rounding, Brush.OutlineSettings.Width);
+			if (bUniformRounding)
+			{
+				DrawList->AddRect(RectMin, RectMax, Color, Rounding.x, Brush.OutlineSettings.Width);
+			}
+			else
+			{
+				PathRect(*DrawList, RectMin, RectMax, Rounding);
+				DrawList->PathStroke(Color, Brush.OutlineSettings.Width, ImDrawFlags_Closed|ImDrawFlags_JoinMiter|ImDrawFlags_StrokeInside);
+			}
 		}
 		else if (BorderColor.IsSet())
 		{
