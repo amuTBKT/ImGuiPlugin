@@ -807,7 +807,7 @@ struct FImGuiWidgetRegisterParams
 
 	/*
 	*  Widget/Window closed callback (optional)
-	*  For standalone widgets : When slate widget is destroyed
+	*  For standalone widgets : When Slate widget is destroyed
 	*  For menu widgets		  : When ImGui window is closed
 	*/
 	void(*OnWindowClosed)(void);
@@ -833,7 +833,7 @@ struct FImGuiWidgetRegisterParams
 	// allow widget to customize menu bar item (only valid when adding widget to the main menu)
 	bool bTickInMenuBar = false;
 
-	// draw the widget from right side of the window
+	// draw the widget from right side of the menu bar
 	bool bRightAligned = false;
 
 	const char* GetWidetName() const
